@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WSU Newsletter Editor v7.0.0</title>
+  <link rel="stylesheet" href="/static/editor.css">
+</head>
+<body>
+  <!-- V7.0.3: Fallback for users with JavaScript disabled -->
+  <noscript>
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #fff; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 40px;">
+      <div style="max-width: 500px; text-align: center; font-family: Arial, sans-serif;">
+        <h1 style="color: #A60F2D; margin: 0 0 20px 0;">JavaScript Required</h1>
+        <p style="color: #333; font-size: 16px; line-height: 1.6;">
+          The WSU Newsletter Editor requires JavaScript to function. Please enable JavaScript in your browser settings and reload this page.
+        </p>
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          Need help? Contact <a href="mailto:gradschool@wsu.edu" style="color: #A60F2D;">gradschool@wsu.edu</a>
+        </p>
+      </div>
+    </div>
+  </noscript>
+  
+  <div class="app">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="left">
+        <h1>WSU Newsletter Editor</h1>
+        <span class="badge">v7.0.0 - Array-Based Social + Collapsible UI</span>
+      </div>
+      <div class="right">
+        <button id="btnUndo" title="Undo (Ctrl+Z)">Undo</button>
+        <button id="btnRedo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+        <button id="btnReset" title="Reset to template defaults">Reset</button>
+        <button id="btnValidate" title="Check accessibility">✓ Validate</button>
+        <button id="btnStats" title="Content statistics">📊 Stats</button>
+        <button id="btnImportHtml">Import HTML</button>
+        <button id="btnGeneratePlainText">Plain Text</button>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <button id="btnExportHtml" class="primary" title="Export (Ctrl+S)">Export HTML</button>
+          <label style="font-size:11px; font-weight:normal; margin:0;"><input id="exportMinify" type="checkbox" checked> Minify</label>
+          <label style="font-size:11px; font-weight:normal; margin:0;"><input id="exportStripJSON" type="checkbox"> Strip embedded data</label>
+        </div>
+        <input type="file" id="importFileInput" accept=".html" style="display:none;">
+      </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="grid">
+      <!-- Left Panel: Editor -->
+      <section class="editor">
+        <!-- Template Selection -->
+        <div class="group">
+          <h3>Template</h3>
+          <select id="templateSelect">
+            <option value="ff">Friday Focus (Students)</option>
+            <option value="briefing">Graduate School Briefing (Faculty/Staff)</option>
+          </select>
+          <p class="hint">Switching templates will load default content for that template type.</p>
+        </div>
+
+        <!-- ⚙️ Global Settings (MOVED TO TOP) -->
+        <details open class="editor-section">
+          <summary>⚙️ Global Settings</summary>
+          <div class="group">
+            <label>Section Spacing (margin between border and title)
+              <input id="section_spacing" type="number" min="0" max="100" value="24" placeholder="24">
+              <span class="hint">Distance between section border line and title (in pixels). Default: 24px</span>
+            </label>
+
+            <label>Container Width (px)
+              <input id="container_width" type="number" min="560" max="700" step="10" value="640" />
+              <span class="hint">Default 640px; 600–700 works in most clients if images match.</span>
+            </label>
+            
+            <label style="margin-top: 16px;">
+              <input id="show_section_borders" type="checkbox" checked>
+              Show section borders (horizontal lines)
+              <span class="hint">Toggle the red horizontal lines between sections on/off</span>
+            </label>
+
+            <h4 style="margin-top: 20px;">Global Padding Defaults</h4>
+            <p class="hint">These paddings apply to all cards unless overridden at section or card level.</p>
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px;">
+              <div>
+                <label><strong>Global Text Padding (px)</strong></label>
+                <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-top:8px;">
+                  <label>Top <input id="g_text_pad_top" type="number" min="0" max="60" value="20" /></label>
+                  <label>Right <input id="g_text_pad_right" type="number" min="0" max="60" value="20" /></label>
+                  <label>Bottom <input id="g_text_pad_bottom" type="number" min="0" max="60" value="20" /></label>
+                  <label>Left <input id="g_text_pad_left" type="number" min="0" max="60" value="20" /></label>
+                </div>
+              </div>
+              <div>
+                <label><strong>Global Image Padding (px)</strong></label>
+                <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-top:8px;">
+                  <label>Top <input id="g_img_pad_top" type="number" min="0" max="60" value="0" /></label>
+                  <label>Right <input id="g_img_pad_right" type="number" min="0" max="60" value="15" /></label>
+                  <label>Bottom <input id="g_img_pad_bottom" type="number" min="0" max="60" value="0" /></label>
+                  <label>Left <input id="g_img_pad_left" type="number" min="0" max="60" value="0" /></label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- 📰 Masthead -->
+        <details open class="editor-section">
+          <summary>📰 Masthead</summary>
+          <div class="group">
+            <label>Banner Image URL
+              <input id="mast_banner_url" type="url" placeholder="https://...">
+            </label>
+            
+            <label>Banner Alt Text
+              <input id="mast_banner_alt" type="text" placeholder="Descriptive text for screen readers">
+            </label>
+
+            <label>
+              <input id="hero_show" type="checkbox" checked />
+              Show Banner Image
+            </label>
+
+            <label>Banner Link URL (optional)
+              <input id="hero_link" type="url" placeholder="https://..." />
+              <span class="hint">Make banner clickable by adding a link.</span>
+            </label>
+			
+			<label>Banner Alignment
+              <select id="banner_align">
+                <option value="left">Left</option>
+                <option value="center">Center (Most Compatible)</option>
+                <option value="right">Right</option>
+              </select>
+              <span class="hint">Center works best in all email clients. Right alignment may not work in older Outlook versions.</span>
+            </label>
+			<h4 style="margin: 16px 0 8px 0;">Banner Spacing</h4>
+			
+            <label>Banner Padding (px)
+              <span class="hint">Space around the banner image</span>
+              <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-top:8px;">
+                <div>
+                  <label style="font-size:12px;">Top</label>
+                  <input id="banner_pad_top" type="number" min="0" max="100" value="20" />
+                </div>
+                <div>
+                  <label style="font-size:12px;">Right</label>
+                  <input id="banner_pad_right" type="number" min="0" max="100" value="0" />
+                </div>
+                <div>
+                  <label style="font-size:12px;">Bottom</label>
+                  <input id="banner_pad_bottom" type="number" min="0" max="100" value="0" />
+                </div>
+                <div>
+                  <label style="font-size:12px;">Left</label>
+                  <input id="banner_pad_left" type="number" min="0" max="100" value="0" />
+                </div>
+              </div>
+            </label>
+            
+            <label>Newsletter Title
+              <input id="mast_title" type="text" placeholder="e.g., Friday Focus Newsletter">
+            </label>
+            
+            <label>Tagline
+              <input id="mast_tagline" type="text" placeholder="e.g., A bimonthly newsletter for graduate students">
+            </label>
+            
+            <label>Preheader Text
+              <input id="mast_preheader" type="text" placeholder="Hidden preview text shown in inbox">
+              <span class="hint"><span id="preheaderCounter">0</span>/90 characters (optimal: 40–90) <span id="preheaderWarning" class="text-danger" style="display:none;">⚠ May be truncated</span></span>
+              <span class="hint">This text appears in email client previews but is hidden in the email itself.</span>
+            </label>
+            
+            <p class="hint"><strong>Note:</strong> "View in Browser" link is hardcoded as <code>href="browser"</code> for Slate compatibility.</p>
+          </div>
+        </details>
+
+        <!-- 📝 Sections Container (Dynamic) -->
+        <div id="sectionsContainer"></div>
+
+        <!-- 🔻 Footer -->
+        <details open class="editor-section">
+          <summary>🔻 Footer</summary>
+          <div class="group">
+            <h4>Address Lines</h4>
+            <div id="footerAddrs"></div>
+            <div class="row btnRow">
+              <button id="btnAddAddr">+ Add Address Line</button>
+            </div>
+            
+            <h4 style="margin: 20px 0 10px 0;">Social Media Links</h4>
+            <p class="hint">Add, remove, or reorder social media platforms. Supports unlimited platforms!</p>
+            
+            <div id="socialLinksContainer">
+              <!-- Populated by JavaScript -->
+            </div>
+            
+            <div class="row btnRow">
+              <button id="btnAddSocial">+ Add Social Link</button>
+            </div>
+            
+            <h4 style="margin: 20px 0 10px 0;">Footer Styling</h4>
+            
+            <div class="row">
+              <label>Background Color
+                <input id="foot_bg_color" type="color" value="#2A3033">
+              </label>
+            </div>
+            
+            <div class="row">
+              <label>Text Color
+                <input id="foot_text_color" type="color" value="#cccccc">
+              </label>
+            </div>
+            
+            <div class="row">
+              <label>Link Color
+                <input id="foot_link_color" type="color" value="#ffffff">
+              </label>
+            </div>
+            
+            <h4 style="margin: 20px 0 10px 0;">Footer Spacing</h4>
+            
+            <div class="row">
+              <label>Top Padding (px)
+                <input id="foot_padding_top" type="number" min="0" max="100" value="60">
+                <span class="hint">Space above social icons (reduces white space at top of footer)</span>
+              </label>
+            </div>
+            
+            <div class="row">
+              <label>Bottom Padding (px)
+                <input id="foot_padding_bottom" type="number" min="0" max="100" value="30">
+                <span class="hint">Space below copyright text</span>
+              </label>
+            </div>
+            
+            <div class="row">
+              <label>Social Icons Top Margin (px)
+                <input id="foot_social_margin_top" type="number" min="0" max="100" value="40">
+                <span class="hint">Space between top of footer and social icons</span>
+              </label>
+            </div>
+            
+            <div class="row">
+              <label>Social Icons Bottom Margin (px)
+                <input id="foot_social_margin_bottom" type="number" min="0" max="100" value="20">
+                <span class="hint">Space between social icons and address</span>
+              </label>
+            </div>
+            
+            <p class="hint" style="margin-top: 16px;"><strong>Note:</strong> Unsubscribe link is handled by Slate separately and not included in exported HTML.</p>
+          </div>
+        </details>
+      </section>
+
+      <!-- Right Panel: Preview -->
+      <aside class="preview">
+        <div class="previewTop">
+          <span><strong>Live Preview</strong> - What you see is what Slate will send</span>
+          <button id="btnRefresh">Refresh Preview</button>
+        </div>
+        <iframe id="previewFrame" title="Newsletter Preview"></iframe>
+      </aside>
+    </main>
+  </div>
+
+  <!-- Rich Text Editor Modal -->
+  <div id="rteModal" class="modal hidden">
+    <div class="modalInner">
+      <div class="modalHead">
+        <strong>Edit Card Body Content</strong>
+        <button id="rteClose" title="Close without saving">×</button>
+      </div>
+      
+      <div class="toolbar">
+        <button data-cmd="bold" title="Bold"><b>B</b></button>
+        <button data-cmd="italic" title="Italic"><i>I</i></button>
+        <button data-cmd="underline" title="Underline"><u>U</u></button>
+        <button id="btnLink" title="Insert Link">🔗 Link</button>
+        <button id="btnUL" title="Bullet List">• List</button>
+        <button id="btnOL" title="Numbered List">1. List</button>
+        <button id="btnClear" title="Clear All" class="danger">Clear</button>
+      </div>
+      
+      <div id="rteArea" contenteditable="true" style="min-height: 300px; padding: 12px; border: 1px solid #ddd; background: white;"></div>
+      
+      <div class="modalFoot">
+        <button id="rteCancel">Cancel</button>
+        <button id="rteSave" class="primary">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plain Text Modal -->
+  <div id="plainTextModal" class="modal hidden">
+    <div class="modalInner">
+      <div class="modalHead">
+        <strong>Plain-Text Version</strong>
+        <button id="plainTextClose">×</button>
+      </div>
+      <div style="padding: 16px;">
+        <p class="hint" style="margin-bottom: 12px;">
+          This plain-text version is auto-generated for accessibility and deliverability. Review it before pasting into Slate.
+        </p>
+        <textarea id="plainTextArea" rows="20" style="width: 100%; font-family: monospace; font-size: 13px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+      </div>
+      <div class="modalFoot">
+        <button id="btnCopyPlainText" class="primary">Copy to Clipboard</button>
+        <button id="plainTextCancel">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Validation Modal -->
+  <div id="validationModal" class="modal hidden">
+    <div class="modalInner">
+      <div class="modalHead">
+        <strong>Accessibility Validation</strong>
+        <button id="validationClose">×</button>
+      </div>
+      <div id="validationResults" style="padding: 16px; max-height: 500px; overflow-y: auto;">
+        <!-- Results populated by JS -->
+      </div>
+      <div class="modalFoot">
+        <button id="validationClose2" onclick="document.getElementById('validationModal').classList.add('hidden')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Modal -->
+  <div id="statsModal" class="modal hidden">
+    <div class="modalInner">
+      <div class="modalHead">
+        <strong>Content Statistics</strong>
+        <button id="statsClose">×</button>
+      </div>
+      <div id="statsContent" style="padding: 20px;">
+        <!-- Stats populated by JS -->
+      </div>
+      <div class="modalFoot">
+        <button id="statsClose2" onclick="document.getElementById('statsModal').classList.add('hidden')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Initialize with model data -->
+  <script>
+    window.__START_MODEL__ = {{ model|safe }};
+  </script>
+  <script src="/static/editor.js"></script>
+</body>
+</html>
