@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { renderFullEmail } from '@/lib/email-templates'
-import type { NewsletterData, ExportOptions } from '@/types/newsletter'
+import type { NewsletterData, ExportOptions, TemplateType } from '@/types/newsletter'
 import { EXPORT_DEFAULTS } from '@/lib/config'
 
 export async function POST(request: NextRequest) {
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     console.log(`Final HTML size: ${finalSize} bytes`)
 
     // Generate filename
-    const templateType = newsletterData.template || 'ff'
+    const templateType: TemplateType = (newsletterData.template === 'briefing' ? 'briefing' : 'ff')
     const prefix =
       EXPORT_DEFAULTS.filename_prefix[templateType] || 'Newsletter_'
     const suffix = stripJson ? '_PRODUCTION' : ''
