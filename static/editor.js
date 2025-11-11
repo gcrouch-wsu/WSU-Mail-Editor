@@ -412,6 +412,7 @@ const tableBorderStyleSelect = document.getElementById('tableBorderStyle');
 const tablePlaceholderCheckbox = document.getElementById('tableShowPlaceholders');
 
 let currentRteTarget = null;
+let savedSelectionRange = null;
 
 // Create debounced update function
 const debouncedUpdate = debounce(updatePreview, 400);
@@ -493,6 +494,7 @@ function init() {
   const btnTable = document.getElementById('btnTable');
   if (btnTable) {
     btnTable.addEventListener('click', () => {
+      saveSelection();
       openTableModal();
     });
   }
@@ -2442,6 +2444,8 @@ if (tableModal) {
 }
 if (tableCreate) {
   tableCreate.onclick = () => {
+    restoreSelection();
+
     const rows = parseInt(tableRowsInput.value || '3', 10);
     const cols = parseInt(tableColsInput.value || '2', 10);
     if (Number.isNaN(rows) || rows < 1 || Number.isNaN(cols) || cols < 1) {
@@ -2628,6 +2632,7 @@ function handleTableToolbarAction(action) {
       break;
     }
     case 'open-modal': {
+      saveSelection();
       openTableModal();
       // prefill modal with current table settings
       if (tableRowsInput && tableColsInput) {
@@ -2695,4 +2700,19 @@ function replaceCurrentTableWithHtml(html) {
     selection.removeAllRanges();
     selection.addRange(range);
   }
+}
+
+function saveSelection() {
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    savedSelectionRange = sel.getRangeAt(0).cloneRange();
+  }
+}
+
+function restoreSelection() {
+  if (!savedSelectionRange) return;
+  const sel = window.getSelection();
+  if (!sel) return;
+  sel.removeAllRanges();
+  sel.addRange(savedSelectionRange);
 }
