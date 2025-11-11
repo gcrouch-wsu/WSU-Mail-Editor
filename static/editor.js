@@ -20,7 +20,7 @@ function setIframeHtml(iframe, html) {
     iframe.srcdoc = html;
     setTimeout(() => {
       const doc = iframe.contentDocument;
-      const h = (doc && doc.body && doc.body.scrollHeight) ? doc.body.scrollHeight : 600;
+      const h = doc && doc.body && doc.body.scrollHeight ? doc.body.scrollHeight : 600;
       iframe.style.height = Math.max(600, h) + 'px';
     }, 120);
   } catch (e) {
@@ -29,7 +29,9 @@ function setIframeHtml(iframe, html) {
       iframe.src = 'about:blank';
       iframe.onload = () => {
         const doc = iframe.contentDocument || iframe.contentWindow.document;
-        doc.open(); doc.write(html); doc.close();
+        doc.open();
+        doc.write(html);
+        doc.close();
         iframe.style.height = Math.max(600, doc.body.scrollHeight) + 'px';
       };
     } catch (_) {
@@ -80,7 +82,26 @@ function cleanHtml(html) {
   temp.innerHTML = html;
 
   // Allowed tags - keep these, strip everything else
-  const allowedTags = ['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'A', 'UL', 'OL', 'LI', 'H3'];
+  const allowedTags = [
+    'P',
+    'BR',
+    'STRONG',
+    'B',
+    'EM',
+    'I',
+    'U',
+    'A',
+    'UL',
+    'OL',
+    'LI',
+    'H3',
+    'TABLE',
+    'TBODY',
+    'THEAD',
+    'TR',
+    'TD',
+    'TH',
+  ];
 
   // Recursively clean nodes
   function cleanNode(node) {
@@ -106,9 +127,23 @@ function cleanHtml(html) {
       // Tag is allowed - create clean version
       const cleanElement = document.createElement(tagName);
 
-      // Only preserve href for links
+      // Preserve href for links
       if (tagName === 'A' && node.href) {
         cleanElement.href = node.href;
+      }
+
+      // Preserve style attribute for allowed tags
+      if (node.getAttribute && node.getAttribute('style')) {
+        cleanElement.setAttribute('style', node.getAttribute('style'));
+      }
+
+      // Preserve table-specific attributes
+      if (node.getAttribute) {
+        ['colspan', 'rowspan', 'role', 'width'].forEach((attr) => {
+          if (node.hasAttribute(attr)) {
+            cleanElement.setAttribute(attr, node.getAttribute(attr));
+          }
+        });
       }
 
       // Recursively clean children
@@ -438,6 +473,50 @@ function init() {
     document.execCommand('insertOrderedList');
     rteArea.focus();
   });
+
+  const btnTable = document.getElementById('btnTable');
+  if (btnTable) {
+    btnTable.addEventListener('click', () => {
+      const defaultCols = '2';
+      const defaultRows = '3';
+      const colsInput = prompt('How many columns?', defaultCols);
+      const cols = Math.max(1, parseInt(colsInput || defaultCols, 10));
+      if (!cols || Number.isNaN(cols)) {
+        return;
+      }
+      const rowsInput = prompt('How many rows (including header)?', defaultRows);
+      const rows = Math.max(1, parseInt(rowsInput || defaultRows, 10));
+      if (!rows || Number.isNaN(rows)) {
+        return;
+      }
+      const useHeader = confirm('Use first row as header?');
+      const tableStyle = 'width:100%; border-collapse:collapse; margin:12px 0;';
+      const headerCellStyle =
+        'padding:8px 10px; border:1px solid #dddddd; background-color:#f4f4f4; text-align:left; font-weight:bold;';
+      const cellStyle = 'padding:8px 10px; border:1px solid #dddddd; text-align:left;';
+      let html = `<table role="presentation" style="${tableStyle}">`;
+      if (useHeader) {
+        html += '<thead><tr>';
+        for (let c = 0; c < cols; c += 1) {
+          html += `<th style="${headerCellStyle}">Header ${c + 1}</th>`;
+        }
+        html += '</tr></thead>';
+      }
+      html += '<tbody>';
+      const bodyRows = useHeader ? rows - 1 : rows;
+      for (let r = 0; r < bodyRows; r += 1) {
+        html += '<tr>';
+        for (let c = 0; c < cols; c += 1) {
+          html += `<td style="${cellStyle}">Cell ${r + 1}-${c + 1}</td>`;
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      document.execCommand('insertHTML', false, html);
+      rteArea.focus();
+      showToast('Table inserted. Replace placeholders with your content.', 'info');
+    });
+  }
 
   document.getElementById('btnClear').addEventListener('click', () => {
     rteArea.innerHTML = '';
@@ -2111,7 +2190,7 @@ function renderCard(section, sIdx, card, cIdx) {
       card.button_alignment = e.target.value;
       updatePreview();
     });
-    
+
     const ctaTextAlignSel = cardDiv.querySelector('.ctaTextAlign');
     if (ctaTextAlignSel) {
       ctaTextAlignSel.addEventListener('change', (e) => {
