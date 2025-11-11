@@ -438,6 +438,8 @@ let tableCellTarget = null;
 let toolbarCleanupHandlers = [];
 let toolbarHost = null;
 let toolbarHostOriginalPosition = null;
+let pointerDown = false;
+let pendingToolbarTable = null;
 
 // Create debounced update function
 const debouncedUpdate = debounce(updatePreview, 400);
@@ -2734,11 +2736,32 @@ document.addEventListener('selectionchange', () => {
   if (table) {
     currentTableElement = table;
     currentTableCell = getSelectionTableCell();
-    createTableToolbar(table);
+    if (pointerDown) {
+      pendingToolbarTable = table;
+    } else {
+      createTableToolbar(table);
+    }
   } else {
     currentTableElement = null;
     currentTableCell = null;
+    pendingToolbarTable = null;
     removeTableToolbar();
+  }
+});
+
+document.addEventListener('pointerdown', (e) => {
+  pointerDown = true;
+  const table = e.target instanceof Element ? e.target.closest('table') : null;
+  if (!table) {
+    pendingToolbarTable = null;
+  }
+});
+
+document.addEventListener('pointerup', () => {
+  pointerDown = false;
+  if (pendingToolbarTable) {
+    createTableToolbar(pendingToolbarTable);
+    pendingToolbarTable = null;
   }
 });
 
