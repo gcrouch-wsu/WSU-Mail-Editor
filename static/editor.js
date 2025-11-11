@@ -416,11 +416,25 @@ const tableHeaderBgInput = document.getElementById('tableHeaderBg');
 const tableHeaderLineWidthInput = document.getElementById('tableHeaderLineWidth');
 const tableHeaderLineColorInput = document.getElementById('tableHeaderLineColor');
 
+// Table cell modal controls
+const tableCellModal = document.getElementById('tableCellModal');
+const tableCellClose = document.getElementById('tableCellClose');
+const tableCellCancel = document.getElementById('tableCellCancel');
+const tableCellApply = document.getElementById('tableCellApply');
+const cellApplyScopeSelect = document.getElementById('cellApplyScope');
+const cellTextColorInput = document.getElementById('cellTextColor');
+const cellBgColorInput = document.getElementById('cellBgColor');
+const cellFontSizeInput = document.getElementById('cellFontSize');
+const cellFontWeightSelect = document.getElementById('cellFontWeight');
+const cellTextAlignSelect = document.getElementById('cellTextAlign');
+
 let currentRteTarget = null;
 let savedSelectionRange = null;
 let currentTableElement = null;
+let currentTableCell = null;
 let tableModalTarget = null;
 let tableModalOriginalContent = null;
+let tableCellTarget = null;
 
 // Create debounced update function
 const debouncedUpdate = debounce(updatePreview, 400);
@@ -2546,9 +2560,8 @@ if (tableCreate) {
       headerUnderlineColor: headerLineColor,
     });
 
-    const targetTable = tableModalTarget && document.body.contains(tableModalTarget)
-      ? tableModalTarget
-      : null;
+    const targetTable =
+      tableModalTarget && document.body.contains(tableModalTarget) ? tableModalTarget : null;
     const originalContent = targetTable ? tableModalOriginalContent : null;
     if (targetTable) {
       replaceTableWithHtml(targetTable, html, originalContent);
@@ -2648,6 +2661,7 @@ function createTableToolbar(table) {
     <button data-action="del-row">Delete Row</button>
     <button data-action="del-col">Delete Column</button>
     <button data-action="clear-cell">Clear Cell</button>
+    <button data-action="format-cell">Format Cell</button>
     <button data-action="open-modal">Open Table Modal</button>
   `;
 
@@ -2667,9 +2681,11 @@ document.addEventListener('selectionchange', () => {
   const table = getSelectionTable();
   if (table) {
     currentTableElement = table;
+    currentTableCell = getSelectionTableCell();
     createTableToolbar(table);
   } else {
     currentTableElement = null;
+    currentTableCell = null;
     removeTableToolbar();
   }
 });
@@ -2740,6 +2756,15 @@ function handleTableToolbarAction(action) {
     case 'clear-cell': {
       if (cell) cell.innerHTML = '';
       modified = true;
+      break;
+    }
+    case 'format-cell': {
+      const targetCell = cell || currentTableCell || getSelectionTableCell();
+      if (!targetCell) {
+        showToast('Place cursor inside a table cell first.', 'info');
+        return;
+      }
+      openTableCellModal(targetCell);
       break;
     }
     case 'open-modal': {
@@ -2898,4 +2923,124 @@ function applyOriginalContent(newTable, originalContent) {
       }
     });
   });
+}
+
+function openTableCellModal(cell) {
+  if (!tableCellModal || !cell) {
+    return;
+  }
+  tableCellTarget = cell;
+  const computed = window.getComputedStyle(cell);
+  if (cellTextColorInput) {
+    cellTextColorInput.value = rgbToHex(computed.color);
+  }
+  if (cellBgColorInput) {
+    cellBgColorInput.value = rgbToHex(computed.backgroundColor);
+  }
+  if (cellFontSizeInput) {
+    const size = parseInt(computed.fontSize, 10);
+    cellFontSizeInput.value = Number.isFinite(size) ? size : 16;
+  }
+  if (cellFontWeightSelect) {
+    const weight = parseInt(computed.fontWeight, 10);
+    cellFontWeightSelect.value = weight >= 600 ? '700' : '400';
+  }
+  if (cellTextAlignSelect) {
+    cellTextAlignSelect.value = computed.textAlign || 'left';
+  }
+  if (cellApplyScopeSelect) {
+    cellApplyScopeSelect.value = 'cell';
+  }
+  tableCellModal.classList.remove('hidden');
+}
+
+function closeTableCellModal() {
+  if (tableCellModal) {
+    tableCellModal.classList.add('hidden');
+  }
+  tableCellTarget = null;
+}
+
+function applyStylesToCell(cell, styles) {
+  if (!cell) return;
+  const { textColor, backgroundColor, fontSize, fontWeight, textAlign } = styles;
+
+  if (textColor) cell.style.color = textColor;
+  if (backgroundColor) cell.style.backgroundColor = backgroundColor;
+  if (fontSize) cell.style.fontSize = `${fontSize}px`;
+  if (fontWeight) cell.style.fontWeight = fontWeight;
+  if (textAlign) cell.style.textAlign = textAlign;
+}
+
+if (tableCellClose) {
+  tableCellClose.onclick = closeTableCellModal;
+}
+if (tableCellCancel) {
+  tableCellCancel.onclick = closeTableCellModal;
+}
+if (tableCellModal) {
+  tableCellModal.addEventListener('click', (e) => {
+    if (e.target === tableCellModal) {
+      closeTableCellModal();
+    }
+  });
+}
+if (tableCellApply) {
+  tableCellApply.onclick = () => {
+    if (!tableCellTarget) {
+      closeTableCellModal();
+      return;
+    }
+
+    const textColor = cellTextColorInput?.value || '';
+    const backgroundColor = cellBgColorInput?.value || '';
+    const fontSizeValue = cellFontSizeInput
+      ? parseInt(cellFontSizeInput.value || '16', 10)
+      : undefined;
+    const fontSize = Number.isFinite(fontSizeValue) ? fontSizeValue : undefined;
+    const fontWeight = cellFontWeightSelect?.value || '400';
+    const textAlign = cellTextAlignSelect?.value || 'left';
+    const scope = cellApplyScopeSelect?.value || 'cell';
+
+    const styles = {
+      textColor,
+      backgroundColor,
+      fontSize,
+      fontWeight,
+      textAlign,
+    };
+
+    const table = tableCellTarget.closest('table');
+    if (!table) {
+      closeTableCellModal();
+      return;
+    }
+
+    if (scope === 'row') {
+      const row = tableCellTarget.parentElement;
+      Array.from(row.children).forEach((c) => applyStylesToCell(c, styles));
+    } else if (scope === 'column') {
+      const colIndex = Array.from(tableCellTarget.parentElement.children).indexOf(tableCellTarget);
+      Array.from(table.querySelectorAll('tr')).forEach((tr) => {
+        const target = tr.children[colIndex];
+        if (target) applyStylesToCell(target, styles);
+      });
+    } else {
+      applyStylesToCell(tableCellTarget, styles);
+    }
+
+    const sel = window.getSelection();
+    if (sel) {
+      const focusCell = tableCellTarget;
+      const range = document.createRange();
+      range.selectNodeContents(focusCell);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    markChanged();
+    debouncedUpdate();
+    closeTableCellModal();
+  };
 }
