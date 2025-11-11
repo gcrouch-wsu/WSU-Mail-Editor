@@ -2630,14 +2630,23 @@ function applyCellStyle(sourceCell, targetCell, fallbackStyle) {
   }
 }
 
-function rgbToHex(colorString) {
-  if (!colorString) return DEFAULT_BORDER_COLOR;
+function rgbToHex(colorString, fallback = DEFAULT_BORDER_COLOR) {
+  if (!colorString) return fallback;
+  const normalized = colorString.trim().toLowerCase();
+  if (normalized === 'transparent') return fallback;
+  const directRgba = normalized.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([0-9.]+)\)/i);
+  if (directRgba && parseFloat(directRgba[1]) === 0) {
+    return fallback;
+  }
   const ctx = document.createElement('canvas').getContext('2d');
-  ctx.fillStyle = colorString;
+  ctx.fillStyle = normalized;
   const computed = ctx.fillStyle;
   if (computed.startsWith('#')) return computed;
-  const match = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
-  if (!match) return DEFAULT_BORDER_COLOR;
+  const match = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\)/i);
+  if (!match) return fallback;
+  if (match[4] !== undefined && parseFloat(match[4]) === 0) {
+    return fallback;
+  }
   const r = parseInt(match[1], 10).toString(16).padStart(2, '0');
   const g = parseInt(match[2], 10).toString(16).padStart(2, '0');
   const b = parseInt(match[3], 10).toString(16).padStart(2, '0');
@@ -2984,10 +2993,10 @@ function openTableCellModal(cell) {
   tableCellTarget = cell;
   const computed = window.getComputedStyle(cell);
   if (cellTextColorInput) {
-    cellTextColorInput.value = rgbToHex(computed.color);
+    cellTextColorInput.value = rgbToHex(computed.color, '#000000');
   }
   if (cellBgColorInput) {
-    cellBgColorInput.value = rgbToHex(computed.backgroundColor);
+    cellBgColorInput.value = rgbToHex(computed.backgroundColor, '#FFFFFF');
   }
   if (cellFontSizeInput) {
     const size = parseInt(computed.fontSize, 10);
