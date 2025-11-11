@@ -435,7 +435,8 @@ let currentTableElement = null;
 let currentTableCell = null;
 let tableModalTarget = null;
 let tableModalOriginalContent = null;
-let tableCellTarget = null;
+let tableCellPrimary = null;
+let tableCellTargets = [];
 let toolbarCleanupHandlers = [];
 let toolbarHost = null;
 let toolbarHostOriginalPosition = null;
@@ -2607,6 +2608,37 @@ function getSelectionTable() {
   return cell.closest('table');
 }
 
+function getSelectedTableCells() {
+  const table = getSelectionTable();
+  if (!table) return [];
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return [];
+  const range = sel.getRangeAt(0);
+  const cells = [];
+  table.querySelectorAll('td, th').forEach((cell) => {
+    try {
+      if (range.intersectsNode(cell)) {
+        cells.push(cell);
+      }
+    } catch (err) {
+      // Some browsers may throw if node partially intersects; fall back to bounding box check.
+      const rect = cell.getBoundingClientRect();
+      const selectionRect = range.getBoundingClientRect();
+      if (
+        rect &&
+        selectionRect &&
+        rect.left < selectionRect.right &&
+        rect.right > selectionRect.left &&
+        rect.top < selectionRect.bottom &&
+        rect.bottom > selectionRect.top
+      ) {
+        cells.push(cell);
+      }
+    }
+  });
+  return Array.from(new Set(cells));
+}
+
 function getTableColumnCount(table) {
   const firstRow = table.querySelector('tr');
   return firstRow ? firstRow.children.length : 1;
@@ -2860,6 +2892,11 @@ function handleTableToolbarAction(action) {
       break;
     }
     case 'format-cell': {
+      const selectedCells = getSelectedTableCells();
+      if (selectedCells.length > 1) {
+        openTableCellModal();
+        break;
+      }
       const targetCell = cell || currentTableCell || getSelectionTableCell();
       if (!targetCell) {
         showToast('Place cursor inside a table cell first.', 'info');
@@ -3034,12 +3071,33 @@ function applyOriginalContent(newTable, originalContent) {
 }
 
 function openTableCellModal(cell) {
-  if (!tableCellModal || !cell) {
+  if (!tableCellModal) {
     return;
   }
   initColorPalettes(tableCellModal);
-  tableCellTarget = cell;
-  const computed = window.getComputedStyle(cell);
+
+  let targets = [];
+  if (cell) {
+    targets = [cell];
+  } else {
+    targets = getSelectedTableCells();
+  }
+  if (!targets.length) {
+    const fallback = currentTableCell || getSelectionTableCell();
+    if (fallback) {
+      targets = [fallback];
+    }
+  }
+  targets = Array.from(new Set(targets.filter(Boolean)));
+  if (!targets.length) {
+    showToast('Select at least one table cell first.', 'info');
+    return;
+  }
+
+  tableCellTargets = targets;
+  tableCellPrimary = targets[0];
+
+  const computed = window.getComputedStyle(tableCellPrimary);
   if (cellTextColorInput) {
     cellTextColorInput.value = rgbToHex(computed.color, '#000000');
   }
@@ -3073,7 +3131,7 @@ function openTableCellModal(cell) {
     cellTextAlignSelect.value = computed.textAlign || 'left';
   }
   if (cellApplyScopeSelect) {
-    cellApplyScopeSelect.value = 'cell';
+    cellApplyScopeSelect.value = tableCellTargets.length > 1 ? 'selection' : 'cell';
   }
   tableCellModal.classList.remove('hidden');
 }
@@ -3082,7 +3140,8 @@ function closeTableCellModal() {
   if (tableCellModal) {
     tableCellModal.classList.add('hidden');
   }
-  tableCellTarget = null;
+  tableCellPrimary = null;
+  tableCellTargets = [];
 }
 
 function applyStylesToCell(cell, styles) {
@@ -3122,7 +3181,7 @@ if (tableCellModal) {
 }
 if (tableCellApply) {
   tableCellApply.onclick = () => {
-    if (!tableCellTarget) {
+    if (!tableCellPrimary) {
       closeTableCellModal();
       return;
     }
@@ -3147,28 +3206,35 @@ if (tableCellApply) {
       fontFamily,
     };
 
-    const table = tableCellTarget.closest('table');
+    const baseCell = tableCellPrimary;
+    const table = baseCell ? baseCell.closest('table') : null;
     if (!table) {
       closeTableCellModal();
       return;
     }
 
+    let targets = [];
     if (scope === 'row') {
-      const row = tableCellTarget.parentElement;
-      Array.from(row.children).forEach((c) => applyStylesToCell(c, styles));
+      const row = baseCell.parentElement;
+      if (row) targets = Array.from(row.children);
     } else if (scope === 'column') {
-      const colIndex = Array.from(tableCellTarget.parentElement.children).indexOf(tableCellTarget);
+      const colIndex = Array.from(baseCell.parentElement.children).indexOf(baseCell);
       Array.from(table.querySelectorAll('tr')).forEach((tr) => {
         const target = tr.children[colIndex];
-        if (target) applyStylesToCell(target, styles);
+        if (target) targets.push(target);
       });
+    } else if (scope === 'selection') {
+      targets = tableCellTargets.length ? tableCellTargets : [baseCell];
     } else {
-      applyStylesToCell(tableCellTarget, styles);
+      targets = [baseCell];
     }
+
+    const uniqueTargets = Array.from(new Set(targets.filter(Boolean)));
+    uniqueTargets.forEach((target) => applyStylesToCell(target, styles));
 
     const sel = window.getSelection();
     if (sel) {
-      const focusCell = tableCellTarget;
+      const focusCell = uniqueTargets[0] || baseCell;
       const range = document.createRange();
       range.selectNodeContents(focusCell);
       range.collapse(true);
