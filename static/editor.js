@@ -435,6 +435,7 @@ let currentTableCell = null;
 let tableModalTarget = null;
 let tableModalOriginalContent = null;
 let tableCellTarget = null;
+let toolbarCleanupHandlers = [];
 
 // Create debounced update function
 const debouncedUpdate = debounce(updatePreview, 400);
@@ -2650,6 +2651,14 @@ function removeTableToolbar() {
     currentTableToolbar.parentElement.removeChild(currentTableToolbar);
   }
   currentTableToolbar = null;
+  toolbarCleanupHandlers.forEach((fn) => {
+    try {
+      fn();
+    } catch (err) {
+      console.warn('Failed to cleanup toolbar handler', err);
+    }
+  });
+  toolbarCleanupHandlers = [];
 }
 
 function createTableToolbar(table) {
@@ -2676,8 +2685,20 @@ function createTableToolbar(table) {
     handleTableToolbarAction(btn.dataset.action);
   });
 
-  table.parentElement.insertBefore(toolbar, table);
+  document.body.appendChild(toolbar);
   currentTableToolbar = toolbar;
+  positionToolbarRelativeToTable(table);
+
+  const updatePosition = () => {
+    if (!currentTableToolbar) return;
+    positionToolbarRelativeToTable(table);
+  };
+  window.addEventListener('scroll', updatePosition, true);
+  window.addEventListener('resize', updatePosition);
+  toolbarCleanupHandlers = [
+    () => window.removeEventListener('scroll', updatePosition, true),
+    () => window.removeEventListener('resize', updatePosition),
+  ];
 }
 
 document.addEventListener('selectionchange', () => {
@@ -3134,4 +3155,20 @@ function snapshotOriginalTable(table) {
   const clone = table.cloneNode(true);
   clone.querySelectorAll('.tableToolbar').forEach((el) => el.remove());
   return clone;
+}
+
+function positionToolbarRelativeToTable(table) {
+  if (!currentTableToolbar) return;
+  const rect = table.getBoundingClientRect();
+  const toolbarRect = currentTableToolbar.getBoundingClientRect();
+  let top = window.scrollY + rect.top - toolbarRect.height - 6;
+  if (top < window.scrollY + 10) {
+    top = window.scrollY + rect.bottom + 6;
+  }
+  const left = window.scrollX + rect.left;
+  currentTableToolbar.style.position = 'absolute';
+  currentTableToolbar.style.top = `${top}px`;
+  currentTableToolbar.style.left = `${left}px`;
+  currentTableToolbar.style.zIndex = '9999';
+  currentTableToolbar.style.pointerEvents = 'auto';
 }

@@ -965,14 +965,15 @@ input[type='number']::-webkit-outer-spin-button {
 }
 
 .tableToolbar {
+  position: absolute;
   background: #f4f4f4;
   border: 1px solid #ddd;
   border-radius: 6px;
   padding: 6px;
-  margin-bottom: 6px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .tableToolbar button {
