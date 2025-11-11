@@ -470,6 +470,7 @@ function init() {
 
   // Align color picker labels (fallback for browsers without :has())
   applyInlineColorLabel();
+  initColorPalettes();
 
   // Template selector
   templateSelect.value = state.template || 'ff';
@@ -2362,6 +2363,8 @@ function openTableModal(targetTable = null) {
     return;
   }
 
+  initColorPalettes(tableModal);
+
   if (targetTable) {
     tableModalTarget = targetTable;
   } else if (!tableModalTarget) {
@@ -2929,6 +2932,7 @@ function openTableCellModal(cell) {
   if (!tableCellModal || !cell) {
     return;
   }
+  initColorPalettes(tableCellModal);
   tableCellTarget = cell;
   const computed = window.getComputedStyle(cell);
   if (cellTextColorInput) {
@@ -3043,4 +3047,48 @@ if (tableCellApply) {
     debouncedUpdate();
     closeTableCellModal();
   };
+}
+
+const WSU_COLOR_PALETTE = [
+  { label: 'Crimson', value: '#A60F2D' },
+  { label: 'Gray', value: '#4D4D4D' },
+  { label: 'Red', value: '#CA1237' },
+  { label: 'Black', value: '#000000' },
+  { label: 'White', value: '#FFFFFF' },
+  { label: 'Autumn', value: '#FF6727' },
+  { label: 'Goldfinch', value: '#F3E700' },
+  { label: 'Vineyard', value: '#AADC24' },
+  { label: 'Pacific Sky', value: '#5BC3F5' },
+  { label: 'Midnight', value: '#002D61' },
+];
+
+function attachColorPalette(input) {
+  if (!input || input.dataset.paletteAttached) return;
+  const container = document.createElement('div');
+  container.className = 'colorPalette';
+
+  WSU_COLOR_PALETTE.forEach((color) => {
+    const swatch = document.createElement('button');
+    swatch.type = 'button';
+    swatch.className = 'colorSwatch';
+    swatch.style.backgroundColor = color.value;
+    swatch.title = `${color.label} (${color.value})`;
+    swatch.addEventListener('click', () => {
+      input.value = color.value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    container.appendChild(swatch);
+  });
+
+  input.parentElement.appendChild(container);
+  input.dataset.paletteAttached = 'true';
+}
+
+function initColorPalettes(scope = document) {
+  const colorInputs = scope.querySelectorAll('input[type="color"][data-wsu-palette]');
+  colorInputs.forEach((input) => {
+    if (!input.parentElement.querySelector('.colorPalette')) {
+      attachColorPalette(input);
+    }
+  });
 }
