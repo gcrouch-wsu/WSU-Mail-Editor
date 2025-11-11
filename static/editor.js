@@ -425,6 +425,7 @@ const cellApplyScopeSelect = document.getElementById('cellApplyScope');
 const cellTextColorInput = document.getElementById('cellTextColor');
 const cellBgColorInput = document.getElementById('cellBgColor');
 const cellFontSizeInput = document.getElementById('cellFontSize');
+const cellFontFamilySelect = document.getElementById('cellFontFamily');
 const cellFontWeightSelect = document.getElementById('cellFontWeight');
 const cellTextAlignSelect = document.getElementById('cellTextAlign');
 
@@ -2752,7 +2753,10 @@ document.addEventListener('selectionchange', () => {
 document.addEventListener('pointerdown', (e) => {
   pointerDown = true;
   const table = e.target instanceof Element ? e.target.closest('table') : null;
-  if (!table) {
+  if (table) {
+    pendingToolbarTable = table;
+    removeTableToolbar();
+  } else {
     pendingToolbarTable = null;
   }
 });
@@ -2795,6 +2799,7 @@ function handleTableToolbarAction(action) {
           newCell.style.fontWeight = referenceCell.style.fontWeight || '';
           newCell.style.color = referenceCell.style.color || '';
           newCell.style.backgroundColor = referenceCell.style.backgroundColor || '';
+          newCell.style.fontFamily = referenceCell.style.fontFamily || '';
         }
         newCell.innerHTML = '';
         newRow.appendChild(newCell);
@@ -2824,6 +2829,7 @@ function handleTableToolbarAction(action) {
           newCell.style.fontWeight = referenceCell.style.fontWeight || '';
           newCell.style.color = referenceCell.style.color || '';
           newCell.style.backgroundColor = referenceCell.style.backgroundColor || '';
+          newCell.style.fontFamily = referenceCell.style.fontFamily || '';
         }
         newCell.innerHTML = '';
         tr.appendChild(newCell);
@@ -3048,6 +3054,21 @@ function openTableCellModal(cell) {
     const weight = parseInt(computed.fontWeight, 10);
     cellFontWeightSelect.value = weight >= 600 ? '700' : '400';
   }
+  if (cellFontFamilySelect) {
+    const computedFamily = (computed.fontFamily || '').toLowerCase().replace(/["']/g, '');
+    let matchedFamily = '';
+    TABLE_FONT_OPTIONS.forEach((opt) => {
+      if (!opt.value) return;
+      const normalizedOption = opt.value.toLowerCase().replace(/["']/g, '');
+      if (
+        computedFamily.startsWith(normalizedOption) ||
+        normalizedOption.startsWith(computedFamily)
+      ) {
+        matchedFamily = opt.value;
+      }
+    });
+    cellFontFamilySelect.value = matchedFamily;
+  }
   if (cellTextAlignSelect) {
     cellTextAlignSelect.value = computed.textAlign || 'left';
   }
@@ -3066,7 +3087,7 @@ function closeTableCellModal() {
 
 function applyStylesToCell(cell, styles) {
   if (!cell) return;
-  const { textColor, backgroundColor, fontSize, fontWeight, textAlign } = styles;
+  const { textColor, backgroundColor, fontSize, fontWeight, textAlign, fontFamily } = styles;
 
   if (textColor) cell.style.color = textColor;
   if (backgroundColor) cell.style.backgroundColor = backgroundColor;
@@ -3076,6 +3097,13 @@ function applyStylesToCell(cell, styles) {
     cell.style.textAlign = textAlign;
   } else if (!cell.style.textAlign) {
     cell.style.textAlign = 'left';
+  }
+  if (fontFamily !== undefined) {
+    if (fontFamily) {
+      cell.style.fontFamily = fontFamily;
+    } else {
+      cell.style.fontFamily = '';
+    }
   }
 }
 
@@ -3105,6 +3133,7 @@ if (tableCellApply) {
       ? parseInt(cellFontSizeInput.value || '16', 10)
       : undefined;
     const fontSize = Number.isFinite(fontSizeValue) ? fontSizeValue : undefined;
+    const fontFamily = cellFontFamilySelect ? cellFontFamilySelect.value : '';
     const fontWeight = cellFontWeightSelect?.value || '400';
     const textAlign = cellTextAlignSelect?.value || 'left';
     const scope = cellApplyScopeSelect?.value || 'cell';
@@ -3115,6 +3144,7 @@ if (tableCellApply) {
       fontSize,
       fontWeight,
       textAlign,
+      fontFamily,
     };
 
     const table = tableCellTarget.closest('table');
@@ -3172,6 +3202,16 @@ const WSU_COLOR_PALETTE = [
   { label: 'Vineyard', value: '#AADC24' },
   { label: 'Pacific Sky', value: '#5BC3F5' },
   { label: 'Midnight', value: '#002D61' },
+];
+
+const TABLE_FONT_OPTIONS = [
+  { label: 'Match section font', value: '' },
+  { label: 'Open Sans', value: "'Open Sans', Arial, sans-serif" },
+  { label: 'Arial / Helvetica', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Georgia / Times New Roman', value: "Georgia, 'Times New Roman', serif" },
+  { label: 'Times New Roman', value: "'Times New Roman', Times, serif" },
+  { label: 'Tahoma', value: "'Tahoma', Geneva, sans-serif" },
+  { label: 'Courier New', value: "'Courier New', Courier, monospace" },
 ];
 
 function attachColorPalette(input) {
