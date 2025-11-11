@@ -430,6 +430,83 @@ def render_resource_card(card, section=None, settings=None):
 </table>"""
 
 
+def render_letter_card(card, section=None, settings=None):
+    """Letter-style card for presidential updates"""
+    greeting = card.get("greeting", "").strip()
+    body_html = card.get("body_html", "")
+    closing = card.get("closing", "").strip()
+    signature_name = card.get("signature_name", "").strip()
+
+    signature_lines = card.get("signature_lines", [])
+    if isinstance(signature_lines, str):
+        signature_lines = [line.strip() for line in signature_lines.splitlines() if line.strip()]
+    elif not signature_lines:
+        signature_lines = []
+
+    signature_image_url = (card.get("signature_image_url") or "").strip()
+    signature_image_alt = (card.get("signature_image_alt") or "Signature").strip()
+    signature_image_width = card.get("signature_image_width")
+    try:
+        signature_image_width = int(signature_image_width) if signature_image_width else 220
+    except (TypeError, ValueError):
+        signature_image_width = 220
+
+    card_style = get_card_style(card)
+    padding = get_card_padding(card, section, settings)
+    padding_style = f"padding:{padding['top']}px {padding['right']}px {padding['bottom']}px {padding['left']}px;"
+
+    content_parts = []
+
+    if greeting:
+        content_parts.append(
+            f'<p style="{STYLE_BODY_TEXT} margin:0 0 18px 0; font-weight:normal;">{esc(greeting)}</p>'
+        )
+
+    if body_html:
+        content_parts.append(
+            f'<div style="font-size:16px; line-height:1.6; color:{TEXT_BODY}; margin:0 0 18px 0;">{body_html}</div>'
+        )
+
+    if closing:
+        content_parts.append(
+            f'<p style="{STYLE_BODY_TEXT} margin:24px 0 8px 0; font-weight:normal;">{esc(closing)}</p>'
+        )
+
+    if signature_image_url:
+        content_parts.append(
+            f'<p style="margin:0 0 12px 0;">'
+            f'<img src="{esc(signature_image_url)}" alt="{esc(signature_image_alt)}" width="{signature_image_width}" '
+            f'style="{STYLE_IMAGE} width:{signature_image_width}px; max-width:100%; height:auto; display:block;" />'
+            f"</p>"
+        )
+
+    if signature_name:
+        content_parts.append(
+            f'<p style="{STYLE_BODY_TEXT} margin:0 0 4px 0; font-weight:bold;">{esc(signature_name)}</p>'
+        )
+
+    for line in signature_lines:
+        content_parts.append(
+            f'<p style="{STYLE_BODY_TEXT} margin:0 0 4px 0; font-weight:normal;">{esc(line)}</p>'
+        )
+
+    links_html = render_card_links(card)
+    if links_html:
+        content_parts.append(
+            f'<div style="margin-top:18px; font-size:14px; line-height:1.6;">{links_html}</div>'
+        )
+
+    content = "\n".join(content_parts)
+
+    return f"""<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="{card_style}">
+  <tr>
+    <td style="{padding_style}">
+      {content}
+    </td>
+  </tr>
+</table>"""
+
+
 def render_closures_section(closures):
     """Special closures list format"""
     if not closures:
@@ -691,6 +768,8 @@ def render_section(section, spacing=24, show_border=True, settings=None, is_last
                     settings=settings,
                 )
             )
+        elif card_type == "letter":
+            card_html.append(render_letter_card(card, section, settings))
         elif card_type == "event":
             card_html.append(render_event_card(card, section, settings))
         elif card_type == "resource":
@@ -861,6 +940,46 @@ def generate_plain_text(data):
                     parts.append(f"• {date} - {reason}")
             continue
         for card in section.get("cards", []):
+            if card.get("type") == "letter":
+                title = (card.get("title") or "").strip()
+                if title:
+                    parts.append(f"\n{title}")
+
+                greeting = (card.get("greeting") or "").strip()
+                if greeting:
+                    parts.append(greeting)
+
+                body_html = card.get("body_html", "")
+                if body_html:
+                    p = _HTMLToText()
+                    p.feed(body_html)
+                    parts.append(p.get_text())
+
+                closing = (card.get("closing") or "").strip()
+                if closing:
+                    parts.append(closing)
+
+                signature_name = (card.get("signature_name") or "").strip()
+                if signature_name:
+                    parts.append(signature_name)
+
+                signature_lines = card.get("signature_lines", [])
+                if isinstance(signature_lines, str):
+                    signature_lines = [
+                        line.strip() for line in signature_lines.splitlines() if line.strip()
+                    ]
+                for line in signature_lines or []:
+                    parts.append(line)
+
+                for link in card.get("links", []):
+                    label = (link.get("label") or "").strip()
+                    url = (link.get("url") or "").strip()
+                    if label and url and url != "#":
+                        parts.append(f"{label}: {url}")
+
+                parts.append("")
+                continue
+
             ctitle = card.get("title", "")
             if ctitle:
                 parts.append(f"\n{ctitle}")

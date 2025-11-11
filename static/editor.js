@@ -44,6 +44,32 @@ function clone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
+const LETTER_SIGNATURE_DEFAULTS = {
+  greeting: 'Dear Colleagues,',
+  closing: 'Sincerely,',
+  signature_name: 'Tammy D. Barry',
+  signature_lines: ['Dean of the Graduate School', 'Vice Provost for Graduate Education'],
+  signature_image_url:
+    'https://futurecoug.wsu.edu/www/images/8hG3FTHdpyUZZD4ILkWxI2Z8EjhQLChenToRkB20GeeDWkUQ6k_cxhHBNhmo8Sp1G26HVWE1AYun2gBz7B2XaQ.png',
+  signature_image_alt: 'Signature image',
+  signature_image_width: 220,
+};
+
+function normalizeSignatureLines(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((line) => (typeof line === 'string' ? line.trim() : ''))
+      .filter((line) => line);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line);
+  }
+  return [];
+}
+
 function escapeHtml(text) {
   if (text == null) return '';
   const div = document.createElement('div');
@@ -660,6 +686,28 @@ function initializeState() {
       } else if (!section.layout.title_align) {
         section.layout.title_align = 'left';
       }
+
+      if (Array.isArray(section.cards)) {
+        section.cards.forEach((card) => {
+          if (card.type === 'letter') {
+            card.greeting = card.greeting || LETTER_SIGNATURE_DEFAULTS.greeting;
+            card.closing = card.closing || LETTER_SIGNATURE_DEFAULTS.closing;
+            card.signature_name = card.signature_name || LETTER_SIGNATURE_DEFAULTS.signature_name;
+            const lines = normalizeSignatureLines(card.signature_lines);
+            card.signature_lines =
+              lines.length > 0 ? lines : [...LETTER_SIGNATURE_DEFAULTS.signature_lines];
+            card.signature_image_url =
+              card.signature_image_url || LETTER_SIGNATURE_DEFAULTS.signature_image_url;
+            card.signature_image_alt =
+              card.signature_image_alt || LETTER_SIGNATURE_DEFAULTS.signature_image_alt;
+            const width = parseInt(card.signature_image_width, 10);
+            card.signature_image_width = Number.isFinite(width)
+              ? width
+              : LETTER_SIGNATURE_DEFAULTS.signature_image_width;
+            card.title = card.title || 'Dean Update';
+          }
+        });
+      }
     });
   }
 
@@ -683,10 +731,12 @@ async function switchTemplate(templateType) {
     if (response.ok) {
       state = await response.json();
       rebuildUI(false);
-      showToast(
-        `Switched to ${templateType === 'ff' ? 'Friday Focus' : 'Briefing'} template`,
-        'success'
-      );
+      const templateLabels = {
+        ff: 'Friday Focus',
+        briefing: 'Graduate School Briefing',
+        letter: 'Graduate School Slate Campaign',
+      };
+      showToast(`Switched to ${templateLabels[templateType] || templateType} template`, 'success');
     } else {
       showToast('Failed to load template defaults', 'error');
     }
@@ -1268,8 +1318,14 @@ function exportHtml() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
+      const filenamePrefixMap = {
+        ff: 'Friday_Focus_',
+        briefing: 'Briefing_',
+        letter: 'Letter_',
+      };
+      const filenamePrefix = filenamePrefixMap[state.template] || 'Newsletter_';
       a.download =
-        (state.template === 'ff' ? 'Friday_Focus_' : 'Briefing_') +
+        filenamePrefix +
         new Date().toISOString().slice(0, 10) +
         (stripJSON ? '_PRODUCTION' : '') +
         '.html';
@@ -1905,18 +1961,38 @@ function addCard(sIdx) {
   const section = state.sections[sIdx];
   const isResource = section.key === 'resources';
   const isCTA = section.key === 'submit_request';
+  const isLetter = section.key === 'letter_body';
 
-  const newCard = {
-    type: isCTA ? 'cta' : isResource ? 'resource' : 'standard',
-    title: 'New Card',
-    body_html: '',
-    location: '',
-    date: '',
-    time: '',
-    links: [],
-    spacing_bottom: 20,
-    background_color: '#f9f9f9',
-  };
+  let newCard;
+  if (isLetter) {
+    newCard = {
+      type: 'letter',
+      title: 'Dean Update',
+      greeting: LETTER_SIGNATURE_DEFAULTS.greeting,
+      body_html: '',
+      closing: LETTER_SIGNATURE_DEFAULTS.closing,
+      signature_name: LETTER_SIGNATURE_DEFAULTS.signature_name,
+      signature_lines: [...LETTER_SIGNATURE_DEFAULTS.signature_lines],
+      signature_image_url: LETTER_SIGNATURE_DEFAULTS.signature_image_url,
+      signature_image_alt: LETTER_SIGNATURE_DEFAULTS.signature_image_alt,
+      signature_image_width: LETTER_SIGNATURE_DEFAULTS.signature_image_width,
+      links: [],
+      spacing_bottom: 0,
+      background_color: '#ffffff',
+    };
+  } else {
+    newCard = {
+      type: isCTA ? 'cta' : isResource ? 'resource' : 'standard',
+      title: 'New Card',
+      body_html: '',
+      location: '',
+      date: '',
+      time: '',
+      links: [],
+      spacing_bottom: 20,
+      background_color: '#f9f9f9',
+    };
+  }
 
   if (isResource) {
     newCard.show_icon = false;
@@ -1945,7 +2021,254 @@ function addCard(sIdx) {
   showToast('Card added', 'success');
 }
 
+function renderLetterCardEditor(section, sIdx, card, cIdx) {
+  card.signature_lines = normalizeSignatureLines(card.signature_lines);
+  if (!card.signature_lines.length) {
+    card.signature_lines = [...LETTER_SIGNATURE_DEFAULTS.signature_lines];
+  }
+  card.greeting = card.greeting || LETTER_SIGNATURE_DEFAULTS.greeting;
+  card.closing = card.closing || LETTER_SIGNATURE_DEFAULTS.closing;
+  card.signature_name = card.signature_name || LETTER_SIGNATURE_DEFAULTS.signature_name;
+  card.signature_image_alt =
+    card.signature_image_alt || LETTER_SIGNATURE_DEFAULTS.signature_image_alt;
+  card.signature_image_width =
+    parseInt(card.signature_image_width, 10) || LETTER_SIGNATURE_DEFAULTS.signature_image_width;
+
+  const cardDiv = document.createElement('div');
+  cardDiv.className = 'cardItem letterCard';
+
+  const signatureLinesValue = card.signature_lines.join('\n');
+  const titleLabel = escapeHtml(card.title || card.greeting || 'Dean Update');
+
+  cardDiv.innerHTML = `
+    <div class="cardHead">
+      <span class="titleText">${titleLabel}</span>
+      <div class="btnRow">
+        <button class="duplicateCard" title="Duplicate card">📋</button>
+        <button data-move="-1">↑</button>
+        <button data-move="1">↓</button>
+        <button class="danger" data-remove="1">Remove</button>
+      </div>
+    </div>
+
+    <div class="cardFields">
+      <div class="row">
+        <label>Internal Label
+          <input class="letterTitle" type="text" value="${escapeHtml(card.title || '')}" />
+          <span class="hint">Optional; used only inside the editor to identify this block.</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Greeting
+          <input class="letterGreeting" type="text" value="${escapeHtml(card.greeting || '')}" />
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Body Content
+          <div class="rtePreview" tabindex="0">${card.body_html || '<em>Click Edit to add content</em>'}</div>
+          <div class="btnRow">
+            <button class="editRte">Edit Body</button>
+          </div>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Closing
+          <input class="letterClosing" type="text" value="${escapeHtml(card.closing || '')}" />
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Signature Name
+          <input class="letterSigName" type="text" value="${escapeHtml(card.signature_name || '')}" />
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Signature Lines
+          <textarea class="letterSigLines" rows="3" placeholder="President, Washington State University">${escapeHtml(signatureLinesValue)}</textarea>
+          <span class="hint">One line per row (e.g., title, department).</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Signature Image URL
+          <input class="letterSigImageUrl" type="url" value="${escapeHtml(card.signature_image_url || '')}" placeholder="https://..." />
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Signature Image Alt Text
+          <input class="letterSigImageAlt" type="text" value="${escapeHtml(card.signature_image_alt || '')}" />
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Signature Image Width (px)
+          <input class="letterSigImageWidth" type="number" min="80" max="400" value="${card.signature_image_width || 220}" />
+        </label>
+      </div>
+
+      <div class="row">
+        <strong>Links</strong>
+        <div class="linksList"></div>
+        <div class="btnRow">
+          <button class="addLink">+ Add Link</button>
+        </div>
+      </div>
+
+      <details style="margin: 12px 0;" class="cardAdvancedControls">
+        <summary style="cursor: pointer; font-weight: 600; color: #5E6A71;">Card Styling</summary>
+        <div style="padding: 12px; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px; margin-top: 8px;">
+          <div class="row">
+            <label>Card Background Color
+              <input class="cardBgColor" type="color" value="${card.background_color || '#ffffff'}" />
+              <button class="cardClearBg" style="margin-left: 8px;">Clear</button>
+            </label>
+          </div>
+
+          <div class="row">
+            <label>Card Bottom Spacing (px)
+              <input class="cardSpacing" type="number" min="0" max="60" value="${card.spacing_bottom || 0}" />
+            </label>
+          </div>
+        </div>
+      </details>
+    </div>
+  `;
+
+  const titleText = cardDiv.querySelector('.titleText');
+
+  const titleInput = cardDiv.querySelector('.letterTitle');
+  if (titleInput) {
+    titleInput.oninput = (e) => {
+      card.title = e.target.value;
+      titleText.textContent = e.target.value || card.greeting || 'Dean Update';
+      debouncedUpdate();
+    };
+  }
+
+  const greetingInput = cardDiv.querySelector('.letterGreeting');
+  greetingInput.oninput = (e) => {
+    card.greeting = e.target.value;
+    if (!card.title) {
+      titleText.textContent = e.target.value || 'Dean Update';
+    }
+    debouncedUpdate();
+  };
+
+  const closingInput = cardDiv.querySelector('.letterClosing');
+  closingInput.oninput = (e) => {
+    card.closing = e.target.value;
+    debouncedUpdate();
+  };
+
+  const sigNameInput = cardDiv.querySelector('.letterSigName');
+  sigNameInput.oninput = (e) => {
+    card.signature_name = e.target.value;
+    debouncedUpdate();
+  };
+
+  const sigLinesInput = cardDiv.querySelector('.letterSigLines');
+  sigLinesInput.oninput = (e) => {
+    card.signature_lines = normalizeSignatureLines(e.target.value);
+    debouncedUpdate();
+  };
+
+  const sigUrlInput = cardDiv.querySelector('.letterSigImageUrl');
+  sigUrlInput.oninput = (e) => {
+    card.signature_image_url = e.target.value;
+    debouncedUpdate();
+  };
+
+  const sigAltInput = cardDiv.querySelector('.letterSigImageAlt');
+  sigAltInput.oninput = (e) => {
+    card.signature_image_alt = e.target.value;
+    debouncedUpdate();
+  };
+
+  const sigWidthInput = cardDiv.querySelector('.letterSigImageWidth');
+  sigWidthInput.oninput = (e) => {
+    const width = parseInt(e.target.value, 10);
+    card.signature_image_width = Number.isFinite(width)
+      ? width
+      : LETTER_SIGNATURE_DEFAULTS.signature_image_width;
+    updatePreview();
+  };
+
+  const bodyPreview = cardDiv.querySelector('.rtePreview');
+  cardDiv.querySelector('.editRte').onclick = () => {
+    pushHistory();
+    currentRteTarget = { card, bodyPreview };
+    rteArea.innerHTML = card.body_html || '';
+    rteModal.classList.remove('hidden');
+    rteArea.focus();
+  };
+
+  cardDiv.querySelector('.cardBgColor').addEventListener('input', (e) => {
+    card.background_color = e.target.value;
+    updatePreview();
+  });
+
+  cardDiv.querySelector('.cardClearBg').addEventListener('click', () => {
+    card.background_color = '';
+    cardDiv.querySelector('.cardBgColor').value = '#ffffff';
+    updatePreview();
+  });
+
+  cardDiv.querySelector('.cardSpacing').addEventListener('input', (e) => {
+    card.spacing_bottom = parseInt(e.target.value, 10) || 0;
+    updatePreview();
+  });
+
+  cardDiv.querySelector('.duplicateCard').onclick = () => {
+    pushHistory();
+    const duplicate = clone(card);
+    duplicate.title = (duplicate.title || '') + ' (Copy)';
+    section.cards.splice(cIdx + 1, 0, duplicate);
+    renderSections();
+    updatePreview();
+    showToast('Card duplicated', 'success');
+  };
+
+  cardDiv.querySelector('[data-remove]').onclick = () => {
+    if (confirm('Remove this card?')) {
+      pushHistory();
+      section.cards.splice(cIdx, 1);
+      renderSections();
+      updatePreview();
+      showToast('Card removed', 'info');
+    }
+  };
+
+  cardDiv.querySelectorAll('[data-move]').forEach((btn) => {
+    btn.onclick = () => {
+      const dir = parseInt(btn.dataset.move, 10);
+      const newIdx = cIdx + dir;
+
+      if (newIdx >= 0 && newIdx < section.cards.length) {
+        pushHistory();
+        const temp = section.cards[cIdx];
+        section.cards[cIdx] = section.cards[newIdx];
+        section.cards[newIdx] = temp;
+        renderSections();
+        updatePreview();
+      }
+    };
+  });
+
+  renderCardLinks(cardDiv, card);
+
+  return cardDiv;
+}
+
 function renderCard(section, sIdx, card, cIdx) {
+  if (card.type === 'letter') {
+    return renderLetterCardEditor(section, sIdx, card, cIdx);
+  }
+
   const isResource = section.key === 'resources';
   const isEvent = section.key === 'events';
   const isCTA = card.type === 'cta';

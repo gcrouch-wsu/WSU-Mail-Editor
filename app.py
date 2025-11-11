@@ -47,6 +47,16 @@ def apply_config_defaults(model_data, template_type):
         model_data["masthead"]["preheader"] = model_data["masthead"].get(
             "preheader", BRIEFING["preheader"]
         )
+    elif template_type == "letter":
+        model_data["masthead"]["title"] = model_data["masthead"].get(
+            "title", LETTER_TEMPLATE["title"]
+        )
+        model_data["masthead"]["tagline"] = model_data["masthead"].get(
+            "tagline", LETTER_TEMPLATE["tagline"]
+        )
+        model_data["masthead"]["preheader"] = model_data["masthead"].get(
+            "preheader", LETTER_TEMPLATE["preheader"]
+        )
 
     # Apply branding defaults
     model_data["masthead"]["banner_url"] = model_data["masthead"].get(
@@ -67,6 +77,29 @@ def apply_config_defaults(model_data, template_type):
     # V7: Apply social defaults (array-based)
     if not model_data["footer"].get("social"):
         model_data["footer"]["social"] = [link.copy() for link in DEFAULT_SOCIAL_LINKS]
+
+    if template_type == "letter":
+        for section in model_data.get("sections", []):
+            for card in section.get("cards", []):
+                if card.get("type") != "letter":
+                    continue
+                card.setdefault("greeting", "Dear Colleagues,")
+                card.setdefault("closing", LETTER_SIGNATURE_DEFAULTS["closing"])
+                card.setdefault("signature_name", LETTER_SIGNATURE_DEFAULTS["name"])
+                lines = card.get("signature_lines")
+                if isinstance(lines, str):
+                    lines = [line.strip() for line in lines.splitlines() if line.strip()]
+                elif not lines:
+                    lines = LETTER_SIGNATURE_DEFAULTS["lines"]
+                card["signature_lines"] = lines
+                card.setdefault("signature_image_url", LETTER_SIGNATURE_DEFAULTS["image_url"])
+                card.setdefault("signature_image_alt", LETTER_SIGNATURE_DEFAULTS["image_alt"])
+                width = card.get("signature_image_width", LETTER_SIGNATURE_DEFAULTS["image_width"])
+                try:
+                    width = int(width)
+                except (TypeError, ValueError):
+                    width = LETTER_SIGNATURE_DEFAULTS["image_width"]
+                card["signature_image_width"] = width
 
     return model_data
 
@@ -378,6 +411,97 @@ def default_briefing_model():
     }
 
 
+def default_letter_model():
+    """Graduate School presidential/letter template defaults"""
+    letter_layout = create_default_section_layout()
+    letter_layout.update(
+        {
+            "padding_top": 18,
+            "padding_bottom": 30,
+            "divider_enabled": False,
+            "divider_thickness": 0,
+            "divider_spacing": 12,
+            "title_align": "left",
+        }
+    )
+
+    sample_body = (
+        "<p><strong>Headline goes here</strong></p>"
+        "<p>Use this space to introduce the key message or announcement for graduate students, "
+        "faculty, staff, or stakeholders. Summarize the purpose of the communication in one or two "
+        "sentences.</p>"
+        "<p>Add supporting details in additional paragraphs. You can include bolded callouts, "
+        "numbered or bulleted lists, and hyperlinks to resources that provide more context.</p>"
+        "<p>Conclude with clear next steps, invitations, or gratitude to reinforce the message.</p>"
+    )
+
+    return {
+        "template": "letter",
+        "masthead": {
+            "banner_url": DEFAULT_BANNER_URL,
+            "banner_alt": DEFAULT_BANNER_ALT,
+            "title": LETTER_TEMPLATE["title"],
+            "tagline": LETTER_TEMPLATE["tagline"],
+            "preheader": LETTER_TEMPLATE["preheader"],
+            "hero_show": True,
+            "hero_link": "",
+        },
+        "sections": [
+            {
+                "key": "letter_body",
+                "title": "",
+                "layout": letter_layout,
+                "cards": [
+                    {
+                        "type": "letter",
+                        "title": "Dean Update",
+                        "greeting": "Dear Colleagues,",
+                        "body_html": sample_body,
+                        "closing": LETTER_SIGNATURE_DEFAULTS["closing"],
+                        "signature_name": LETTER_SIGNATURE_DEFAULTS["name"],
+                        "signature_lines": LETTER_SIGNATURE_DEFAULTS["lines"],
+                        "signature_image_url": LETTER_SIGNATURE_DEFAULTS["image_url"],
+                        "signature_image_alt": LETTER_SIGNATURE_DEFAULTS["image_alt"],
+                        "signature_image_width": LETTER_SIGNATURE_DEFAULTS["image_width"],
+                        "links": [],
+                        "spacing_bottom": 0,
+                        "background_color": "#ffffff",
+                    }
+                ],
+            }
+        ],
+        "footer": {
+            "address_lines": [
+                ORGANIZATION["name"],
+                ORGANIZATION["address_line_1"],
+                ORGANIZATION["address_line_2"],
+            ],
+            "social": [link.copy() for link in DEFAULT_SOCIAL_LINKS],
+            "background_color": FOOTER_DEFAULTS["background_color"],
+            "text_color": FOOTER_DEFAULTS["text_color"],
+            "link_color": FOOTER_DEFAULTS["link_color"],
+            "padding_top": FOOTER_DEFAULTS["padding_top"],
+            "padding_bottom": FOOTER_DEFAULTS["padding_bottom"],
+            "social_margin_top": FOOTER_DEFAULTS["social_margin_top"],
+            "social_margin_bottom": FOOTER_DEFAULTS["social_margin_bottom"],
+        },
+        "settings": {
+            "container_width": 600,
+            "section_spacing": 16,
+            "show_section_borders": False,
+            "padding_text": {"top": 24, "right": 28, "bottom": 24, "left": 28},
+            "padding_image": LAYOUT_DEFAULTS["padding_image"],
+            "typography": TYPOGRAPHY_DEFAULTS,
+            "colors": {
+                "primary": BRAND_PRIMARY,
+                "text_dark": TEXT_DARK,
+                "text_body": TEXT_BODY,
+                "text_muted": TEXT_MUTED,
+            },
+        },
+    }
+
+
 # ---------------- Flask Routes ----------------
 
 
@@ -388,6 +512,8 @@ def index():
 
     if template_type == "briefing":
         model = default_briefing_model()
+    elif template_type == "letter":
+        model = default_letter_model()
     else:
         model = default_ff_model()
 
@@ -490,6 +616,7 @@ def api_export():
         friendly_prefix = {
             "ff": "FF",
             "briefing": "Briefing",
+            "letter": "Letter",
         }.get(template_type, EXPORT_DEFAULTS["filename_prefix"].get(template_type, "Newsletter"))
         suffix = "_PRODUCTION" if strip_json else ""
         filename = f"{friendly_prefix}_{datetime.now().strftime('%d-%m-%Y')}{suffix}.html"
@@ -628,6 +755,8 @@ def api_defaults(template_type):
     """Get default data for a template type"""
     if template_type == "briefing":
         model = default_briefing_model()
+    elif template_type == "letter":
+        model = default_letter_model()
     else:
         model = default_ff_model()
 

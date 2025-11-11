@@ -72,6 +72,25 @@ BRIEFING = {
     "knowledge_base_url": "https://confluence.esg.wsu.edu/display/GRADSCHOOL",
 }
 
+# Presidential / Letter defaults
+LETTER_TEMPLATE = {
+    "title": "",
+    "tagline": "",
+    "preheader": "Official communication from the WSU Graduate School",
+}
+
+LETTER_SIGNATURE_DEFAULTS = {
+    "closing": "Sincerely,",
+    "name": "Tammy D. Barry",
+    "lines": [
+        "Dean of the Graduate School",
+        "Vice Provost for Graduate Education",
+    ],
+    "image_url": "https://futurecoug.wsu.edu/www/images/8hG3FTHdpyUZZD4ILkWxI2Z8EjhQLChenToRkB20GeeDWkUQ6k_cxhHBNhmo8Sp1G26HVWE1AYun2gBz7B2XaQ.png",
+    "image_alt": "Signature image",
+    "image_width": 220,
+}
+
 # ============================================================
 # CONTACT INFORMATION
 # ============================================================
@@ -232,5 +251,5 @@ SLATE_VARIABLES = {
 EXPORT_DEFAULTS = {
     "minify": True,  # Minify HTML output by default
     "strip_json": False,  # Keep embedded JSON for re-import by default
-    "filename_prefix": {"ff": "Friday_Focus_", "briefing": "Briefing_"},
+    "filename_prefix": {"ff": "Friday_Focus_", "briefing": "Briefing_", "letter": "Letter"},
 }
