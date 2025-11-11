@@ -2882,16 +2882,8 @@ function prefillTableModalFromTable(table) {
     return;
   }
 
-  tableModalOriginalContent = extractTableContent(table);
-
-  if (tableRowsInput && tableColsInput) {
-    const bodyRows = table.querySelectorAll('tbody tr').length;
-    const headerRows = table.querySelectorAll('thead tr').length;
-    const totalRows = bodyRows + headerRows || table.querySelectorAll('tr').length;
-    tableRowsInput.value = String(totalRows || 1);
-    const firstRow = table.querySelector('tr');
-    tableColsInput.value = String(firstRow ? firstRow.children.length : 2);
-  }
+  const snapshot = snapshotOriginalTable(table);
+  tableModalOriginalContent = extractTableContent(snapshot);
 }
 
 function extractTableContent(table) {
@@ -3080,6 +3072,12 @@ const WSU_COLOR_PALETTE = [
   { label: 'Red', value: '#CA1237' },
   { label: 'Black', value: '#000000' },
   { label: 'White', value: '#FFFFFF' },
+  { label: 'Black 80%', value: '#333333' },
+  { label: 'Black 70%', value: '#4D4D4D' },
+  { label: 'Black 60%', value: '#666666' },
+  { label: 'Black 50%', value: '#808080' },
+  { label: 'Black 40%', value: '#999999' },
+  { label: 'Black 30%', value: '#B3B3B3' },
   { label: 'Autumn', value: '#FF6727' },
   { label: 'Goldfinch', value: '#F3E700' },
   { label: 'Vineyard', value: '#AADC24' },
@@ -3116,4 +3114,10 @@ function initColorPalettes(scope = document) {
       attachColorPalette(input);
     }
   });
+}
+
+function snapshotOriginalTable(table) {
+  const clone = table.cloneNode(true);
+  clone.querySelectorAll('.tableToolbar').forEach((el) => el.remove());
+  return clone;
 }
