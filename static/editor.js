@@ -411,9 +411,15 @@ const tableColWidthsInput = document.getElementById('tableColWidths');
 const tableBorderStyleSelect = document.getElementById('tableBorderStyle');
 const tablePlaceholderCheckbox = document.getElementById('tableShowPlaceholders');
 const tableBorderColorInput = document.getElementById('tableBorderColor');
+const tableFontSizeInput = document.getElementById('tableFontSize');
+const tableHeaderBgInput = document.getElementById('tableHeaderBg');
+const tableHeaderLineWidthInput = document.getElementById('tableHeaderLineWidth');
+const tableHeaderLineColorInput = document.getElementById('tableHeaderLineColor');
 
 let currentRteTarget = null;
 let savedSelectionRange = null;
+let currentTableElement = null;
+let tableModalTarget = null;
 
 // Create debounced update function
 const debouncedUpdate = debounce(updatePreview, 400);
@@ -496,7 +502,7 @@ function init() {
   if (btnTable) {
     btnTable.addEventListener('click', () => {
       saveSelection();
-      openTableModal();
+      openTableModal(currentTableElement || getSelectionTable());
     });
   }
 
@@ -1158,9 +1164,13 @@ function renderFooter() {
 
 function saveRteContent() {
   if (currentRteTarget) {
-    currentRteTarget.card.body_html = rteArea.innerHTML;
-    currentRteTarget.bodyPreview.innerHTML =
-      currentRteTarget.card.body_html || '<em>Click Edit to add content</em>';
+    const clone = rteArea.cloneNode(true);
+    clone.querySelectorAll('.tableToolbar').forEach((el) => el.remove());
+    const cleanedHtml = clone.innerHTML;
+    currentRteTarget.card.body_html = cleanedHtml;
+    rteArea.innerHTML = cleanedHtml;
+    currentRteTarget.bodyPreview.innerHTML = cleanedHtml || '<em>Click Edit to add content</em>';
+    markChanged();
     updatePreview();
   }
   rteModal.classList.add('hidden');
@@ -2332,21 +2342,46 @@ function renderCardLinks(cardDiv, card) {
 
 console.log(`✅ WSU Newsletter Editor v${APP_VERSION} loaded`);
 
-function openTableModal() {
+function openTableModal(targetTable = null) {
   if (!tableModal) {
     return;
   }
 
-  tableRowsInput.value = tableRowsInput.value || '3';
-  tableColsInput.value = tableColsInput.value || '2';
-  tableIncludeHeader.checked = true;
-  if (!tableWidthInput.value) {
-    tableWidthInput.value = '100%';
+  if (targetTable) {
+    tableModalTarget = targetTable;
+  } else if (!tableModalTarget) {
+    tableModalTarget = currentTableElement || getSelectionTable();
   }
-  tableColWidthsInput.value = '';
-  tableBorderStyleSelect.value = 'light';
-  if (tablePlaceholderCheckbox) {
-    tablePlaceholderCheckbox.checked = true;
+
+  if (tableModalTarget) {
+    prefillTableModalFromTable(tableModalTarget);
+  } else {
+    tableRowsInput.value = tableRowsInput.value || '3';
+    tableColsInput.value = tableColsInput.value || '2';
+    tableIncludeHeader.checked = true;
+    if (!tableWidthInput.value) {
+      tableWidthInput.value = '100%';
+    }
+    tableColWidthsInput.value = '';
+    tableBorderStyleSelect.value = 'light';
+    if (tableBorderColorInput) {
+      tableBorderColorInput.value = DEFAULT_BORDER_COLOR;
+    }
+    if (tableFontSizeInput) {
+      tableFontSizeInput.value = '16';
+    }
+    if (tableHeaderBgInput) {
+      tableHeaderBgInput.value = '#f4f4f4';
+    }
+    if (tableHeaderLineWidthInput) {
+      tableHeaderLineWidthInput.value = '0';
+    }
+    if (tableHeaderLineColorInput) {
+      tableHeaderLineColorInput.value = DEFAULT_BORDER_COLOR;
+    }
+    if (tablePlaceholderCheckbox) {
+      tablePlaceholderCheckbox.checked = true;
+    }
   }
 
   tableModal.classList.remove('hidden');
@@ -2357,6 +2392,7 @@ function closeTableModal() {
   if (tableModal) {
     tableModal.classList.add('hidden');
   }
+  tableModalTarget = null;
 }
 
 function buildTableHtml({
@@ -2368,6 +2404,10 @@ function buildTableHtml({
   borderStyle,
   borderColor,
   showPlaceholders,
+  fontSize,
+  headerBgColor,
+  headerUnderlineWidth,
+  headerUnderlineColor,
 }) {
   const safeRows = Math.max(1, rows);
   const safeCols = Math.max(1, cols);
@@ -2392,20 +2432,31 @@ function buildTableHtml({
     'border-collapse:collapse',
     'margin:12px 0',
   ];
+  if (fontSize && Number.isFinite(fontSize)) {
+    tableStyles.push(`font-size:${fontSize}px`);
+  }
 
+  const resolvedBorderColor = borderColor || DEFAULT_BORDER_COLOR;
   let cellBorder;
   let headerBorder;
-  const color = borderColor || DEFAULT_BORDER_COLOR;
   if (borderStyle === 'none') {
     cellBorder = 'border:0;';
     headerBorder = 'border:0;';
   } else {
     const width = borderStyle === 'medium' ? '2px' : '1px';
-    cellBorder = `border:${width} solid ${color};`;
-    headerBorder = `border:${width} solid ${color};`;
+    cellBorder = `border:${width} solid ${resolvedBorderColor};`;
+    headerBorder = `border:${width} solid ${resolvedBorderColor};`;
   }
 
-  const headerCellStyle = `padding:8px 10px; ${headerBorder} background-color:#f4f4f4; text-align:left; font-weight:bold;`;
+  const headerBg = headerBgColor || '#f4f4f4';
+  const headerLineW = Number.isFinite(headerUnderlineWidth) ? Math.max(0, headerUnderlineWidth) : 0;
+  const headerLineColorValue = headerUnderlineColor || resolvedBorderColor;
+
+  let headerCellStyle = `padding:8px 10px; ${headerBorder} background-color:${headerBg}; text-align:left; font-weight:bold;`;
+  if (headerLineW > 0) {
+    headerCellStyle += ` border-bottom:${headerLineW}px solid ${headerLineColorValue};`;
+  }
+
   const cellStyle = `padding:8px 10px; ${cellBorder} text-align:left;`;
 
   const widths = columnWidths.map((w) => normalizeWidth(w)).filter((w) => w.length > 0);
@@ -2457,8 +2508,6 @@ if (tableModal) {
 }
 if (tableCreate) {
   tableCreate.onclick = () => {
-    restoreSelection();
-
     const rows = parseInt(tableRowsInput.value || '3', 10);
     const cols = parseInt(tableColsInput.value || '2', 10);
     if (Number.isNaN(rows) || rows < 1 || Number.isNaN(cols) || cols < 1) {
@@ -2467,6 +2516,17 @@ if (tableCreate) {
     }
     const tableWidth = (tableWidthInput.value || '100%').trim();
     const colWidths = (tableColWidthsInput.value || '').split(',').map((w) => w.trim());
+    const fontSize = tableFontSizeInput
+      ? parseInt(tableFontSizeInput.value || '16', 10)
+      : undefined;
+    const headerBg = tableHeaderBgInput?.value || '#f4f4f4';
+    const headerLineWidth = tableHeaderLineWidthInput
+      ? parseInt(tableHeaderLineWidthInput.value || '0', 10)
+      : 0;
+    const headerLineColor =
+      tableHeaderLineColorInput?.value ||
+      (tableBorderColorInput && tableBorderColorInput.value) ||
+      DEFAULT_BORDER_COLOR;
 
     const html = buildTableHtml({
       rows,
@@ -2477,17 +2537,26 @@ if (tableCreate) {
       borderStyle: tableBorderStyleSelect.value,
       borderColor: (tableBorderColorInput && tableBorderColorInput.value) || DEFAULT_BORDER_COLOR,
       showPlaceholders: !tablePlaceholderCheckbox || tablePlaceholderCheckbox.checked,
+      fontSize: Number.isFinite(fontSize) ? fontSize : undefined,
+      headerBgColor: headerBg,
+      headerUnderlineWidth: headerLineWidth,
+      headerUnderlineColor: headerLineColor,
     });
 
-    const existingTable = getSelectionTable();
-    if (existingTable) {
-      replaceCurrentTableWithHtml(html);
+    const targetTable =
+      tableModalTarget && document.body.contains(tableModalTarget) ? tableModalTarget : null;
+    if (targetTable) {
+      replaceTableWithHtml(targetTable, html);
     } else {
+      restoreSelection();
       document.execCommand('insertHTML', false, html);
+      markChanged();
+      debouncedUpdate();
     }
     rteArea.focus();
     closeTableModal();
     showToast('Table inserted. Replace placeholders with your content.', 'info');
+    tableModalTarget = null;
   };
 }
 
@@ -2592,8 +2661,10 @@ function createTableToolbar(table) {
 document.addEventListener('selectionchange', () => {
   const table = getSelectionTable();
   if (table) {
+    currentTableElement = table;
     createTableToolbar(table);
   } else {
+    currentTableElement = null;
     removeTableToolbar();
   }
 });
@@ -2668,53 +2739,8 @@ function handleTableToolbarAction(action) {
     }
     case 'open-modal': {
       saveSelection();
-      openTableModal();
-      // prefill modal with current table settings
-      if (tableRowsInput && tableColsInput) {
-        const bodyRows = table.querySelectorAll('tbody tr').length;
-        const headerRows = table.querySelectorAll('thead tr').length;
-        const totalRows = bodyRows + headerRows;
-        tableRowsInput.value = String(totalRows || table.querySelectorAll('tr').length);
-        const firstRow = table.querySelector('tr');
-        tableColsInput.value = String(firstRow ? firstRow.children.length : 2);
-      }
-      if (tableIncludeHeader) {
-        tableIncludeHeader.checked = !!table.querySelector('thead');
-      }
-      if (tableWidthInput) {
-        tableWidthInput.value = table.style.width || '100%';
-      }
-      if (tableColWidthsInput) {
-        const firstRow = table.querySelector('tr');
-        if (firstRow) {
-          const widths = Array.from(firstRow.children)
-            .map((c) => (c.style && c.style.width ? c.style.width : ''))
-            .filter((w) => w && w.trim().length > 0);
-          tableColWidthsInput.value = widths.join(', ');
-        } else {
-          tableColWidthsInput.value = '';
-        }
-      }
-      if (tableBorderStyleSelect) {
-        const sampleCell = table.querySelector('td') || table.querySelector('th');
-        const border = sampleCell ? sampleCell.style.border : '';
-        if (!border || border === '0px' || border === '0px none rgb(0, 0, 0)') {
-          tableBorderStyleSelect.value = 'none';
-        } else if (border.includes('2px')) {
-          tableBorderStyleSelect.value = 'medium';
-        } else {
-          tableBorderStyleSelect.value = 'light';
-        }
-        if (tableBorderColorInput) {
-          const computed = sampleCell ? window.getComputedStyle(sampleCell) : null;
-          tableBorderColorInput.value = computed
-            ? rgbToHex(computed.borderColor)
-            : DEFAULT_BORDER_COLOR;
-        }
-      }
-      if (tablePlaceholderCheckbox) {
-        tablePlaceholderCheckbox.checked = false;
-      }
+      tableModalTarget = table;
+      openTableModal(table);
       break;
     }
     default:
@@ -2769,3 +2795,122 @@ function restoreSelection() {
 const DEFAULT_BORDER_COLOR = '#dddddd';
 const TABLE_DEFAULT_CELL_STYLE = `padding:8px 10px; border:1px solid ${DEFAULT_BORDER_COLOR}; text-align:left;`;
 const TABLE_DEFAULT_HEADER_STYLE = `padding:8px 10px; border:1px solid ${DEFAULT_BORDER_COLOR}; background-color:#f4f4f4; text-align:left; font-weight:bold;`;
+
+function replaceTableWithHtml(targetTable, html) {
+  if (!targetTable) {
+    showToast('Place cursor inside a table before updating.', 'error');
+    return;
+  }
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+  const newTable = temp.querySelector('table');
+  if (!newTable) return;
+  targetTable.replaceWith(newTable);
+  const selection = window.getSelection();
+  if (selection && newTable.querySelector('td, th')) {
+    const cell = newTable.querySelector('td, th');
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+  markChanged();
+  debouncedUpdate();
+}
+
+function prefillTableModalFromTable(table) {
+  if (!table) return;
+
+  if (tableRowsInput && tableColsInput) {
+    const bodyRows = table.querySelectorAll('tbody tr').length;
+    const headerRows = table.querySelectorAll('thead tr').length;
+    const totalRows = bodyRows + headerRows || table.querySelectorAll('tr').length;
+    tableRowsInput.value = String(totalRows || 1);
+    const firstRow = table.querySelector('tr');
+    tableColsInput.value = String(firstRow ? firstRow.children.length : 2);
+  }
+
+  if (tableIncludeHeader) {
+    tableIncludeHeader.checked = !!table.querySelector('thead');
+  }
+
+  if (tableWidthInput) {
+    tableWidthInput.value = table.style.width || '100%';
+  }
+
+  if (tableColWidthsInput) {
+    const firstRow = table.querySelector('tr');
+    if (firstRow) {
+      const widths = Array.from(firstRow.children)
+        .map((c) => {
+          if (c.style && c.style.width && c.style.width.trim().length) {
+            return c.style.width;
+          }
+          const rect = c.getBoundingClientRect();
+          const tableRect = table.getBoundingClientRect();
+          if (tableRect.width) {
+            const percent = Math.round((rect.width / tableRect.width) * 100);
+            return `${percent}%`;
+          }
+          return '';
+        })
+        .filter((w) => w && w.trim().length > 0);
+      tableColWidthsInput.value = widths.join(', ');
+    } else {
+      tableColWidthsInput.value = '';
+    }
+  }
+
+  const sampleCell = table.querySelector('td') || table.querySelector('th');
+  if (tableBorderStyleSelect) {
+    if (sampleCell) {
+      const computed = window.getComputedStyle(sampleCell);
+      const width = parseInt(computed.borderTopWidth, 10);
+      if (!width) {
+        tableBorderStyleSelect.value = 'none';
+      } else if (width >= 2) {
+        tableBorderStyleSelect.value = 'medium';
+      } else {
+        tableBorderStyleSelect.value = 'light';
+      }
+      if (tableBorderColorInput) {
+        tableBorderColorInput.value = rgbToHex(computed.borderTopColor);
+      }
+    } else {
+      tableBorderStyleSelect.value = 'light';
+      if (tableBorderColorInput) {
+        tableBorderColorInput.value = DEFAULT_BORDER_COLOR;
+      }
+    }
+  }
+
+  if (tableFontSizeInput) {
+    const tableComputed = window.getComputedStyle(table);
+    const size = parseInt(tableComputed.fontSize, 10);
+    tableFontSizeInput.value = Number.isFinite(size) ? size : 16;
+  }
+
+  const headerCell = table.querySelector('thead th') || table.querySelector('th');
+  if (headerCell) {
+    const headerComputed = window.getComputedStyle(headerCell);
+    if (tableHeaderBgInput) {
+      tableHeaderBgInput.value = rgbToHex(headerComputed.backgroundColor);
+    }
+    if (tableHeaderLineWidthInput) {
+      const width = parseInt(headerComputed.borderBottomWidth, 10);
+      tableHeaderLineWidthInput.value = Number.isFinite(width) ? width : 0;
+    }
+    if (tableHeaderLineColorInput) {
+      tableHeaderLineColorInput.value = rgbToHex(headerComputed.borderBottomColor);
+    }
+  } else {
+    if (tableHeaderBgInput) tableHeaderBgInput.value = '#f4f4f4';
+    if (tableHeaderLineWidthInput) tableHeaderLineWidthInput.value = '0';
+    if (tableHeaderLineColorInput) tableHeaderLineColorInput.value = DEFAULT_BORDER_COLOR;
+  }
+
+  if (tablePlaceholderCheckbox) {
+    tablePlaceholderCheckbox.checked = false;
+  }
+}
