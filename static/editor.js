@@ -410,6 +410,7 @@ const tableWidthInput = document.getElementById('tableWidth');
 const tableColWidthsInput = document.getElementById('tableColWidths');
 const tableBorderStyleSelect = document.getElementById('tableBorderStyle');
 const tablePlaceholderCheckbox = document.getElementById('tableShowPlaceholders');
+const tableBorderColorInput = document.getElementById('tableBorderColor');
 
 let currentRteTarget = null;
 let savedSelectionRange = null;
@@ -2358,7 +2359,16 @@ function closeTableModal() {
   }
 }
 
-function buildTableHtml({ rows, cols, includeHeader, tableWidth, columnWidths, borderStyle }) {
+function buildTableHtml({
+  rows,
+  cols,
+  includeHeader,
+  tableWidth,
+  columnWidths,
+  borderStyle,
+  borderColor,
+  showPlaceholders,
+}) {
   const safeRows = Math.max(1, rows);
   const safeCols = Math.max(1, cols);
   const bodyRows = includeHeader ? Math.max(0, safeRows - 1) : safeRows;
@@ -2382,14 +2392,20 @@ function buildTableHtml({ rows, cols, includeHeader, tableWidth, columnWidths, b
     'border-collapse:collapse',
     'margin:12px 0',
   ];
-  let cellBorder = 'border:1px solid #dddddd;';
+
+  let cellBorder;
+  let headerBorder;
+  const color = borderColor || DEFAULT_BORDER_COLOR;
   if (borderStyle === 'none') {
     cellBorder = 'border:0;';
-  } else if (borderStyle === 'medium') {
-    cellBorder = 'border:2px solid #c9c9c9;';
+    headerBorder = 'border:0;';
+  } else {
+    const width = borderStyle === 'medium' ? '2px' : '1px';
+    cellBorder = `border:${width} solid ${color};`;
+    headerBorder = `border:${width} solid ${color};`;
   }
 
-  const headerCellStyle = `padding:8px 10px; ${cellBorder} background-color:#f4f4f4; text-align:left; font-weight:bold;`;
+  const headerCellStyle = `padding:8px 10px; ${headerBorder} background-color:#f4f4f4; text-align:left; font-weight:bold;`;
   const cellStyle = `padding:8px 10px; ${cellBorder} text-align:left;`;
 
   const widths = columnWidths.map((w) => normalizeWidth(w)).filter((w) => w.length > 0);
@@ -2416,10 +2432,7 @@ function buildTableHtml({ rows, cols, includeHeader, tableWidth, columnWidths, b
   for (let r = 0; r < bodyRows; r += 1) {
     html += '<tr>';
     for (let c = 0; c < safeCols; c += 1) {
-      const content =
-        tablePlaceholderCheckbox && !tablePlaceholderCheckbox.checked
-          ? ''
-          : `Cell ${r + 1}-${c + 1}`;
+      const content = showPlaceholders ? `Cell ${r + 1}-${c + 1}` : '';
       html += `<td style="${cellStyle}${getWidthStyle(c)}">${content}</td>`;
     }
     html += '</tr>';
@@ -2462,6 +2475,8 @@ if (tableCreate) {
       tableWidth,
       columnWidths: colWidths,
       borderStyle: tableBorderStyleSelect.value,
+      borderColor: (tableBorderColorInput && tableBorderColorInput.value) || DEFAULT_BORDER_COLOR,
+      showPlaceholders: !tablePlaceholderCheckbox || tablePlaceholderCheckbox.checked,
     });
 
     const existingTable = getSelectionTable();
@@ -2524,6 +2539,20 @@ function applyCellStyle(sourceCell, targetCell, fallbackStyle) {
   }
 }
 
+function rgbToHex(colorString) {
+  if (!colorString) return DEFAULT_BORDER_COLOR;
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.fillStyle = colorString;
+  const computed = ctx.fillStyle;
+  if (computed.startsWith('#')) return computed;
+  const match = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!match) return DEFAULT_BORDER_COLOR;
+  const r = parseInt(match[1], 10).toString(16).padStart(2, '0');
+  const g = parseInt(match[2], 10).toString(16).padStart(2, '0');
+  const b = parseInt(match[3], 10).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`;
+}
+
 let currentTableToolbar = null;
 
 function removeTableToolbar() {
@@ -2578,6 +2607,7 @@ function handleTableToolbarAction(action) {
   }
 
   const row = cell ? cell.parentElement : null;
+  let modified = false;
   switch (action) {
     case 'add-row': {
       const colCount = getTableColumnCount(table);
@@ -2594,11 +2624,12 @@ function handleTableToolbarAction(action) {
       }
       const insertPosition = row && row.parentElement === targetBody ? row.nextSibling : null;
       targetBody.insertBefore(newRow, insertPosition);
+      modified = true;
       break;
     }
     case 'add-col': {
       const allRows = Array.from(table.querySelectorAll('tr'));
-      allRows.forEach((tr, rowIndex) => {
+      allRows.forEach((tr) => {
         const cellTag = tr.parentElement && tr.parentElement.tagName === 'THEAD' ? 'th' : 'td';
         const newCell = document.createElement(cellTag);
         const referenceCell = tr.children.length ? tr.children[tr.children.length - 1] : null;
@@ -2610,11 +2641,13 @@ function handleTableToolbarAction(action) {
         newCell.innerHTML = '';
         tr.appendChild(newCell);
       });
+      modified = true;
       break;
     }
     case 'del-row': {
       if (row) {
         row.remove();
+        modified = true;
       }
       break;
     }
@@ -2625,10 +2658,12 @@ function handleTableToolbarAction(action) {
         const target = tr.children[colIndex];
         if (target) target.remove();
       });
+      modified = true;
       break;
     }
     case 'clear-cell': {
       if (cell) cell.innerHTML = '';
+      modified = true;
       break;
     }
     case 'open-modal': {
@@ -2661,13 +2696,20 @@ function handleTableToolbarAction(action) {
         }
       }
       if (tableBorderStyleSelect) {
-        const border = (table.querySelector('td') || table.querySelector('th'))?.style.border || '';
+        const sampleCell = table.querySelector('td') || table.querySelector('th');
+        const border = sampleCell ? sampleCell.style.border : '';
         if (!border || border === '0px' || border === '0px none rgb(0, 0, 0)') {
           tableBorderStyleSelect.value = 'none';
         } else if (border.includes('2px')) {
           tableBorderStyleSelect.value = 'medium';
         } else {
           tableBorderStyleSelect.value = 'light';
+        }
+        if (tableBorderColorInput) {
+          const computed = sampleCell ? window.getComputedStyle(sampleCell) : null;
+          tableBorderColorInput.value = computed
+            ? rgbToHex(computed.borderColor)
+            : DEFAULT_BORDER_COLOR;
         }
       }
       if (tablePlaceholderCheckbox) {
@@ -2677,6 +2719,11 @@ function handleTableToolbarAction(action) {
     }
     default:
       break;
+  }
+
+  if (modified) {
+    markChanged();
+    debouncedUpdate();
   }
 }
 
@@ -2700,6 +2747,8 @@ function replaceCurrentTableWithHtml(html) {
     selection.removeAllRanges();
     selection.addRange(range);
   }
+  markChanged();
+  debouncedUpdate();
 }
 
 function saveSelection() {
@@ -2716,3 +2765,7 @@ function restoreSelection() {
   sel.removeAllRanges();
   sel.addRange(savedSelectionRange);
 }
+
+const DEFAULT_BORDER_COLOR = '#dddddd';
+const TABLE_DEFAULT_CELL_STYLE = `padding:8px 10px; border:1px solid ${DEFAULT_BORDER_COLOR}; text-align:left;`;
+const TABLE_DEFAULT_HEADER_STYLE = `padding:8px 10px; border:1px solid ${DEFAULT_BORDER_COLOR}; background-color:#f4f4f4; text-align:left; font-weight:bold;`;
