@@ -310,7 +310,7 @@ def default_briefing_model():
                         "body_html": (
                             "<p>Do you have an update or announcement to share? We encourage submissions from "
                             "all graduate programs. Submit your post here. You can also access "
-                            "<a href=\"https://gradschool.wsu.edu/faculty-and-staff-updates/\">current and archived updates</a>." 
+                            '<a href="https://gradschool.wsu.edu/faculty-and-staff-updates/">current and archived updates</a>.'
                             "</p>"
                         ),
                         "button_bg_color": CTA_BUTTON_DEFAULTS["bg_color"],
@@ -438,6 +438,7 @@ def api_export():
         export_options = data.get("export_options", {})
         minify = export_options.get("minify", False)
         strip_json = export_options.get("strip_json", False)
+        requested_template = export_options.get("template_type")
 
         # Remove export_options from data before rendering
         newsletter_data = {k: v for k, v in data.items() if k != "export_options"}
@@ -485,13 +486,11 @@ def api_export():
         app.logger.info(f"Final HTML size: {final_size} bytes")
 
         # Generate filename
-        template_type = newsletter_data.get("template", "ff")
-        prefix = EXPORT_DEFAULTS["filename_prefix"].get(template_type, "Newsletter_")
-        # map to friendly names
+        template_type = newsletter_data.get("template") or requested_template or "ff"
         friendly_prefix = {
             "ff": "FF",
             "briefing": "Briefing",
-        }.get(template_type, "Newsletter")
+        }.get(template_type, EXPORT_DEFAULTS["filename_prefix"].get(template_type, "Newsletter"))
         suffix = "_PRODUCTION" if strip_json else ""
         filename = f"{friendly_prefix}_{datetime.now().strftime('%d-%m-%Y')}{suffix}.html"
 

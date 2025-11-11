@@ -933,3 +933,27 @@ input[type='number']::-webkit-outer-spin-button {
     break-inside: avoid;
   }
 }
+
+.tableToolbar {
+  background: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 6px;
+  margin-bottom: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tableToolbar button {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tableToolbar button:hover {
+  background: #ececec;
+}
