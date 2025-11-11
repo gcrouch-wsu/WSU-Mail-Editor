@@ -420,6 +420,7 @@ let currentRteTarget = null;
 let savedSelectionRange = null;
 let currentTableElement = null;
 let tableModalTarget = null;
+let tableModalOriginalContent = null;
 
 // Create debounced update function
 const debouncedUpdate = debounce(updatePreview, 400);
@@ -2356,6 +2357,7 @@ function openTableModal(targetTable = null) {
   if (tableModalTarget) {
     prefillTableModalFromTable(tableModalTarget);
   } else {
+    tableModalOriginalContent = null;
     tableRowsInput.value = tableRowsInput.value || '3';
     tableColsInput.value = tableColsInput.value || '2';
     tableIncludeHeader.checked = true;
@@ -2393,6 +2395,7 @@ function closeTableModal() {
     tableModal.classList.add('hidden');
   }
   tableModalTarget = null;
+  tableModalOriginalContent = null;
 }
 
 function buildTableHtml({
@@ -2543,10 +2546,12 @@ if (tableCreate) {
       headerUnderlineColor: headerLineColor,
     });
 
-    const targetTable =
-      tableModalTarget && document.body.contains(tableModalTarget) ? tableModalTarget : null;
+    const targetTable = tableModalTarget && document.body.contains(tableModalTarget)
+      ? tableModalTarget
+      : null;
+    const originalContent = targetTable ? tableModalOriginalContent : null;
     if (targetTable) {
-      replaceTableWithHtml(targetTable, html);
+      replaceTableWithHtml(targetTable, html, originalContent);
     } else {
       restoreSelection();
       document.execCommand('insertHTML', false, html);
@@ -2796,7 +2801,7 @@ const DEFAULT_BORDER_COLOR = '#dddddd';
 const TABLE_DEFAULT_CELL_STYLE = `padding:8px 10px; border:1px solid ${DEFAULT_BORDER_COLOR}; text-align:left;`;
 const TABLE_DEFAULT_HEADER_STYLE = `padding:8px 10px; border:1px solid ${DEFAULT_BORDER_COLOR}; background-color:#f4f4f4; text-align:left; font-weight:bold;`;
 
-function replaceTableWithHtml(targetTable, html) {
+function replaceTableWithHtml(targetTable, html, originalContent = null) {
   if (!targetTable) {
     showToast('Place cursor inside a table before updating.', 'error');
     return;
@@ -2805,6 +2810,9 @@ function replaceTableWithHtml(targetTable, html) {
   temp.innerHTML = html;
   const newTable = temp.querySelector('table');
   if (!newTable) return;
+  if (originalContent) {
+    applyOriginalContent(newTable, originalContent);
+  }
   targetTable.replaceWith(newTable);
   const selection = window.getSelection();
   if (selection && newTable.querySelector('td, th')) {
@@ -2820,7 +2828,12 @@ function replaceTableWithHtml(targetTable, html) {
 }
 
 function prefillTableModalFromTable(table) {
-  if (!table) return;
+  if (!table) {
+    tableModalOriginalContent = null;
+    return;
+  }
+
+  tableModalOriginalContent = extractTableContent(table);
 
   if (tableRowsInput && tableColsInput) {
     const bodyRows = table.querySelectorAll('tbody tr').length;
@@ -2830,87 +2843,59 @@ function prefillTableModalFromTable(table) {
     const firstRow = table.querySelector('tr');
     tableColsInput.value = String(firstRow ? firstRow.children.length : 2);
   }
+}
 
-  if (tableIncludeHeader) {
-    tableIncludeHeader.checked = !!table.querySelector('thead');
+function extractTableContent(table) {
+  const content = {
+    header: [],
+    body: [],
+  };
+
+  const headerRows = table.querySelectorAll('thead tr');
+  if (headerRows.length) {
+    headerRows.forEach((row) => {
+      content.header.push(Array.from(row.children).map((cell) => cell.innerHTML));
+    });
   }
 
-  if (tableWidthInput) {
-    tableWidthInput.value = table.style.width || '100%';
-  }
-
-  if (tableColWidthsInput) {
-    const firstRow = table.querySelector('tr');
-    if (firstRow) {
-      const widths = Array.from(firstRow.children)
-        .map((c) => {
-          if (c.style && c.style.width && c.style.width.trim().length) {
-            return c.style.width;
-          }
-          const rect = c.getBoundingClientRect();
-          const tableRect = table.getBoundingClientRect();
-          if (tableRect.width) {
-            const percent = Math.round((rect.width / tableRect.width) * 100);
-            return `${percent}%`;
-          }
-          return '';
-        })
-        .filter((w) => w && w.trim().length > 0);
-      tableColWidthsInput.value = widths.join(', ');
-    } else {
-      tableColWidthsInput.value = '';
+  let bodyRows = table.querySelectorAll('tbody tr');
+  if (!bodyRows.length) {
+    bodyRows = table.querySelectorAll('tr');
+    if (content.header.length) {
+      // skip header row already captured
+      const skip = content.header.length;
+      bodyRows = Array.from(bodyRows).slice(skip);
     }
   }
+  bodyRows.forEach((row) => {
+    content.body.push(Array.from(row.children).map((cell) => cell.innerHTML));
+  });
 
-  const sampleCell = table.querySelector('td') || table.querySelector('th');
-  if (tableBorderStyleSelect) {
-    if (sampleCell) {
-      const computed = window.getComputedStyle(sampleCell);
-      const width = parseInt(computed.borderTopWidth, 10);
-      if (!width) {
-        tableBorderStyleSelect.value = 'none';
-      } else if (width >= 2) {
-        tableBorderStyleSelect.value = 'medium';
-      } else {
-        tableBorderStyleSelect.value = 'light';
+  return content;
+}
+
+function applyOriginalContent(newTable, originalContent) {
+  if (!originalContent) return;
+
+  const headerRows = newTable.querySelectorAll('thead tr');
+  headerRows.forEach((row, rowIndex) => {
+    const originalRow = originalContent.header[rowIndex];
+    if (!originalRow) return;
+    Array.from(row.children).forEach((cell, cellIndex) => {
+      if (originalRow[cellIndex] !== undefined) {
+        cell.innerHTML = originalRow[cellIndex];
       }
-      if (tableBorderColorInput) {
-        tableBorderColorInput.value = rgbToHex(computed.borderTopColor);
+    });
+  });
+
+  const bodyRows = newTable.querySelectorAll('tbody tr');
+  bodyRows.forEach((row, rowIndex) => {
+    const originalRow = originalContent.body[rowIndex];
+    if (!originalRow) return;
+    Array.from(row.children).forEach((cell, cellIndex) => {
+      if (originalRow[cellIndex] !== undefined) {
+        cell.innerHTML = originalRow[cellIndex];
       }
-    } else {
-      tableBorderStyleSelect.value = 'light';
-      if (tableBorderColorInput) {
-        tableBorderColorInput.value = DEFAULT_BORDER_COLOR;
-      }
-    }
-  }
-
-  if (tableFontSizeInput) {
-    const tableComputed = window.getComputedStyle(table);
-    const size = parseInt(tableComputed.fontSize, 10);
-    tableFontSizeInput.value = Number.isFinite(size) ? size : 16;
-  }
-
-  const headerCell = table.querySelector('thead th') || table.querySelector('th');
-  if (headerCell) {
-    const headerComputed = window.getComputedStyle(headerCell);
-    if (tableHeaderBgInput) {
-      tableHeaderBgInput.value = rgbToHex(headerComputed.backgroundColor);
-    }
-    if (tableHeaderLineWidthInput) {
-      const width = parseInt(headerComputed.borderBottomWidth, 10);
-      tableHeaderLineWidthInput.value = Number.isFinite(width) ? width : 0;
-    }
-    if (tableHeaderLineColorInput) {
-      tableHeaderLineColorInput.value = rgbToHex(headerComputed.borderBottomColor);
-    }
-  } else {
-    if (tableHeaderBgInput) tableHeaderBgInput.value = '#f4f4f4';
-    if (tableHeaderLineWidthInput) tableHeaderLineWidthInput.value = '0';
-    if (tableHeaderLineColorInput) tableHeaderLineColorInput.value = DEFAULT_BORDER_COLOR;
-  }
-
-  if (tablePlaceholderCheckbox) {
-    tablePlaceholderCheckbox.checked = false;
-  }
+    });
+  });
 }
