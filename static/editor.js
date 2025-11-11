@@ -2884,6 +2884,20 @@ function prefillTableModalFromTable(table) {
 
   const snapshot = snapshotOriginalTable(table);
   tableModalOriginalContent = extractTableContent(snapshot);
+
+  const headerLen = tableModalOriginalContent.header.length;
+  const bodyLen = tableModalOriginalContent.body.length;
+  const totalRows = headerLen + bodyLen;
+  const referenceRow =
+    tableModalOriginalContent.header[0] || tableModalOriginalContent.body[0] || [];
+  const totalCols = referenceRow.length || getTableColumnCount(table);
+
+  if (tableRowsInput) {
+    tableRowsInput.value = String(totalRows || table.querySelectorAll('tr').length || 1);
+  }
+  if (tableColsInput) {
+    tableColsInput.value = String(totalCols || 2);
+  }
 }
 
 function extractTableContent(table) {
