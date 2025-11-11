@@ -101,6 +101,8 @@ function cleanHtml(html) {
     'TR',
     'TD',
     'TH',
+    'COLGROUP',
+    'COL',
   ];
 
   // Recursively clean nodes
@@ -394,6 +396,19 @@ const validationClose = document.getElementById('validationClose');
 const statsModal = document.getElementById('statsModal');
 const statsContent = document.getElementById('statsContent');
 const statsClose = document.getElementById('statsClose');
+const statsClose2 = document.getElementById('statsClose2');
+
+// Table modal controls
+const tableModal = document.getElementById('tableModal');
+const tableClose = document.getElementById('tableClose');
+const tableCancel = document.getElementById('tableCancel');
+const tableCreate = document.getElementById('tableCreate');
+const tableRowsInput = document.getElementById('tableRows');
+const tableColsInput = document.getElementById('tableCols');
+const tableIncludeHeader = document.getElementById('tableIncludeHeader');
+const tableWidthInput = document.getElementById('tableWidth');
+const tableColWidthsInput = document.getElementById('tableColWidths');
+const tableBorderStyleSelect = document.getElementById('tableBorderStyle');
 
 let currentRteTarget = null;
 
@@ -477,44 +492,7 @@ function init() {
   const btnTable = document.getElementById('btnTable');
   if (btnTable) {
     btnTable.addEventListener('click', () => {
-      const defaultCols = '2';
-      const defaultRows = '3';
-      const colsInput = prompt('How many columns?', defaultCols);
-      const cols = Math.max(1, parseInt(colsInput || defaultCols, 10));
-      if (!cols || Number.isNaN(cols)) {
-        return;
-      }
-      const rowsInput = prompt('How many rows (including header)?', defaultRows);
-      const rows = Math.max(1, parseInt(rowsInput || defaultRows, 10));
-      if (!rows || Number.isNaN(rows)) {
-        return;
-      }
-      const useHeader = confirm('Use first row as header?');
-      const tableStyle = 'width:100%; border-collapse:collapse; margin:12px 0;';
-      const headerCellStyle =
-        'padding:8px 10px; border:1px solid #dddddd; background-color:#f4f4f4; text-align:left; font-weight:bold;';
-      const cellStyle = 'padding:8px 10px; border:1px solid #dddddd; text-align:left;';
-      let html = `<table role="presentation" style="${tableStyle}">`;
-      if (useHeader) {
-        html += '<thead><tr>';
-        for (let c = 0; c < cols; c += 1) {
-          html += `<th style="${headerCellStyle}">Header ${c + 1}</th>`;
-        }
-        html += '</tr></thead>';
-      }
-      html += '<tbody>';
-      const bodyRows = useHeader ? rows - 1 : rows;
-      for (let r = 0; r < bodyRows; r += 1) {
-        html += '<tr>';
-        for (let c = 0; c < cols; c += 1) {
-          html += `<td style="${cellStyle}">Cell ${r + 1}-${c + 1}</td>`;
-        }
-        html += '</tr>';
-      }
-      html += '</tbody></table>';
-      document.execCommand('insertHTML', false, html);
-      rteArea.focus();
-      showToast('Table inserted. Replace placeholders with your content.', 'info');
+      openTableModal();
     });
   }
 
@@ -2346,3 +2324,119 @@ function renderCardLinks(cardDiv, card) {
 }
 
 console.log(`✅ WSU Newsletter Editor v${APP_VERSION} loaded`);
+
+function openTableModal() {
+  if (!tableModal) {
+    return;
+  }
+
+  tableRowsInput.value = tableRowsInput.value || '3';
+  tableColsInput.value = tableColsInput.value || '2';
+  tableIncludeHeader.checked = true;
+  if (!tableWidthInput.value) {
+    tableWidthInput.value = '100%';
+  }
+  tableColWidthsInput.value = '';
+  tableBorderStyleSelect.value = 'light';
+
+  tableModal.classList.remove('hidden');
+  tableRowsInput.focus();
+}
+
+function closeTableModal() {
+  if (tableModal) {
+    tableModal.classList.add('hidden');
+  }
+}
+
+function buildTableHtml({ rows, cols, includeHeader, tableWidth, columnWidths, borderStyle }) {
+  const safeRows = Math.max(1, rows);
+  const safeCols = Math.max(1, cols);
+  const bodyRows = includeHeader ? Math.max(0, safeRows - 1) : safeRows;
+
+  const tableStyles = [`width:${tableWidth}`, 'border-collapse:collapse', 'margin:12px 0'];
+  let cellBorder = 'border:1px solid #dddddd;';
+  if (borderStyle === 'none') {
+    cellBorder = 'border:0;';
+  } else if (borderStyle === 'medium') {
+    cellBorder = 'border:2px solid #c9c9c9;';
+  }
+
+  const headerCellStyle = `padding:8px 10px; ${cellBorder} background-color:#f4f4f4; text-align:left; font-weight:bold;`;
+  const cellStyle = `padding:8px 10px; ${cellBorder} text-align:left;`;
+
+  const widths = columnWidths.map((w) => w.trim()).filter((w) => w.length > 0);
+
+  const getWidthStyle = (index) => {
+    if (!widths.length) {
+      return '';
+    }
+    const width = widths[index] || widths[widths.length - 1];
+    return width ? `width:${width};` : '';
+  };
+
+  let html = `<table role="presentation" style="${tableStyles.join('; ')}">`;
+
+  if (includeHeader) {
+    html += '<thead><tr>';
+    for (let c = 0; c < safeCols; c += 1) {
+      html += `<th style="${headerCellStyle}${getWidthStyle(c)}">Header ${c + 1}</th>`;
+    }
+    html += '</tr></thead>';
+  }
+
+  html += '<tbody>';
+  for (let r = 0; r < bodyRows; r += 1) {
+    html += '<tr>';
+    for (let c = 0; c < safeCols; c += 1) {
+      html += `<td style="${cellStyle}${getWidthStyle(c)}">Cell ${r + 1}-${c + 1}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+
+  return html;
+}
+
+if (tableClose) {
+  tableClose.onclick = closeTableModal;
+}
+if (tableCancel) {
+  tableCancel.onclick = closeTableModal;
+}
+if (tableModal) {
+  tableModal.addEventListener('click', (e) => {
+    if (e.target === tableModal) {
+      closeTableModal();
+    }
+  });
+}
+if (tableCreate) {
+  tableCreate.onclick = () => {
+    const rows = parseInt(tableRowsInput.value || '3', 10);
+    const cols = parseInt(tableColsInput.value || '2', 10);
+    if (Number.isNaN(rows) || rows < 1 || Number.isNaN(cols) || cols < 1) {
+      showToast('Please enter valid row and column counts.', 'error');
+      return;
+    }
+    const tableWidth = (tableWidthInput.value || '100%').trim();
+    const colWidths = (tableColWidthsInput.value || '')
+      .split(',')
+      .map((w) => w.trim())
+      .filter((w) => w.length > 0);
+
+    const html = buildTableHtml({
+      rows,
+      cols,
+      includeHeader: tableIncludeHeader.checked,
+      tableWidth,
+      columnWidths: colWidths,
+      borderStyle: tableBorderStyleSelect.value,
+    });
+
+    document.execCommand('insertHTML', false, html);
+    rteArea.focus();
+    closeTableModal();
+    showToast('Table inserted. Replace placeholders with your content.', 'info');
+  };
+}

@@ -485,6 +485,50 @@
       </div>
     </div>
 
+    <!-- Table Insert Modal -->
+    <div id="tableModal" class="modal hidden">
+      <div class="modalInner" style="max-width: 480px">
+        <div class="modalHead">
+          <strong>Insert Table</strong>
+          <button id="tableClose">×</button>
+        </div>
+        <div style="padding: 16px; display: grid; gap: 12px">
+          <label>
+            Rows (including header if enabled)
+            <input id="tableRows" type="number" min="1" value="3" />
+          </label>
+          <label>
+            Columns
+            <input id="tableCols" type="number" min="1" value="2" />
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px">
+            <input id="tableIncludeHeader" type="checkbox" checked />
+            Include header row
+          </label>
+          <label>
+            Table width (e.g., 100% or 600px)
+            <input id="tableWidth" type="text" value="100%" />
+          </label>
+          <label>
+            Column widths (comma separated, optional)
+            <input id="tableColWidths" type="text" placeholder="e.g., 50%, 30%, 20%" />
+          </label>
+          <label>
+            Border style
+            <select id="tableBorderStyle">
+              <option value="none">No border</option>
+              <option value="light" selected>Light (1px)</option>
+              <option value="medium">Medium (2px)</option>
+            </select>
+          </label>
+        </div>
+        <div class="modalFoot">
+          <button id="tableCancel">Cancel</button>
+          <button id="tableCreate" class="primary">Insert Table</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Stats Modal -->
     <div id="statsModal" class="modal hidden">
       <div class="modalInner">
