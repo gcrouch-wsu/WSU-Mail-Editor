@@ -409,6 +409,7 @@ const tableIncludeHeader = document.getElementById('tableIncludeHeader');
 const tableWidthInput = document.getElementById('tableWidth');
 const tableColWidthsInput = document.getElementById('tableColWidths');
 const tableBorderStyleSelect = document.getElementById('tableBorderStyle');
+const tablePlaceholderCheckbox = document.getElementById('tableShowPlaceholders');
 
 let currentRteTarget = null;
 
@@ -2338,6 +2339,9 @@ function openTableModal() {
   }
   tableColWidthsInput.value = '';
   tableBorderStyleSelect.value = 'light';
+  if (tablePlaceholderCheckbox) {
+    tablePlaceholderCheckbox.checked = true;
+  }
 
   tableModal.classList.remove('hidden');
   tableRowsInput.focus();
@@ -2354,7 +2358,21 @@ function buildTableHtml({ rows, cols, includeHeader, tableWidth, columnWidths, b
   const safeCols = Math.max(1, cols);
   const bodyRows = includeHeader ? Math.max(0, safeRows - 1) : safeRows;
 
-  const tableStyles = [`width:${tableWidth}`, 'border-collapse:collapse', 'margin:12px 0'];
+  const normalizeWidth = (width) => {
+    if (!width) return '';
+    const trimmed = width.trim();
+    if (!trimmed) return '';
+    if (/^(\d+%|\d+px)$/i.test(trimmed)) {
+      return trimmed;
+    }
+    if (/^\d+$/.test(trimmed)) {
+      return `${trimmed}px`;
+    }
+    return '';
+  };
+
+  const normalizedTableWidth = normalizeWidth(tableWidth) || '100%';
+  const tableStyles = [`width:${normalizedTableWidth}`, 'border-collapse:collapse', 'margin:12px 0'];
   let cellBorder = 'border:1px solid #dddddd;';
   if (borderStyle === 'none') {
     cellBorder = 'border:0;';
@@ -2365,7 +2383,9 @@ function buildTableHtml({ rows, cols, includeHeader, tableWidth, columnWidths, b
   const headerCellStyle = `padding:8px 10px; ${cellBorder} background-color:#f4f4f4; text-align:left; font-weight:bold;`;
   const cellStyle = `padding:8px 10px; ${cellBorder} text-align:left;`;
 
-  const widths = columnWidths.map((w) => w.trim()).filter((w) => w.length > 0);
+  const widths = columnWidths
+    .map((w) => normalizeWidth(w))
+    .filter((w) => w.length > 0);
 
   const getWidthStyle = (index) => {
     if (!widths.length) {
@@ -2389,7 +2409,8 @@ function buildTableHtml({ rows, cols, includeHeader, tableWidth, columnWidths, b
   for (let r = 0; r < bodyRows; r += 1) {
     html += '<tr>';
     for (let c = 0; c < safeCols; c += 1) {
-      html += `<td style="${cellStyle}${getWidthStyle(c)}">Cell ${r + 1}-${c + 1}</td>`;
+      const content = tablePlaceholderCheckbox && !tablePlaceholderCheckbox.checked ? '' : `Cell ${r + 1}-${c + 1}`;
+      html += `<td style="${cellStyle}${getWidthStyle(c)}">${content}</td>`;
     }
     html += '</tr>';
   }
@@ -2422,8 +2443,7 @@ if (tableCreate) {
     const tableWidth = (tableWidthInput.value || '100%').trim();
     const colWidths = (tableColWidthsInput.value || '')
       .split(',')
-      .map((w) => w.trim())
-      .filter((w) => w.length > 0);
+      .map((w) => w.trim());
 
     const html = buildTableHtml({
       rows,

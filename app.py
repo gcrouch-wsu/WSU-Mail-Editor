@@ -487,8 +487,13 @@ def api_export():
         # Generate filename
         template_type = newsletter_data.get("template", "ff")
         prefix = EXPORT_DEFAULTS["filename_prefix"].get(template_type, "Newsletter_")
+        # map to friendly names
+        friendly_prefix = {
+            "ff": "FF",
+            "briefing": "Briefing",
+        }.get(template_type, "Newsletter")
         suffix = "_PRODUCTION" if strip_json else ""
-        filename = f"{prefix}{datetime.now().strftime('%Y-%m-%d')}{suffix}.html"
+        filename = f"{friendly_prefix}_{datetime.now().strftime('%d-%m-%Y')}{suffix}.html"
 
         app.logger.info(f"Exporting as: {filename}")
 
