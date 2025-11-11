@@ -436,6 +436,8 @@ let tableModalTarget = null;
 let tableModalOriginalContent = null;
 let tableCellTarget = null;
 let toolbarCleanupHandlers = [];
+let toolbarHost = null;
+let toolbarHostOriginalPosition = null;
 
 // Create debounced update function
 const debouncedUpdate = debounce(updatePreview, 400);
@@ -2668,11 +2670,26 @@ function removeTableToolbar() {
     }
   });
   toolbarCleanupHandlers = [];
+  if (toolbarHost && toolbarHostOriginalPosition !== null) {
+    toolbarHost.style.position = toolbarHostOriginalPosition || '';
+  }
+  toolbarHost = null;
+  toolbarHostOriginalPosition = null;
 }
 
 function createTableToolbar(table) {
   removeTableToolbar();
   if (!table || !table.parentElement) return;
+
+  const host = table.parentElement;
+  toolbarHost = host;
+  const hostStyle = window.getComputedStyle(host);
+  if (hostStyle.position === 'static') {
+    toolbarHostOriginalPosition = host.style.position;
+    host.style.position = 'relative';
+  } else {
+    toolbarHostOriginalPosition = null;
+  }
 
   const toolbar = document.createElement('div');
   toolbar.className = 'tableToolbar';
@@ -2694,7 +2711,7 @@ function createTableToolbar(table) {
     handleTableToolbarAction(btn.dataset.action);
   });
 
-  document.body.appendChild(toolbar);
+  host.appendChild(toolbar);
   currentTableToolbar = toolbar;
   positionToolbarRelativeToTable(table);
 
@@ -2702,11 +2719,13 @@ function createTableToolbar(table) {
     if (!currentTableToolbar) return;
     positionToolbarRelativeToTable(table);
   };
-  window.addEventListener('scroll', updatePosition, true);
   window.addEventListener('resize', updatePosition);
+  if (host !== document.body) {
+    host.addEventListener('scroll', updatePosition, true);
+  }
   toolbarCleanupHandlers = [
-    () => window.removeEventListener('scroll', updatePosition, true),
     () => window.removeEventListener('resize', updatePosition),
+    () => host.removeEventListener('scroll', updatePosition, true),
   ];
 }
 
@@ -3116,6 +3135,9 @@ const WSU_COLOR_PALETTE = [
   { label: 'Red', value: '#CA1237' },
   { label: 'Black', value: '#000000' },
   { label: 'White', value: '#FFFFFF' },
+  { label: 'Light Panel', value: '#F7F7F7' },
+  { label: 'Card Gray', value: '#F4F4F4' },
+  { label: 'Divider Gray', value: '#E0E0E0' },
   { label: 'Black 80%', value: '#333333' },
   { label: 'Black 70%', value: '#4D4D4D' },
   { label: 'Black 60%', value: '#666666' },
@@ -3167,17 +3189,13 @@ function snapshotOriginalTable(table) {
 }
 
 function positionToolbarRelativeToTable(table) {
-  if (!currentTableToolbar) return;
-  const rect = table.getBoundingClientRect();
-  const toolbarRect = currentTableToolbar.getBoundingClientRect();
-  let top = window.scrollY + rect.top - toolbarRect.height - 6;
-  if (top < window.scrollY + 10) {
-    top = window.scrollY + rect.bottom + 6;
+  if (!currentTableToolbar || !toolbarHost) return;
+  const toolbarHeight = currentTableToolbar.offsetHeight || 32;
+  let top = table.offsetTop - toolbarHeight - 6;
+  if (top < 0) {
+    top = table.offsetTop + table.offsetHeight + 6;
   }
-  const left = window.scrollX + rect.left;
-  currentTableToolbar.style.position = 'absolute';
+  const left = table.offsetLeft;
   currentTableToolbar.style.top = `${top}px`;
   currentTableToolbar.style.left = `${left}px`;
-  currentTableToolbar.style.zIndex = '9999';
-  currentTableToolbar.style.pointerEvents = 'auto';
 }
