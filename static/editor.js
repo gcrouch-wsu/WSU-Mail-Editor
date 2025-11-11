@@ -2707,13 +2707,23 @@ function handleTableToolbarAction(action) {
     case 'add-row': {
       const colCount = getTableColumnCount(table);
       const targetBody = ensureTableBody(table);
+      const referenceRow =
+        row && row.parentElement === targetBody ? row : targetBody.querySelector('tr');
       const newRow = document.createElement('tr');
       for (let i = 0; i < colCount; i += 1) {
         const newCell = document.createElement('td');
-        const referenceRow =
-          row && row.parentElement === targetBody ? row : targetBody.querySelector('tr');
         const referenceCell = referenceRow ? referenceRow.children[i] : null;
         applyCellStyle(referenceCell, newCell, TABLE_DEFAULT_CELL_STYLE);
+        if (referenceCell) {
+          newCell.style.textAlign =
+            referenceCell.style.textAlign ||
+            referenceCell.style.getPropertyValue('text-align') ||
+            '';
+          newCell.style.fontSize = referenceCell.style.fontSize || '';
+          newCell.style.fontWeight = referenceCell.style.fontWeight || '';
+          newCell.style.color = referenceCell.style.color || '';
+          newCell.style.backgroundColor = referenceCell.style.backgroundColor || '';
+        }
         newCell.innerHTML = '';
         newRow.appendChild(newCell);
       }
@@ -2733,6 +2743,16 @@ function handleTableToolbarAction(action) {
           newCell,
           cellTag === 'th' ? TABLE_DEFAULT_HEADER_STYLE : TABLE_DEFAULT_CELL_STYLE
         );
+        if (referenceCell) {
+          newCell.style.textAlign =
+            referenceCell.style.textAlign ||
+            referenceCell.style.getPropertyValue('text-align') ||
+            '';
+          newCell.style.fontSize = referenceCell.style.fontSize || '';
+          newCell.style.fontWeight = referenceCell.style.fontWeight || '';
+          newCell.style.color = referenceCell.style.color || '';
+          newCell.style.backgroundColor = referenceCell.style.backgroundColor || '';
+        }
         newCell.innerHTML = '';
         tr.appendChild(newCell);
       });
@@ -2811,6 +2831,7 @@ function replaceCurrentTableWithHtml(html) {
 }
 
 function saveSelection() {
+  savedSelectionRange = null;
   const sel = window.getSelection();
   if (sel && sel.rangeCount > 0) {
     savedSelectionRange = sel.getRangeAt(0).cloneRange();
@@ -2973,7 +2994,11 @@ function applyStylesToCell(cell, styles) {
   if (backgroundColor) cell.style.backgroundColor = backgroundColor;
   if (fontSize) cell.style.fontSize = `${fontSize}px`;
   if (fontWeight) cell.style.fontWeight = fontWeight;
-  if (textAlign) cell.style.textAlign = textAlign;
+  if (textAlign) {
+    cell.style.textAlign = textAlign;
+  } else if (!cell.style.textAlign) {
+    cell.style.textAlign = 'left';
+  }
 }
 
 if (tableCellClose) {
