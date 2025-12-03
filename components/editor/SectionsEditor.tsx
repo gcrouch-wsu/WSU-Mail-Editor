@@ -7,6 +7,8 @@ import type { NewsletterData, Section, Card, Closure } from '@/types/newsletter'
 import { Plus, Trash2, Edit2, FileText, GripVertical, Calendar } from 'lucide-react'
 import CardEditor from './CardEditor'
 import ClosureEditor from './ClosureEditor'
+import ConfirmModal from './ConfirmModal'
+import PromptModal from './PromptModal'
 import {
   DndContext,
   closestCenter,
@@ -276,6 +278,31 @@ export default function SectionsEditor({
     closureIndex: number
     closure: Closure
   } | null>(null)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    onConfirm: () => void
+    variant?: 'danger' | 'warning' | 'info'
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  })
+  const [promptModal, setPromptModal] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    defaultValue?: string
+    placeholder?: string
+    onConfirm: (value: string) => void
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  })
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -286,49 +313,64 @@ export default function SectionsEditor({
   )
 
   const addSection = () => {
-    const title = window.prompt('Enter section title:')
-    if (!title) return
+    setPromptModal({
+      isOpen: true,
+      title: 'Add New Section',
+      message: 'Enter a title for the new section:',
+      placeholder: 'Section title',
+      onConfirm: (title) => {
+        if (!title) return
 
-    const key = title.toLowerCase().replace(/\s+/g, '_')
-    const isClosuresSection = key === 'closures'
+        const key = title.toLowerCase().replace(/\s+/g, '_')
+        const isClosuresSection = key === 'closures'
 
-    updateState(
-      (prev) => ({
-        ...prev,
-        sections: [
-          ...prev.sections,
-          {
-            key,
-            title,
-            layout: {
-              padding_top: 18,
-              padding_bottom: 28,
-              background_color: '',
-              border_radius: 0,
-              divider_enabled: true,
-              divider_thickness: 2,
-              divider_color: '#e0e0e0',
-              divider_spacing: 24,
-              title_align: 'left',
-            },
-            ...(isClosuresSection ? { closures: [] } : { cards: [] }),
-          },
-        ],
-      }),
-      true
-    )
+        updateState(
+          (prev) => ({
+            ...prev,
+            sections: [
+              ...prev.sections,
+              {
+                key,
+                title,
+                layout: {
+                  padding_top: 18,
+                  padding_bottom: 28,
+                  background_color: '',
+                  border_radius: 0,
+                  divider_enabled: true,
+                  divider_thickness: 2,
+                  divider_color: '#e0e0e0',
+                  divider_spacing: 24,
+                  title_align: 'left',
+                },
+                ...(isClosuresSection ? { closures: [] } : { cards: [] }),
+              },
+            ],
+          }),
+          true
+        )
+        setPromptModal({ isOpen: false, title: '', message: '', onConfirm: () => {} })
+      },
+    })
   }
 
   const removeSection = (index: number) => {
-    if (window.confirm('Remove this entire section?')) {
-      updateState(
-        (prev) => ({
-          ...prev,
-          sections: prev.sections.filter((_, i) => i !== index),
-        }),
-        true
-      )
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remove Section',
+      message: 'Are you sure you want to remove this entire section? This action cannot be undone.',
+      variant: 'danger',
+      onConfirm: () => {
+        updateState(
+          (prev) => ({
+            ...prev,
+            sections: prev.sections.filter((_, i) => i !== index),
+          }),
+          true
+        )
+        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} })
+      },
+    })
   }
 
   // Handle section drag end
@@ -505,19 +547,26 @@ export default function SectionsEditor({
   }
 
   const removeCard = (sectionIndex: number, cardIndex: number) => {
-    if (window.confirm('Remove this card?')) {
-      updateState(
-        (prev) => {
-          const newSections = [...prev.sections]
-          const section = newSections[sectionIndex]
-          if (section.cards) {
-            section.cards.splice(cardIndex, 1)
-          }
-          return { ...prev, sections: newSections }
-        },
-        true
-      )
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remove Card',
+      message: 'Are you sure you want to remove this card? This action cannot be undone.',
+      variant: 'danger',
+      onConfirm: () => {
+        updateState(
+          (prev) => {
+            const newSections = [...prev.sections]
+            const section = newSections[sectionIndex]
+            if (section.cards) {
+              section.cards.splice(cardIndex, 1)
+            }
+            return { ...prev, sections: newSections }
+          },
+          true
+        )
+        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} })
+      },
+    })
   }
 
   // Closure management functions
@@ -597,19 +646,26 @@ export default function SectionsEditor({
   }
 
   const removeClosure = (sectionIndex: number, closureIndex: number) => {
-    if (window.confirm('Remove this closure?')) {
-      updateState(
-        (prev) => {
-          const newSections = [...prev.sections]
-          const section = newSections[sectionIndex]
-          if (section.closures) {
-            section.closures.splice(closureIndex, 1)
-          }
-          return { ...prev, sections: newSections }
-        },
-        true
-      )
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remove Closure',
+      message: 'Are you sure you want to remove this closure? This action cannot be undone.',
+      variant: 'danger',
+      onConfirm: () => {
+        updateState(
+          (prev) => {
+            const newSections = [...prev.sections]
+            const section = newSections[sectionIndex]
+            if (section.closures) {
+              section.closures.splice(closureIndex, 1)
+            }
+            return { ...prev, sections: newSections }
+          },
+          true
+        )
+        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} })
+      },
+    })
   }
 
   // Handle closure drag end
@@ -962,6 +1018,31 @@ export default function SectionsEditor({
           onDelete={deleteClosure}
         />
       )}
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() =>
+          setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} })
+        }
+      />
+
+      {/* Prompt Modal */}
+      <PromptModal
+        isOpen={promptModal.isOpen}
+        title={promptModal.title}
+        message={promptModal.message}
+        defaultValue={promptModal.defaultValue}
+        placeholder={promptModal.placeholder}
+        onConfirm={promptModal.onConfirm}
+        onCancel={() =>
+          setPromptModal({ isOpen: false, title: '', message: '', onConfirm: () => {} })
+        }
+      />
     </>
   )
 }

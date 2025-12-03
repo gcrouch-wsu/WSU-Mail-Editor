@@ -19,10 +19,10 @@ export default function ToolTile({
   return (
     <Link
       href={href}
-      className="group block p-6 bg-white border-2 border-wsu-border-light rounded-lg hover:border-wsu-crimson hover:shadow-lg transition-all duration-200"
+      className="group block p-6 bg-white border-2 border-wsu-border-light rounded-full hover:border-wsu-crimson hover:shadow-lg transition-all duration-200"
     >
       <div className="flex items-start gap-4">
-        <div className="flex-shrink-0 p-3 bg-wsu-crimson/10 rounded-lg group-hover:bg-wsu-crimson/20 transition-colors">
+        <div className="flex-shrink-0 p-3 bg-wsu-crimson/10 rounded-full group-hover:bg-wsu-crimson/20 transition-colors">
           <Icon className="w-6 h-6 text-wsu-crimson" />
         </div>
         <div className="flex-1">

@@ -7,6 +7,7 @@ import { useNewsletterState } from './hooks/useNewsletterState'
 import { usePreview } from './hooks/usePreview'
 import PreviewPanel from '@/components/editor/PreviewPanel'
 import EditorPanel from '@/components/editor/EditorPanel'
+import ConfirmModal from '@/components/editor/ConfirmModal'
 import type { NewsletterData, ValidationResult, ValidationIssue } from '@/types/newsletter'
 import { defaultFFModel } from '@/lib/defaults'
 import {
@@ -27,6 +28,22 @@ export default function EditorPage() {
   const [showValidation, setShowValidation] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [showMenu, setShowMenu] = useState(false)
+  const [backupConfirmModal, setBackupConfirmModal] = useState<{
+    isOpen: boolean
+    message: string
+    backupData: NewsletterData | null
+  }>({
+    isOpen: false,
+    message: '',
+    backupData: null,
+  })
+  const [templateChangeConfirm, setTemplateChangeConfirm] = useState<{
+    isOpen: boolean
+    newType: 'ff' | 'briefing' | 'letter' | null
+  }>({
+    isOpen: false,
+    newType: null,
+  })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const hasLoadedInitialPreview = useRef(false)
@@ -59,7 +76,7 @@ export default function EditorPage() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        let restoredFromBackup = false
+        const restoredFromBackup = false
         
         // Check for auto-save backup only once per session
         const backupCheckedKey = 'wsu_newsletter_backup_checked'
@@ -83,15 +100,14 @@ export default function EditorPage() {
               if (ageMinutes >= 1 && ageMinutes < 1440) {
                 // Less than 24 hours old and at least 1 minute old
                 const message = `Found an auto-saved draft from ${ageMinutes} minutes ago. Restore it?`
-                if (window.confirm(message)) {
-                  setInitialData(backup.state)
-                  restoredFromBackup = true
-                  setLoading(false)
-                  return
-                } else {
-                  // User declined - clear the backup to prevent re-prompting
-                  localStorage.removeItem('wsu_newsletter_backup')
-                }
+                setBackupConfirmModal({
+                  isOpen: true,
+                  message,
+                  backupData: backup.state,
+                })
+                // Don't continue loading - wait for user response
+                // Loading will be set to false in modal callbacks
+                return
               } else if (ageMinutes >= 1440) {
                 // Backup is too old, clear it
                 localStorage.removeItem('wsu_newsletter_backup')
@@ -172,13 +188,23 @@ export default function EditorPage() {
   }
 
   const handleTemplateChange = async (newType: 'ff' | 'briefing' | 'letter') => {
-    if (
-      window.confirm(
-        'Switch template? This will load default content and discard current edits.'
-      )
-    ) {
-      setTemplateType(newType)
-      // The useEffect will handle loading the new template
+    setTemplateChangeConfirm({
+      isOpen: true,
+      newType,
+    })
+  }
+
+  const confirmTemplateChange = async () => {
+    if (templateChangeConfirm.newType) {
+      setTemplateType(templateChangeConfirm.newType)
+      const response = await fetch(`/api/defaults/${templateChangeConfirm.newType}`)
+      if (response.ok) {
+        const data = await response.json()
+        setInitialData(data)
+      } else {
+        setInitialData(defaultFFModel())
+      }
+      setTemplateChangeConfirm({ isOpen: false, newType: null })
     }
   }
 
@@ -529,6 +555,54 @@ export default function EditorPage() {
           </div>
         </div>
       )}
+
+      {/* Backup Restore Confirm Modal */}
+      <ConfirmModal
+        isOpen={backupConfirmModal.isOpen}
+        title="Restore Auto-Saved Draft"
+        message={backupConfirmModal.message}
+        confirmLabel="Restore"
+        cancelLabel="Start Fresh"
+        variant="info"
+        onConfirm={async () => {
+          if (backupConfirmModal.backupData) {
+            setInitialData(backupConfirmModal.backupData)
+            setLoading(false)
+          }
+          setBackupConfirmModal({ isOpen: false, message: '', backupData: null })
+        }}
+        onCancel={async () => {
+          // User declined - clear the backup to prevent re-prompting
+          localStorage.removeItem('wsu_newsletter_backup')
+          setBackupConfirmModal({ isOpen: false, message: '', backupData: null })
+          // Continue with normal loading
+          try {
+            const response = await fetch(`/api/defaults/${templateType}`)
+            if (response.ok) {
+              const data = await response.json()
+              setInitialData(data)
+            } else {
+              setInitialData(defaultFFModel())
+            }
+          } catch (error) {
+            setInitialData(defaultFFModel())
+          } finally {
+            setLoading(false)
+          }
+        }}
+      />
+
+      {/* Template Change Confirm Modal */}
+      <ConfirmModal
+        isOpen={templateChangeConfirm.isOpen}
+        title="Switch Template"
+        message="Are you sure you want to switch templates? This will load default content and discard your current edits."
+        confirmLabel="Switch"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={confirmTemplateChange}
+        onCancel={() => setTemplateChangeConfirm({ isOpen: false, newType: null })}
+      />
     </div>
   )
 }

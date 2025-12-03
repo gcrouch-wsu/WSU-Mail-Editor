@@ -12,7 +12,8 @@ import TextAlign from '@tiptap/extension-text-align'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import PromptModal from './PromptModal'
 import {
   Bold,
   Italic,
@@ -49,6 +50,7 @@ export default function TiptapEditor({
   placeholder = 'Enter content...',
   style,
 }: TiptapEditorProps) {
+  const [linkPromptOpen, setLinkPromptOpen] = useState(false)
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -284,10 +286,7 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => {
-            const url = window.prompt('Enter URL:')
-            if (url) {
-              editor.chain().focus().setLink({ href: url }).run()
-            }
+            setLinkPromptOpen(true)
           }}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('link')
@@ -419,6 +418,22 @@ export default function TiptapEditor({
 
       {/* Editor Content */}
       <EditorContent editor={editor} />
+
+      {/* Link Prompt Modal */}
+      <PromptModal
+        isOpen={linkPromptOpen}
+        title="Insert Link"
+        message="Enter the URL for the link:"
+        defaultValue={editor.getAttributes('link').href || ''}
+        placeholder="https://..."
+        onConfirm={(url) => {
+          if (url) {
+            editor.chain().focus().setLink({ href: url }).run()
+          }
+          setLinkPromptOpen(false)
+        }}
+        onCancel={() => setLinkPromptOpen(false)}
+      />
     </div>
   )
 }
