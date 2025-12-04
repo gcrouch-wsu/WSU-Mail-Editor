@@ -316,3 +316,7 @@ Internal/WSU use. All rights reserved.
 ## Version
 
 Current version: **8.0** (Next.js/TypeScript)
+
+## AI Handoff
+
+For detailed information about the project architecture, recent changes, and development guidelines, see **[AI_HANDOFF.md](./AI_HANDOFF.md)**. This document is designed to help AI assistants and new developers quickly understand the codebase and continue development.
