@@ -77,7 +77,7 @@ export interface SectionLayout {
   border_radius: number
   divider_enabled: boolean
   divider_thickness: number
-  divider_color: string
+  divider_color?: string // Optional - falls back to global settings if not set
   divider_spacing: number
   divider_margin_top?: number // Space above the divider line
   divider_margin_bottom?: number // Space below the divider line

@@ -9,7 +9,6 @@ import {
   STYLE_BODY_TEXT,
   STYLE_META,
   STYLE_LOCATION_LABEL,
-  STYLE_CARD_ACCENT,
   STYLE_CARD_BODY,
   STYLE_RESET,
   STYLE_SOCIAL_ICON_CELL,
@@ -314,13 +313,11 @@ export function renderSectionStart(
   const dividerColor = layout.divider_color !== undefined 
     ? layout.divider_color 
     : (settings?.divider_color !== undefined ? settings.divider_color : BORDER_LIGHT)
-  // Get divider margins - use section-level if set, otherwise global settings, otherwise 0
+  // Get divider margin top - use section-level if set, otherwise global settings, otherwise 0
+  // Note: dividerMarginBottom is calculated and used in renderSection, not here
   const dividerMarginTop = layout.divider_margin_top !== undefined 
     ? layout.divider_margin_top 
     : (settings?.divider_margin_top !== undefined ? settings.divider_margin_top : 0)
-  const dividerMarginBottom = layout.divider_margin_bottom !== undefined 
-    ? layout.divider_margin_bottom 
-    : (settings?.divider_margin_bottom !== undefined ? settings.divider_margin_bottom : 0)
 
   // Validate title_align
   if (!['left', 'center', 'right'].includes(titleAlign)) {
@@ -451,10 +448,7 @@ function renderCardLinks(card: Card): string {
  */
 function getCardStyle(card: Card, settings: Settings | null = null): string {
   const bgColor = card.background_color || '#f9f9f9'
-  // Use card-level spacing_bottom if set, otherwise global card_spacing, otherwise default 20
-  const spacingBottom = card.spacing_bottom !== undefined 
-    ? card.spacing_bottom 
-    : (settings?.card_spacing !== undefined ? settings.card_spacing : 20)
+  // Note: Card spacing is handled by spacer elements between cards, not in cardStyle
   const borderWidth = card.border_width || 0
   const borderColor = card.border_color || '#e0e0e0'
   // Use per-card border_radius if set, otherwise fall back to global setting, otherwise 0
