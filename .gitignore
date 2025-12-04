@@ -33,7 +33,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Python (keep existing Flask files for reference)
-# __pycache__/
-# *.py[cod]
-# *$py.class
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
