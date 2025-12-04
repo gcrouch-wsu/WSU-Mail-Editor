@@ -1,7 +1,7 @@
 // app/page.tsx - Homepage: WSU Graduate School Tools
 
 import ToolTile from '@/components/homepage/ToolTile'
-import { FileText } from 'lucide-react'
+import { FileText, Network } from 'lucide-react'
 
 export default function HomePage() {
   return (
@@ -26,6 +26,12 @@ export default function HomePage() {
             description="Create and edit email newsletters for Friday Focus and Graduate School Briefing"
             href="/editor"
             icon={FileText}
+          />
+          <ToolTile
+            title="Org Chart Editor"
+            description="Create and edit organizational charts with multiple layout options"
+            href="/orgchart"
+            icon={Network}
           />
           {/* Add more tool tiles here as needed */}
         </div>

@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Org Chart Admin — Unified</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root{--line:#e5e7eb;--ink:#111827;--muted:#6b7280;--brand:#981e32;--card:#fff;--shadow:0 1px 0 rgba(16,24,40,.04),0 1px 2px rgba(16,24,40,.08)}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:#fff}
+    header{display:flex;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:5}
+    header .t{font-weight:700;margin-right:auto}
+    .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
+    .btn:hover{background:#f3f4f6}
+    .primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .danger{color:#ef4444;border-color:#ef4444;background:#fff}
+    main{display:flex;gap:16px;padding:14px}
+    @media (max-width:1400px){main{flex-wrap:wrap}}
+    .col-1{display:flex;flex-direction:column;width:380px;gap:16px}
+    .col-2{display:flex;flex-direction:column;width:420px;gap:16px}
+    .col-3{display:flex;flex-direction:column;flex:1;min-width:0}
+    @media (max-width:1400px){.col-1,.col-2{width:420px}.col-3{width:100%}}
+    .card{border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:var(--shadow);width:100%}
+    .card h3{margin:0;padding:10px 12px;border-bottom:1px solid var(--line);font-size:15px}
+    .content{padding:12px}
+    .muted{color:var(--muted)}
+    input,select,textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
+    input,select{height:38px}
+    input[type="color"]{padding:4px;cursor:pointer}
+    textarea{min-height:100px;resize:vertical}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:end}
+    .grid3 > div > .muted{height:32px;display:flex;align-items:flex-end;margin-bottom:4px;line-height:1.2}
+    .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .section{margin-top:10px}
+    .host{min-height:650px;border:1px dashed var(--line);border-radius:10px;padding:8px;background:#fafafa;position:relative}
+    #toast{position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:9px 11px;border-radius:8px;opacity:0;transition:opacity .15s;z-index:999}
+    #toast.show{opacity:.92}
+    pre.log{white-space:pre-wrap;background:#0b1220;color:#d6e2ff;padding:8px;border-radius:8px;max-height:180px;overflow:auto;border:1px solid #26324a;font-size:12px}
+    .badge{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:2px 6px;background:#f8fafc}
+    .helper-preview{width:100%;text-align:right;margin:0 0 8px 0}
+    .file{display:flex;gap:8px;align-items:center}
+    .file input[type="file"]{padding:6px 8px;border:1px dashed var(--line);border-radius:8px}
+    .layout-section{display:none}
+    .layout-section.show{display:block}
+    #preview-card{position:sticky;top:70px;max-height:calc(100vh - 85px);overflow-y:auto}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="t">Org Chart Admin — Unified</div>
+    <label style="margin-left:20px;font-size:13px;display:flex;align-items:center;gap:6px">
+      <input type="checkbox" id="selfContainedExport" style="width:auto">
+      <span>Self-contained export (includes JS/CSS)</span>
+    </label>
+    <button id="btnDownloadJs" class="btn" title="Download Wordpress.js for WordPress">Download JS</button>
+    <button id="btnDownloadCss" class="btn" title="Download Wordpress.css for WordPress">Download CSS</button>
+    <button id="btnExport" class="btn primary">Export WP HTML</button>
+    <button id="btnJson" class="btn">Download JSON</button>
+  </header>
+
+  <main>
+    <div class="col-1">
+      <section class="card" id="import-card">
+      <h3>Import & People</h3>
+      <div class="content">
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Chart Layout Type</div>
+          <select id="layoutType">
+            <option value="centered">Centered (Left/Right)</option>
+            <option value="vertical">Simple Vertical</option>
+            <option value="vertical_horizontal">Horizontal</option>
+          </select>
+          <div class="muted" style="margin-top:4px;font-size:12px">
+            <span id="layoutDesc">Centered: Spine with left/right branching</span>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Upload or paste HTML block</div>
+          <div class="file">
+            <input id="fileHtml" type="file" accept=".html,text/html">
+            <button id="btnUploadImport" class="btn">Upload & Import</button>
+          </div>
+          <textarea id="txt" placeholder="Or paste the WP Custom HTML block here…"></textarea>
+          <div class="grid2" style="margin-top:6px">
+            <button id="btnLoad" class="btn">Load Sample</button>
+            <button id="btnClear" class="btn">Clear</button>
+          </div>
+          <div class="grid2" style="margin-top:6px">
+            <button id="btnDoImport" class="btn primary">Import Now</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Upload Excel File</div>
+          <div class="muted" style="font-size:11px;margin-bottom:8px;color:#6b7280">Import organizational data from Excel spreadsheet</div>
+          <div class="file">
+            <input id="fileExcel" type="file" accept=".xlsx,.xls">
+            <button id="btnUploadExcel" class="btn">Upload Excel</button>
+          </div>
+          <div class="grid2" style="margin-top:6px">
+            <button id="btnDownloadTemplate" class="btn">Download Template</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Node selector</div>
+          <select id="nodeSelect"></select>
+          <div class="grid2" style="margin-top:6px">
+            <button id="btnAddChild" class="btn">Add Child</button>
+            <button id="btnAddSibling" class="btn">Add Sibling</button>
+          </div>
+          <div class="grid2" style="margin-top:6px">
+            <button id="btnAddRoot" class="btn">Add Root</button>
+            <button id="btnDelete" class="btn danger">Delete (Reassign Reports)</button>
+          </div>
+          <div class="grid2" style="margin-top:6px">
+            <button id="btnDeleteSubtree" class="btn danger">Delete Entire Subtree</button>
+          </div>
+        </div>
+
+        <div class="section" id="sectionL1">
+          <div class="muted" style="margin-bottom:4px">Level-1 (children of root)</div>
+          <div class="grid2">
+            <select id="selL1"></select>
+            <div class="grid2">
+              <button id="btnL1Up" class="btn">↑ Up</button>
+              <button id="btnL1Down" class="btn">↓ Down</button>
+            </div>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <button id="btnL1Flip" class="btn">Flip L ↔ R</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Logs</div>
+          <pre id="log" class="log"></pre>
+        </div>
+      </div>
+    </section>
+      <section class="card" id="inspector-card">
+      <h3>Inspector</h3>
+      <div class="content">
+        <div class="row"><span class="badge" id="selInfo">none</span></div>
+        <div class="row"><label style="min-width:90px" class="muted">ID</label><input id="f_id" type="text" placeholder="unique-id"></div>
+        <div class="row">
+          <label style="min-width:90px" class="muted">Parent</label>
+          <select id="f_parent" style="flex:1">
+            <option value="">(root - no parent)</option>
+          </select>
+        </div>
+        <div class="row"><label style="min-width:90px" class="muted">Name</label><input id="f_name" type="text" placeholder="Name"></div>
+        <div class="row"><label style="min-width:90px" class="muted">Title</label><input id="f_title" type="text" placeholder="Title"></div>
+        <div class="row" id="rowSide">
+          <label style="min-width:90px" class="muted">Side</label>
+          <select id="f_side">
+            <option value="">(auto)</option>
+            <option value="L">L</option>
+            <option value="R">R</option>
+          </select>
+        </div>
+        <div class="grid2 section">
+          <button id="btnSave" class="btn primary">Save</button>
+          <button id="btnRevert" class="btn">Revert</button>
+        </div>
+
+      </div>
+    </section>
+    </div>
+    <div class="col-2">
+      <section class="card" id="styling-card">
+      <h3>Styling</h3>
+      <div class="content">
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Text Styling</div>
+          <div class="grid3">
+            <div><div class="muted">Name font</div><input id="style_name_font" type="text" value="Inter, Segoe UI, system-ui, sans-serif" placeholder="Font family"></div>
+            <div><div class="muted">Name size (px)</div><input id="style_name_size" type="number" min="10" max="32" value="17"></div>
+            <div><div class="muted">Name weight</div><select id="style_name_weight"><option value="400">Normal</option><option value="500">Medium</option><option value="600">Semi-bold</option><option value="700" selected>Bold</option></select></div>
+            <div><div class="muted">Name style</div><select id="style_name_style"><option value="normal" selected>Normal</option><option value="italic">Italic</option></select></div>
+            <div><div class="muted">Name color</div><input id="style_name_color" type="color" value="#111827"></div>
+            <div><div class="muted">Title font</div><input id="style_title_font" type="text" value="Inter, Segoe UI, system-ui, sans-serif" placeholder="Font family"></div>
+            <div><div class="muted">Title size (px)</div><input id="style_title_size" type="number" min="8" max="24" value="13.5"></div>
+            <div><div class="muted">Title weight</div><select id="style_title_weight"><option value="400">Normal</option><option value="500" selected>Medium</option><option value="600">Semi-bold</option><option value="700">Bold</option></select></div>
+            <div><div class="muted">Title style</div><select id="style_title_style"><option value="normal" selected>Normal</option><option value="italic">Italic</option></select></div>
+            <div><div class="muted">Title color</div><input id="style_title_color" type="color" value="#374151"></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Card Styling</div>
+          <div class="grid3">
+            <div><div class="muted">Card fill</div><input id="style_card_fill" type="color" value="#ffffff"></div>
+            <div><div class="muted">Card stroke</div><input id="style_card_stroke" type="color" value="#d0d0d0"></div>
+            <div><div class="muted">Card shadow</div><select id="style_card_shadow"><option value="1" selected>On</option><option value="0">Off</option></select></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Connector Styling</div>
+          <div class="grid3">
+            <div><div class="muted">Link color</div><input id="style_link_color" type="color" value="#981e32"></div>
+            <div><div class="muted">Link width</div><input id="style_link_width" type="number" step="0.1" min="1" max="10" value="2.5"></div>
+            <div><div class="muted">Spine color</div><input id="style_spine_color" type="color" value="#111111"></div>
+            <div><div class="muted">Spine width</div><input id="style_spine_width" type="number" step="0.1" min="1" max="10" value="3"></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Button Styling</div>
+          <div class="grid3">
+            <div><div class="muted">Circle fill</div><input id="style_btn_circle_fill" type="color" value="#ffffff"></div>
+            <div><div class="muted">Circle stroke</div><input id="style_btn_circle_stroke" type="color" value="#d0d0d0"></div>
+            <div><div class="muted">Circle outline</div><select id="style_btn_circle_outline"><option value="1" selected>On</option><option value="0">Off</option></select></div>
+            <div><div class="muted">Button fill</div><input id="style_btn_rect_fill" type="color" value="#374151"></div>
+          </div>
+        </div>
+
+        <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+        <h4 style="margin-top:6px;margin-bottom:8px">Typography Enhancement</h4>
+        <div class="section">
+          <div class="grid3">
+            <div><div class="muted">Name line height</div><input id="style_name_line_height" type="number" step="0.01" min="0.8" max="2.5" value="1.18"></div>
+            <div><div class="muted">Title line height</div><input id="style_title_line_height" type="number" step="0.01" min="0.8" max="2.5" value="1.33"></div>
+            <div><div class="muted">Text gap (px)</div><input id="style_text_gap" type="number" min="0" max="30" value="8"></div>
+            <div><div class="muted">Name letter spacing (px)</div><input id="style_name_letter_spacing" type="number" step="0.1" min="-2" max="5" value="0"></div>
+            <div><div class="muted">Title letter spacing (px)</div><input id="style_title_letter_spacing" type="number" step="0.1" min="-2" max="5" value="0"></div>
+            <div><div class="muted">Text alignment</div><select id="style_text_align"><option value="left" selected>Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
+          </div>
+        </div>
+
+        <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+        <h4 style="margin-top:6px;margin-bottom:8px">Card Appearance</h4>
+        <div class="section">
+          <div class="grid3">
+            <div><div class="muted">Padding top (px)</div><input id="style_card_padding_top" type="number" min="0" max="40" value="12"></div>
+            <div><div class="muted">Padding bottom (px)</div><input id="style_card_padding_bottom" type="number" min="0" max="40" value="12"></div>
+            <div><div class="muted">Padding left (px)</div><input id="style_card_padding_left" type="number" min="0" max="40" value="12"></div>
+            <div><div class="muted">Padding right (px)</div><input id="style_card_padding_right" type="number" min="0" max="40" value="12"></div>
+            <div><div class="muted">Border radius (px)</div><input id="style_card_radius" type="number" min="0" max="30" value="10"></div>
+            <div><div class="muted">Border width (px)</div><input id="style_card_stroke_width" type="number" step="0.1" min="0" max="5" value="1"></div>
+          </div>
+        </div>
+
+        <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+        <h4 style="margin-top:6px;margin-bottom:8px">Button Appearance</h4>
+        <div class="section">
+          <div class="grid3">
+            <div><div class="muted">Button size (radius px)</div><input id="style_btn_radius" type="number" min="8" max="24" value="14"></div>
+            <div><div class="muted">Offset X (px)</div><input id="style_btn_offset_x" type="number" min="4" max="20" value="8"></div>
+            <div><div class="muted">Offset Y (px)</div><input id="style_btn_offset_y" type="number" min="4" max="20" value="8"></div>
+          </div>
+        </div>
+
+        <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+        <h4 style="margin-top:6px;margin-bottom:8px">Shadow Settings</h4>
+        <div class="section">
+          <div class="grid3">
+            <div><div class="muted">Shadow color</div><input id="style_shadow_color" type="color" value="#981e32"></div>
+            <div><div class="muted">Blur (px)</div><input id="style_shadow_blur" type="number" step="0.5" min="0" max="10" value="2"></div>
+            <div><div class="muted">Opacity</div><input id="style_shadow_opacity" type="number" step="0.05" min="0" max="1" value="0.35"></div>
+            <div><div class="muted">Offset X (px)</div><input id="style_shadow_offset_x" type="number" min="-10" max="10" value="0"></div>
+            <div><div class="muted">Offset Y (px)</div><input id="style_shadow_offset_y" type="number" min="-10" max="10" value="3"></div>
+          </div>
+        </div>
+
+        <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+        <h4 style="margin-top:6px;margin-bottom:8px">Spacing</h4>
+        <div class="section">
+          <div class="grid3">
+            <div><div class="muted">Margin (px)</div><input id="style_margin" type="number" min="0" max="100" value="24"></div>
+            <div><div class="muted">Sibling gap (px)</div><input id="style_sibling_gap" type="number" min="10" max="80" value="26"></div>
+          </div>
+        </div>
+
+        <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+        <div class="section">
+          <div class="muted" style="margin-bottom:4px">Background</div>
+          <div class="grid3">
+            <div><div class="muted">Background color</div><input id="style_bg_color" type="color" value="#ffffff"></div>
+            <div><div class="muted">Use transparent</div><select id="style_bg_transparent"><option value="0" selected>No</option><option value="1">Yes</option></select></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+      <section class="card" id="layout-card">
+      <h3>Layout</h3>
+      <div class="content">
+
+        <div id="layoutCentered" class="layout-section show">
+          <h3 style="border:none;margin-top:6px">Layout (Centered)</h3>
+          <div class="grid3 section">
+            <div><div class="muted">HGaps</div><input id="hgaps" type="text" value="40"></div>
+            <div><div class="muted">Stubs</div><input id="stubs" type="text" value="18"></div>
+            <div><div class="muted">Card width</div><input id="cardw" type="number" min="220" max="420" value="260"></div>
+            <div><div class="muted">Card height</div><input id="cardh" type="number" min="92" max="800" value="" placeholder="auto"></div>
+            <div><div class="muted">L1 Stub</div><input id="l1stub" type="number" min="0" max="60" value="6"></div>
+            <div><div class="muted">Center</div><select id="center"><option value="1" selected>Yes</option><option value="0">No</option></select></div>
+            <div><div class="muted">Align root connector</div><select id="c_connector_align"><option value="0">No</option><option value="1">Yes</option></select></div>
+          </div>
+          <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+          <div class="section">
+            <div class="muted" style="margin-bottom:4px">Scale (Responsive)</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px;color:#6b7280">Control zoom level on different screen sizes</div>
+            <div class="grid3">
+              <div><div class="muted">Desktop</div><input id="c_scale_desktop" type="number" step="0.01" min="0.4" max="1.6" value="0.85" placeholder="≥1024px" title="Desktop: ≥1024px"></div>
+              <div><div class="muted">Tablet</div><input id="c_scale_tablet" type="number" step="0.01" min="0.4" max="1.6" value="0.75" placeholder="768-1023px" title="Tablet: 768-1023px"></div>
+              <div><div class="muted">Phone</div><input id="c_scale_phone" type="number" step="0.01" min="0.4" max="1.6" value="0.60" placeholder="<768px" title="Phone: <768px"></div>
+            </div>
+          </div>
+          <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+          <div class="section">
+            <div class="muted" style="margin-bottom:4px">Expand/Collapse Depth (Responsive)</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px;color:#6b7280">Control how many levels are expanded by default on different screen sizes</div>
+            <div class="grid3">
+              <div><div class="muted">Desktop</div><input id="c_open_depth_desktop" type="number" min="0" max="5" value="1" placeholder="≥1024px" title="Desktop: ≥1024px"></div>
+              <div><div class="muted">Tablet</div><input id="c_open_depth_tablet" type="number" min="0" max="5" value="1" placeholder="768-1023px" title="Tablet: 768-1023px"></div>
+              <div><div class="muted">Phone</div><input id="c_open_depth_phone" type="number" min="0" max="5" value="1" placeholder="<768px" title="Phone: <768px"></div>
+            </div>
+          </div>
+
+          <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+
+          <h3 style="border:none;margin-top:6px">Helper text</h3>
+          <div class="grid2 section">
+            <div>
+              <div class="muted">Text</div>
+              <textarea id="helperText" placeholder="Helper text"></textarea>
+            </div>
+            <div>
+              <div class="muted">Font size (px)</div>
+              <input id="helperSize" type="number" min="10" max="28" value="14">
+            </div>
+          </div>
+        </div>
+
+        <div id="layoutVertical" class="layout-section">
+          <h3 style="border:none;margin-top:6px">Layout (Simple Vertical)</h3>
+          <div class="grid3 section">
+            <div><div class="muted">Card width</div><input id="v_cardw" type="number" min="200" max="420" value="260"></div>
+            <div><div class="muted">Card height</div><input id="v_cardh" type="number" min="92" max="800" value="" placeholder="auto"></div>
+            <div><div class="muted">H Gap</div><input id="v_hgap" type="number" min="20" max="120" value="60"></div>
+            <div><div class="muted">V Gap</div><input id="v_vgap" type="number" min="10" max="60" value="26"></div>
+            <div><div class="muted">Root offset Y (px)</div><input id="v_root_offset_y" type="number" min="-200" max="200" value="0" placeholder="0"></div>
+          </div>
+          <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+          <div class="section">
+            <div class="muted" style="margin-bottom:4px">Scale (Responsive)</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px;color:#6b7280">Control zoom level on different screen sizes</div>
+            <div class="grid3">
+              <div><div class="muted">Desktop</div><input id="v_scale_desktop" type="number" step="0.01" min="0.4" max="1.6" value="0.85" placeholder="≥1024px" title="Desktop: ≥1024px"></div>
+              <div><div class="muted">Tablet</div><input id="v_scale_tablet" type="number" step="0.01" min="0.4" max="1.6" value="0.75" placeholder="768-1023px" title="Tablet: 768-1023px"></div>
+              <div><div class="muted">Phone</div><input id="v_scale_phone" type="number" step="0.01" min="0.4" max="1.6" value="0.60" placeholder="<768px" title="Phone: <768px"></div>
+            </div>
+          </div>
+          <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+          <div class="section">
+            <div class="muted" style="margin-bottom:4px">Expand/Collapse Depth (Responsive)</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px;color:#6b7280">Control how many levels are expanded by default on different screen sizes</div>
+            <div class="grid3">
+              <div><div class="muted">Desktop</div><input id="v_open_depth_desktop" type="number" min="0" max="5" value="1" placeholder="≥1024px" title="Desktop: ≥1024px"></div>
+              <div><div class="muted">Tablet</div><input id="v_open_depth_tablet" type="number" min="0" max="5" value="1" placeholder="768-1023px" title="Tablet: 768-1023px"></div>
+              <div><div class="muted">Phone</div><input id="v_open_depth_phone" type="number" min="0" max="5" value="1" placeholder="<768px" title="Phone: <768px"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="layoutVerticalHorizontal" class="layout-section">
+          <h3 style="border:none;margin-top:6px">Layout (Horizontal)</h3>
+          <div class="section">
+            <div class="muted" style="margin-bottom:4px">General</div>
+            <div class="grid3">
+              <div><div class="muted">Card width</div><input id="vh_cardw" type="number" min="200" max="420" value="260"></div>
+              <div><div class="muted">Card height</div><input id="vh_cardh" type="number" min="92" max="800" value="" placeholder="auto"></div>
+              <div><div class="muted">V Gap (connector)</div><input id="vh_vgap" type="number" min="10" max="100" value="26"></div>
+              <div><div class="muted">H Gap (sibling)</div><input id="vh_hgap" type="number" min="10" max="100" value="26"></div>
+              <div><div class="muted">H Stub (connector)</div><input id="vh_stub" type="number" min="0" max="60" value="18"></div>
+              <div><div class="muted">Parent Stub</div><input id="vh_parent_stub" type="number" min="0" max="60" value="18"></div>
+              <div><div class="muted">Max Columns</div><input id="vh_max_cols" type="number" min="0" max="12" value="0" placeholder="auto"></div>
+              <div><div class="muted">Row Spacing</div><input id="vh_row_spacing" type="number" step="0.1" min="1.0" max="3.0" value="1.5"></div>
+              <div><div class="muted">Breakpoint</div><input id="vh_breakpoint" type="number" min="400" max="1400" value="820"></div>
+              <div><div class="muted">Toggle</div><select id="vh_toggle"><option value="0" selected>No</option><option value="1">Yes</option></select></div>
+              <div><div class="muted">Root offset X (px)</div><input id="h_root_offset_x" type="number" min="-200" max="200" value="0" placeholder="0"></div>
+              <div><div class="muted">Align rows</div><select id="vh_alignrows"><option value="0" selected>No</option><option value="1">Yes</option></select></div>
+              <div><div class="muted">Wrap</div><select id="vh_wrap"><option value="">Single row</option><option value="flow">Flow (wrap)</option></select></div>
+              <div><div class="muted">Pack</div><select id="vh_pack"><option value="balanced" selected>Balanced</option><option value="compact">Compact</option></select></div>
+            </div>
+          </div>
+          <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+          <div class="section">
+            <div class="muted" style="margin-bottom:4px">Scale (Responsive)</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px;color:#6b7280">Control zoom level on different screen sizes</div>
+            <div class="grid3">
+              <div><div class="muted">Desktop</div><input id="vh_scale_desktop" type="number" step="0.01" min="0.4" max="1.6" value="0.85" placeholder="≥1024px" title="Desktop: ≥1024px"></div>
+              <div><div class="muted">Tablet</div><input id="vh_scale_tablet" type="number" step="0.01" min="0.4" max="1.6" value="0.75" placeholder="768-1023px" title="Tablet: 768-1023px"></div>
+              <div><div class="muted">Phone</div><input id="vh_scale_phone" type="number" step="0.01" min="0.4" max="1.6" value="0.60" placeholder="<768px" title="Phone: <768px"></div>
+            </div>
+          </div>
+          <div class="section"><hr style="border:none;border-top:1px solid var(--line)"></div>
+          <div class="section">
+            <div class="muted" style="margin-bottom:4px">Expand/Collapse Depth (Responsive)</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px;color:#6b7280">Control how many levels are expanded by default on different screen sizes</div>
+            <div class="grid3">
+              <div><div class="muted">Desktop</div><input id="vh_open_depth_desktop" type="number" min="0" max="5" value="2" placeholder="≥1024px" title="Desktop: ≥1024px"></div>
+              <div><div class="muted">Tablet</div><input id="vh_open_depth_tablet" type="number" min="0" max="5" value="1" placeholder="768-1023px" title="Tablet: 768-1023px"></div>
+              <div><div class="muted">Phone</div><input id="vh_open_depth_phone" type="number" min="0" max="5" value="1" placeholder="<768px" title="Phone: <768px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    </div>
+    <div class="col-3">
+      <section class="card" id="preview-card">
+        <h3>Live Preview</h3>
+        <div class="content">
+          <div id="helperPreview" class="helper-preview" style="font-size:14px;"></div>
+          <div id="wsu-orgchart" class="host wsu-orgchart" data-preview-mode="true"></div>
+          <script id="wsu-org-data" type="application/json">[]</script>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+
+  <!-- SheetJS library for Excel support -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>
