@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     const filePath = join(process.cwd(), 'public', 'Wordpress.js')
     const content = await readFile(filePath, 'utf-8')
