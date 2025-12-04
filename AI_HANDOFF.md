@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: Accent bar wrap documentation, expanded project descriptions)  
+**Last Updated:** December 2025 (Latest: Vercel deployment documentation, GitHub integration)  
 **Project Version:** 8.0 (Next.js/TypeScript)  
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
@@ -454,18 +454,6 @@ Defined in `lib/config.ts`:
     5. Add UI control for wrap distance
     6. Ensure email client compatibility
 
-- **Accent Bar Wrap Control Not Implemented:**
-  - Feature was attempted but reverted due to errors
-  - Current implementation only supports vertical accent bar (left edge)
-  - Desired: Accent bar should be able to extend horizontally along top edge
-  - **Implementation Requirements:**
-    1. Modify card HTML structure to support horizontal bar element
-    2. Add `accent_bar_wrap` or `accent_bar_extension` property to settings/cards
-    3. Update `getAccentBarStyle()` or create new function for horizontal bar
-    4. Handle corner radius when bar wraps around corner
-    5. Add UI control for wrap distance
-    6. Ensure email client compatibility
-
 ### Potential Improvements
 - [ ] Fix card spacing control (see Critical Issues above)
 - [ ] Add error boundaries for better error handling
@@ -478,12 +466,80 @@ Defined in `lib/config.ts`:
 
 ## Deployment
 
-### Vercel Deployment
-1. Push to GitHub: `git push origin main`
-2. Import project in Vercel
-3. Vercel auto-detects Next.js
-4. API routes work as serverless functions
-5. No additional configuration needed
+### Vercel Deployment via GitHub
+
+**Setup:**
+- Vercel is connected to the GitHub repository: `https://github.com/gcrouch-wsu/WSU-Mail-Editor.git`
+- Automatic deployments are enabled for the `main` branch
+- Each push to `main` triggers a new deployment automatically
+
+**Deployment Process:**
+1. **Push to GitHub:** `git push origin main`
+2. **Vercel Auto-Detection:** Vercel automatically detects the push via GitHub webhook
+3. **Build Process:**
+   - Vercel clones the repository
+   - Runs `npm install` to install dependencies
+   - Runs `npm run build` to build the Next.js application
+   - Deploys the built application
+4. **API Routes:** All API routes in `app/api/` are automatically deployed as serverless functions
+
+**Verifying Deployments:**
+1. **Check Latest Commit:** 
+   - In Vercel dashboard, go to "Deployments" tab
+   - Verify the commit hash matches the latest commit on GitHub
+   - Use `git log --oneline -1` to see the latest local commit
+   - Use `git log --oneline origin/main -1` to see the latest remote commit
+
+2. **If Deployment Uses Old Commit:**
+   - Vercel may be building from a cached commit
+   - Create an empty commit to force a new deployment:
+     ```bash
+     git commit --allow-empty -m "Trigger Vercel rebuild"
+     git push origin main
+     ```
+   - Or manually trigger a deployment in Vercel dashboard
+
+3. **Check Build Status:**
+   - Green checkmark = successful deployment
+   - Red X = build failed (check build logs)
+   - Yellow circle = building in progress
+
+**Common Deployment Issues:**
+
+1. **"A more recent Production Deployment has been created"**
+   - This means Vercel already detected a newer commit and is building it
+   - Check the "Deployments" tab for the latest deployment
+   - Don't try to redeploy old deployments
+
+2. **Build Failing with TypeScript Errors:**
+   - Always test locally first: `npm run build`
+   - Check that all fixes are committed and pushed
+   - Verify the deployment is using the latest commit (not an old one)
+   - Check build logs in Vercel dashboard for specific errors
+
+3. **Build Using Old Commit:**
+   - Verify latest commit is pushed: `git log origin/main -1`
+   - Check Vercel deployment commit hash matches GitHub
+   - Create empty commit to trigger new build if needed
+
+4. **File System Access in Serverless Functions:**
+   - Files in `public/` are served statically
+   - API routes can read from `public/` using `process.cwd()`
+   - Ensure files are committed to git (not in `.gitignore`)
+
+**Deployment Configuration:**
+- **Framework Preset:** Next.js (auto-detected)
+- **Root Directory:** `.` (root)
+- **Build Command:** `npm run build` (default)
+- **Output Directory:** `.next` (default)
+- **Install Command:** `npm install` (default)
+- **Node.js Version:** 18.x (Vercel default)
+
+**Manual Deployment:**
+- Go to Vercel dashboard → Project → Deployments
+- Click "Deploy" button
+- Select branch and commit to deploy
+- Or use Vercel CLI: `vercel --prod`
 
 ### Environment Variables
 Currently none required. All configuration is in `lib/config.ts`.
