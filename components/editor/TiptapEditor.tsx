@@ -35,6 +35,8 @@ import {
   X,
   Undo,
   Redo,
+  Code,
+  Eye,
 } from 'lucide-react'
 
 interface TiptapEditorProps {
@@ -51,6 +53,9 @@ export default function TiptapEditor({
   style,
 }: TiptapEditorProps) {
   const [linkPromptOpen, setLinkPromptOpen] = useState(false)
+  const [codeView, setCodeView] = useState(false)
+  const [htmlCode, setHtmlCode] = useState('')
+  const [listSpacing, setListSpacing] = useState('1.0')
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -82,17 +87,37 @@ export default function TiptapEditor({
       },
     },
     onUpdate: ({ editor }) => {
+      if (codeView) return // Don't update from editor when in code view
       const html = editor.getHTML()
       // Normalize empty content
       const normalizedValue =
         html === '<p></p>' || html.trim() === '' ? '' : html
       onChange(normalizedValue)
+      setHtmlCode(normalizedValue) // Keep code view in sync
+      
+      // Apply current list spacing to any new list items
+      const spacingValue = parseFloat(listSpacing) || 1.0
+      editor.chain().command(({ tr, state }) => {
+        let modified = false
+        state.doc.descendants((node, pos) => {
+          if (node.type.name === 'listItem') {
+            const attrs = node.attrs
+            const currentStyle = attrs.style || ''
+            if (!currentStyle.includes('line-height:')) {
+              const newStyle = currentStyle ? `${currentStyle} line-height:${spacingValue};` : `line-height:${spacingValue};`
+              tr.setNodeMarkup(pos, undefined, { ...attrs, style: newStyle })
+              modified = true
+            }
+          }
+        })
+        return modified
+      }).run()
     },
   })
 
   // Update content when value prop changes (but not from internal changes)
   useEffect(() => {
-    if (editor && value !== undefined) {
+    if (editor && value !== undefined && !codeView) {
       const currentHtml = editor.getHTML()
       const normalizedCurrent =
         currentHtml === '<p></p>' || currentHtml.trim() === '' ? '' : currentHtml
@@ -100,9 +125,96 @@ export default function TiptapEditor({
       // Only update if the value is different (to avoid infinite loops)
       if (normalizedCurrent !== value) {
         editor.commands.setContent(value || '', { emitUpdate: false })
+        setHtmlCode(value || '')
       }
     }
-  }, [value, editor])
+  }, [value, editor, codeView])
+
+  // Sync htmlCode when value changes externally
+  useEffect(() => {
+    if (value !== undefined) {
+      setHtmlCode(value || '')
+    }
+  }, [value])
+
+  // Handle code view toggle
+  const handleToggleCodeView = () => {
+    if (codeView) {
+      // Switching from code view to WYSIWYG
+      // Update editor with code view content
+      if (editor) {
+        try {
+          editor.commands.setContent(htmlCode || '', { emitUpdate: false })
+          onChange(htmlCode || '')
+        } catch (error) {
+          console.error('Error setting content from code view:', error)
+          // Revert to editor content on error
+          setHtmlCode(editor.getHTML())
+        }
+      }
+    } else {
+      // Switching from WYSIWYG to code view
+      // Get current HTML from editor
+      if (editor) {
+        const currentHtml = editor.getHTML()
+        const normalized = currentHtml === '<p></p>' || currentHtml.trim() === '' ? '' : currentHtml
+        setHtmlCode(normalized)
+      }
+    }
+    setCodeView(!codeView)
+  }
+
+  // Handle code view changes
+  const handleCodeChange = (newCode: string) => {
+    setHtmlCode(newCode)
+    // Update parent immediately for code view
+    onChange(newCode)
+  }
+
+  // Handle list spacing change
+  const handleListSpacingChange = (spacing: string) => {
+    setListSpacing(spacing)
+    if (editor) {
+      const spacingValue = parseFloat(spacing) || 1.0
+      // Also update CSS variable for new list items
+      if (editor.view.dom) {
+        const editorElement = editor.view.dom.closest('.tiptap-editor') || editor.view.dom
+        if (editorElement instanceof HTMLElement) {
+          editorElement.style.setProperty('--list-line-height', spacingValue.toString())
+        }
+      }
+      // Apply spacing to all list items in the entire document
+      editor.chain().focus().command(({ tr, state }) => {
+        let modified = false
+
+        // Process entire document to update all list items
+        state.doc.descendants((node, pos) => {
+          if (node.type.name === 'listItem') {
+            const attrs = node.attrs
+            const currentStyle = attrs.style || ''
+            
+            // Update or add line-height in style
+            let newStyle = currentStyle
+            if (currentStyle.includes('line-height:')) {
+              newStyle = currentStyle.replace(/line-height:\s*[\d.]+;?/g, `line-height:${spacingValue};`)
+            } else {
+              newStyle = currentStyle ? `${currentStyle} line-height:${spacingValue};` : `line-height:${spacingValue};`
+            }
+            
+            if (newStyle !== currentStyle) {
+              tr.setNodeMarkup(pos, undefined, { ...attrs, style: newStyle })
+              modified = true
+            }
+          }
+        })
+
+        if (modified) {
+          tr.setMeta('addToHistory', true)
+        }
+        return modified
+      }).run()
+    }
+  }
 
   if (!editor) {
     return (
@@ -123,12 +235,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
-          disabled={!editor.can().chain().focus().toggleBold().run()}
+          disabled={!editor.can().chain().focus().toggleBold().run() || codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('bold')
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Bold"
         >
           <Bold className="w-4 h-4" />
@@ -136,12 +248,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          disabled={!editor.can().chain().focus().toggleItalic().run()}
+          disabled={!editor.can().chain().focus().toggleItalic().run() || codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('italic')
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Italic"
         >
           <Italic className="w-4 h-4" />
@@ -149,11 +261,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleUnderline().run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('underline')
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Underline"
         >
           <UnderlineIcon className="w-4 h-4" />
@@ -161,12 +274,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleStrike().run()}
-          disabled={!editor.can().chain().focus().toggleStrike().run()}
+          disabled={!editor.can().chain().focus().toggleStrike().run() || codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('strike')
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Strikethrough"
         >
           <Strikethrough className="w-4 h-4" />
@@ -178,11 +291,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('heading', { level: 1 })
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Heading 1"
         >
           <Heading1 className="w-4 h-4" />
@@ -190,11 +304,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('heading', { level: 2 })
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Heading 2"
         >
           <Heading2 className="w-4 h-4" />
@@ -202,11 +317,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('heading', { level: 3 })
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Heading 3"
         >
           <Heading3 className="w-4 h-4" />
@@ -218,11 +334,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBulletList().run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('bulletList')
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Bullet List"
         >
           <List className="w-4 h-4" />
@@ -230,15 +347,43 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('orderedList')
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Numbered List"
         >
           <ListOrdered className="w-4 h-4" />
         </button>
+        {(editor.isActive('bulletList') || editor.isActive('orderedList')) && !codeView && (
+          <div className="flex items-center gap-1 px-2">
+            <label className="text-xs text-wsu-text-muted whitespace-nowrap">Spacing:</label>
+            <input
+              type="number"
+              value={listSpacing}
+              onChange={(e) => handleListSpacingChange(e.target.value)}
+              onBlur={(e) => {
+                // Validate and apply on blur
+                const value = parseFloat(e.target.value)
+                if (isNaN(value) || value < 0.5 || value > 2.0) {
+                  // Reset to default if invalid
+                  setListSpacing('1.0')
+                  handleListSpacingChange('1.0')
+                } else {
+                  handleListSpacingChange(e.target.value)
+                }
+              }}
+              min="0.5"
+              max="2.0"
+              step="0.1"
+              className="text-xs border border-wsu-border-light rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-16"
+              title="List line spacing (0.5-2.0)"
+              placeholder="1.0"
+            />
+          </div>
+        )}
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />
 
@@ -246,11 +391,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().setTextAlign('left').run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive({ textAlign: 'left' })
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Align Left"
         >
           <AlignLeft className="w-4 h-4" />
@@ -258,11 +404,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().setTextAlign('center').run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive({ textAlign: 'center' })
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Align Center"
         >
           <AlignCenter className="w-4 h-4" />
@@ -270,11 +417,12 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().setTextAlign('right').run()}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive({ textAlign: 'right' })
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Align Right"
         >
           <AlignRight className="w-4 h-4" />
@@ -288,16 +436,17 @@ export default function TiptapEditor({
           onClick={() => {
             setLinkPromptOpen(true)
           }}
+          disabled={codeView}
           className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
             editor.isActive('link')
               ? 'bg-wsu-crimson text-white'
               : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light`}
+          } border border-wsu-border-light disabled:opacity-50`}
           title="Insert Link"
         >
           <LinkIcon className="w-4 h-4" />
         </button>
-        {editor.isActive('link') && (
+        {editor.isActive('link') && !codeView && (
           <button
             type="button"
             onClick={() => editor.chain().focus().unsetLink().run()}
@@ -320,12 +469,13 @@ export default function TiptapEditor({
               .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
               .run()
           }
-          className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light"
+          disabled={codeView}
+          className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
           title="Insert Table"
         >
           <TableIcon className="w-4 h-4" />
         </button>
-        {editor.isActive('table') && (
+        {editor.isActive('table') && !codeView && (
           <>
             <button
               type="button"
@@ -395,11 +545,27 @@ export default function TiptapEditor({
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />
 
+        {/* Code View Toggle */}
+        <button
+          type="button"
+          onClick={handleToggleCodeView}
+          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
+            codeView
+              ? 'bg-wsu-crimson text-white'
+              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
+          } border border-wsu-border-light`}
+          title={codeView ? 'Switch to Visual Editor' : 'Switch to HTML Code View'}
+        >
+          {codeView ? <Eye className="w-4 h-4" /> : <Code className="w-4 h-4" />}
+        </button>
+
+        <div className="w-px h-6 bg-wsu-border-light mx-1" />
+
         {/* Other */}
         <button
           type="button"
           onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().undo()}
+          disabled={!editor.can().undo() || codeView}
           className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
           title="Undo"
         >
@@ -408,7 +574,7 @@ export default function TiptapEditor({
         <button
           type="button"
           onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().redo()}
+          disabled={!editor.can().redo() || codeView}
           className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
           title="Redo"
         >
@@ -416,8 +582,23 @@ export default function TiptapEditor({
         </button>
       </div>
 
-      {/* Editor Content */}
-      <EditorContent editor={editor} />
+      {/* Editor Content or Code View */}
+      {codeView ? (
+        <div className="p-4">
+          <textarea
+            value={htmlCode}
+            onChange={(e) => handleCodeChange(e.target.value)}
+            className="w-full min-h-[200px] font-mono text-sm border border-wsu-border-light rounded p-3 focus:outline-none focus:ring-2 focus:ring-wsu-crimson resize-y"
+            placeholder="Enter HTML code..."
+            style={{ fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.5' }}
+          />
+          <p className="mt-2 text-xs text-wsu-text-muted">
+            Edit HTML directly. Click the eye icon to return to visual editor.
+          </p>
+        </div>
+      ) : (
+        <EditorContent editor={editor} />
+      )}
 
       {/* Link Prompt Modal */}
       <PromptModal

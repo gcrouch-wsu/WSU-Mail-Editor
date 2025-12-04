@@ -339,7 +339,7 @@ export default function SectionsEditor({
                   border_radius: 0,
                   divider_enabled: true,
                   divider_thickness: 2,
-                  divider_color: '#e0e0e0',
+                  // Don't set divider_color here - let it fall back to global settings
                   divider_spacing: 24,
                   title_align: 'left',
                 },

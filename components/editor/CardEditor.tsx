@@ -460,6 +460,36 @@ export default function CardEditor({
             </div>
           )}
 
+          {/* Card Styling Options */}
+          <div className="border-t border-wsu-border-light pt-4 space-y-4">
+            <h3 className="text-sm font-semibold text-wsu-text-dark mb-2">
+              Card Styling
+            </h3>
+            
+            <div>
+              <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                Border Radius (px) - Override
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="50"
+                value={editedCard.border_radius !== undefined ? editedCard.border_radius : ''}
+                onChange={(e) => {
+                  const value = e.target.value
+                  updateCard({
+                    border_radius: value === '' ? undefined : parseInt(value) || 0,
+                  })
+                }}
+                className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                placeholder="Use global setting"
+              />
+              <p className="mt-1 text-xs text-wsu-text-muted">
+                Override the global border radius for this card. Leave empty to use the global setting from Settings.
+              </p>
+            </div>
+          </div>
+
           {/* Table Styling Options */}
           <div className="border-t border-wsu-border-light pt-4 space-y-4">
             <h3 className="text-sm font-semibold text-wsu-text-dark mb-2">

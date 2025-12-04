@@ -38,6 +38,12 @@ export interface Settings {
   padding_image: Padding
   typography: Typography
   colors: Colors
+  card_border_radius?: number
+  accent_bar_width?: number
+  divider_margin_top?: number
+  divider_margin_bottom?: number
+  divider_color?: string
+  card_spacing?: number
 }
 
 export interface Masthead {
@@ -73,6 +79,8 @@ export interface SectionLayout {
   divider_thickness: number
   divider_color: string
   divider_spacing: number
+  divider_margin_top?: number // Space above the divider line
+  divider_margin_bottom?: number // Space below the divider line
   title_align: TitleAlign
   padding_text?: Padding
   padding_image?: Padding

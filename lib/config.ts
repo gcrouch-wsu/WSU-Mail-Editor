@@ -134,6 +134,9 @@ export const LAYOUT_DEFAULTS = {
   // Global padding (applied to all content unless overridden)
   padding_text: { top: 20, right: 20, bottom: 20, left: 20 },
   padding_image: { top: 20, right: 15, bottom: 20, left: 0 },
+  card_border_radius: 0, // Default border radius for all cards (0 = sharp corners)
+  accent_bar_width: 4, // Width of the accent bar on standard and event cards
+  divider_color: '#e0e0e0', // Default color for section divider lines
 } as const
 
 // Section-specific layout defaults

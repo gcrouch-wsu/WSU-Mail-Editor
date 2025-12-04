@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 3, 2025  
+**Last Updated:** December 2025 (Latest: Accent bar wrap documentation, expanded project descriptions)  
 **Project Version:** 8.0 (Next.js/TypeScript)  
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
@@ -8,10 +8,10 @@
 
 This is a Next.js 14 web application that provides tools for the WSU Graduate School, including:
 
-1. **HTML Newsletter Editor** - Create and edit email-safe HTML newsletters (Friday Focus and Graduate School Briefing)
-2. **Org Chart Editor** - Create and edit organizational charts with multiple layout options
+1. **HTML Newsletter Editor** - Create and edit email-safe HTML newsletters (Friday Focus, Graduate School Briefing, and Graduate School Slate Campaign)
+2. **Org Chart Editor** - Create and edit organizational charts with multiple layout options (centered, vertical, horizontal)
 
-The application is built with TypeScript, React, Tailwind CSS, and uses Next.js App Router with API routes.
+The application is built with TypeScript, React, Tailwind CSS, and uses Next.js App Router with API routes. Both tools are accessible from a unified homepage and share the same deployment infrastructure.
 
 ## Technology Stack
 
@@ -126,30 +126,99 @@ wsu-mail-editor/
 ## Key Features
 
 ### Newsletter Editor (`/editor`)
-- **Templates:** Friday Focus (FF) and Graduate School Briefing
-- **Sections:** Configurable sections with cards
-- **Card Types:** Standard, Event, Resource, CTA
+- **Purpose:** Create and edit email-safe HTML newsletters for WSU Graduate School communications
+- **Templates:** 
+  - **Friday Focus (FF):** Weekly newsletter template with updates, fiscal information, closures, resources, and submit request section
+  - **Graduate School Briefing:** Briefing template with similar structure but different default content and CTA URLs
+  - **Graduate School Slate Campaign:** Letter-style template with greeting, body, closing, and signature image support
+- **Sections:** 
+  - Configurable sections with titles and layout settings
+  - Each section can contain multiple cards or closures (for closures section)
+  - Section layout includes: padding (top/bottom), background color, border radius, divider settings (enabled, thickness, color, spacing, margins)
+  - Sections can be reordered via drag-and-drop
+- **Card Types:** 
+  - **Standard:** Text content with title and body (rich text). Features crimson accent bar on left edge (4px wide by default)
+  - **Event:** Date/time/location metadata with location label. Same accent bar as standard cards
+  - **Resource:** Links and resource information with icon support
+  - **CTA (Call-to-Action):** Customizable button with title, body text, button styling (colors, padding, border, radius, alignment, full-width option)
+  - **Letter:** For letter template with greeting, body, closing, signature name, signature lines (multi-line), and signature image (with alt text and width control)
+- **Global Settings:**
+  - **Layout:**
+    - Container width (560-700px, default 640px)
+    - Section spacing (distance from divider to title, default 24px)
+    - Show/hide section borders (divider lines)
+    - Divider line color (with WSU color palette support)
+    - Divider vertical spacing (above/below divider, default 0px)
+    - Card spacing (NOT WORKING - see Known Issues, default 20px)
+    - Card border radius (global, can be overridden per card, default 0px)
+    - Accent bar width (for standard/event cards, default 4px, vertical only - wrap feature NOT IMPLEMENTED)
+  - **Padding:**
+    - Text padding (top, right, bottom, left, default 20px)
+    - Image padding (top, right, bottom, left, default varies)
+  - **Typography:**
+    - Font family, sizes, colors
+    - Heading styles
+- **Content Editing:**
+  - **Rich Text Editor (Tiptap):**
+    - Bold, italic, underline
+    - Headings (H1-H6)
+    - Lists (bulleted, numbered) with custom spacing control
+    - Links
+    - Tables (insert, edit, format cells, multi-cell selection)
+    - Code view toggle (direct HTML editing)
+    - Undo/redo
+  - **Table Editor:**
+    - Modal for table creation/editing
+    - Inline toolbar for quick edits (add/delete rows/columns)
+    - Cell formatting (colors, fonts, alignment, scope)
+    - Column width control
+    - Border styling (style, color, thickness)
+    - Header styling (background, underline)
+    - Font family selection
+    - Multi-cell selection for batch formatting
 - **Features:**
-  - Live preview with real-time updates
-  - Export HTML with embedded Base64 data
-  - Import from exported HTML
+  - Live preview with real-time updates (iframe-based)
+  - Export HTML with embedded Base64 JSON data for round-trip editing
+  - Import from exported HTML (restores full editor state)
   - Auto-save to localStorage (30-second intervals)
-  - Undo/redo functionality
-  - Accessibility validation
-  - Content statistics
-  - Rich text editing with Tiptap
-  - Table editing capabilities
+  - Undo/redo functionality (history stack)
+  - Accessibility validation (alt text, aria-labels, scope attributes, meta descriptions)
+  - Content statistics (word count, character count, etc.)
+  - Template switching with confirmation dialog
+  - File upload/download
+  - Validation warnings and errors
 
 ### Org Chart Editor (`/orgchart`)
-- **Layouts:** Centered, Vertical, Horizontal
+- **Purpose:** Create and edit organizational charts for WordPress integration
+- **Layouts:** 
+  - **Centered:** Hierarchical tree with root at center
+  - **Vertical:** Top-down organizational structure
+  - **Horizontal:** Left-to-right organizational structure
+- **Data Management:**
+  - Import from HTML (parses existing org chart structure)
+  - Import from Excel (planned/partial support)
+  - Visual node editing with drag-and-drop
+  - Node inspector for editing individual node properties
+- **Styling Controls:**
+  - Node colors (background, text, border)
+  - Font family and size
+  - Spacing and padding
+  - Border styles
+- **Layout Configuration:**
+  - Orientation settings
+  - Spacing between nodes
+  - Connection line styles
 - **Features:**
-  - Import from HTML or Excel
-  - Visual node editing
-  - Styling controls (colors, fonts, spacing)
-  - Layout configuration
-  - Live preview
+  - Live preview with real-time updates
   - Export WordPress-compatible HTML
-  - Download runtime files (Wordpress.js, Wordpress.css)
+  - Download runtime files (Wordpress.js, Wordpress.css) for WordPress integration
+  - Sample templates for each layout type
+  - Self-contained export option
+- **Technical Implementation:**
+  - Embedded in iframe (`orgchart-admin.html`)
+  - Uses existing JavaScript library (`Wordpress.js`)
+  - API routes handle data import/export and file serving
+  - Flexbox layout for responsive admin interface
 
 ## API Routes
 
@@ -253,12 +322,101 @@ Defined in `lib/config.ts`:
 
 ### Email Template Generation
 - **File:** `lib/email-templates.ts`
-- **Functions:**
-  - `renderMasthead()` - Generate masthead HTML
-  - `renderSection()` - Generate section HTML
-  - `renderCard()` - Generate card HTML (standard, event, resource, cta)
+- **Key Functions:**
+  - `renderFullEmail()` - Main function that generates complete email HTML
+  - `renderMasthead()` - Generate masthead HTML with logo and title
+  - `renderSectionStart()` - Generate section wrapper with title and divider
+  - `renderSection()` - Generate complete section with all cards
+  - `renderSectionEnd()` - Close section wrapper
+  - `renderStandardCard()` - Generate standard card HTML
+  - `renderEventCard()` - Generate event card HTML
+  - `renderResourceCard()` - Generate resource card HTML
+  - `renderCTABox()` - Generate CTA card HTML
+  - `renderLetterCard()` - Generate letter card HTML
   - `renderFooter()` - Generate footer HTML
+  - `getCardStyle()` - Build card style with border radius, spacing, etc.
+  - `getCardPadding()` - Calculate card padding from global/section/card settings
   - All functions use email-safe inline styles
+  - Padding applied to `<td>` elements, not `<table>` elements (for email compatibility)
+
+## Recent Editor Features (December 2025)
+
+### Divider Line Controls
+- **Added:** Global controls for section divider lines (horizontal lines between sections)
+- **Location:** Settings panel → "Show section borders" section
+- **Controls:**
+  - **Divider Line Color:** Color picker with WSU palette support
+  - **Divider Vertical Spacing:**
+    - **Space Above:** Adds padding-bottom to section (pushes divider down)
+    - **Space Below:** Adds padding-top to next section (creates space after divider)
+- **Implementation:**
+  - Settings: `divider_color`, `divider_margin_top`, `divider_margin_bottom`
+  - Applied in `renderSectionStart()` function
+  - Padding moved from `<table>` to `<td>` for email client compatibility
+  - ✅ **Status:** Working correctly
+
+### Card Spacing Control (NOT WORKING)
+- **Added:** Global control for spacing between cards
+- **Location:** Settings panel → "Card Spacing (px)" input
+- **Expected Behavior:** Should control vertical spacing (margin-bottom) between cards
+- **Implementation Attempt:**
+  - Settings: `card_spacing` (default: 20px)
+  - Logic in `renderSection()` function (lines 1256-1309)
+  - Uses spacer table elements between cards instead of margin-bottom
+  - Spacer HTML: `<table><tr><td style="height:${spacingBottom}px;">&nbsp;</td></tr></table>`
+- **Current Status:** ❌ **NOT WORKING**
+  - Control exists in UI (`components/editor/SettingsEditor.tsx` line 268-287)
+  - Value is stored in settings correctly
+  - Spacer logic exists in `lib/email-templates.ts` (lines 1304-1309)
+  - Spacer is only added if `!isLastCard && spacingBottom > 0`
+  - **Issue:** Changes to card spacing value do not appear to affect the preview
+  - **Possible Causes:**
+    - Settings value not being read correctly
+    - Preview not updating when settings change
+    - Spacer HTML not rendering correctly in email clients
+    - Logic issue with how spacingBottom is calculated
+- **Code Location:**
+  - Settings UI: `components/editor/SettingsEditor.tsx:268-287`
+  - Spacing logic: `lib/email-templates.ts:1256-1309`
+  - Default value: `lib/config.ts:133` (20px)
+  - Type definition: `types/newsletter.ts:46` (`card_spacing?: number`)
+
+### Section Spacing
+- **Control:** "Section Spacing (px)" in Settings panel
+- **Function:** Controls distance between horizontal divider line and section title (H2)
+- **Implementation:** Sets `margin-top` on section title
+- **Default:** 24px
+- ✅ **Status:** Working correctly
+
+### Accent Bar Wrap Control (NOT IMPLEMENTED)
+- **Intended Feature:** Allow the crimson accent bar on standard and event cards to extend horizontally along the top edge
+- **Current Behavior:** Accent bar is a vertical bar on the left side of cards (4px wide by default)
+- **Desired Behavior:** 
+  - Accent bar starts as a vertical bar on the left edge (as it currently does)
+  - User can control how far the accent bar extends horizontally along the top edge
+  - Visual: The red accent bar would wrap around the top-left corner and continue horizontally
+  - Control would specify the horizontal extension distance (in pixels)
+- **Visual Description:**
+  - **Default (current):** Red vertical bar on left edge only
+  - **With wrap:** Red vertical bar on left edge + red horizontal bar extending from top-left corner along the top edge
+  - The horizontal extension would be controlled by a "wrap" or "extension" value
+- **Implementation Attempt:**
+  - Attempted to add `accent_bar_wrap` property to card types and settings
+  - Attempted to modify `getAccentBarHtml()` function to support horizontal extension
+  - Changes were reverted due to errors
+- **Current Status:** ❌ **NOT IMPLEMENTED**
+  - Only vertical accent bar exists (left edge)
+  - No horizontal extension capability
+  - `accent_bar_width` control exists but only affects vertical bar width
+- **Code Location:**
+  - Accent bar rendering: `lib/email-templates.ts:507-510` (`getAccentBarStyle()`)
+  - Used in: `renderStandardCard()` and `renderEventCard()`
+  - Settings: `lib/config.ts:138` (`accent_bar_width: 4`)
+- **Future Implementation Notes:**
+  - Would need to modify card HTML structure to include a top horizontal bar
+  - Would need to handle corner radius if card has rounded corners
+  - Would need UI control in Settings or Card Editor for wrap distance
+  - Would need to ensure email client compatibility (tables, inline styles)
 
 ## Known Issues & TODOs
 
@@ -267,8 +425,49 @@ Defined in `lib/config.ts`:
 - ✅ Layout fixed with Flexbox
 - ✅ JavaScript errors resolved
 - ✅ Download functionality working
+- ✅ Divider line controls working (color, spacing)
+- ❌ Card spacing control NOT working (see Critical Issues)
+- ❌ Accent bar wrap control NOT implemented (see Critical Issues)
+
+### Critical Issues
+- **Card Spacing Control Not Working:**
+  - Control exists and updates state correctly
+  - Spacer logic is implemented
+  - Preview does not reflect changes
+  - **Investigation Needed:**
+    1. Verify settings are passed correctly to `renderSection()`
+    2. Check if preview updates when settings change
+    3. Verify spacer HTML is being generated correctly
+    4. Test if spacer tables render correctly in email clients
+    5. Check browser console for any errors
+    6. Verify `settings.card_spacing` is being read correctly (not always undefined)
+
+- **Accent Bar Wrap Control Not Implemented:**
+  - Feature was attempted but reverted due to errors
+  - Current implementation only supports vertical accent bar (left edge)
+  - Desired: Accent bar should be able to extend horizontally along top edge
+  - **Implementation Requirements:**
+    1. Modify card HTML structure to support horizontal bar element
+    2. Add `accent_bar_wrap` or `accent_bar_extension` property to settings/cards
+    3. Update `getAccentBarStyle()` or create new function for horizontal bar
+    4. Handle corner radius when bar wraps around corner
+    5. Add UI control for wrap distance
+    6. Ensure email client compatibility
+
+- **Accent Bar Wrap Control Not Implemented:**
+  - Feature was attempted but reverted due to errors
+  - Current implementation only supports vertical accent bar (left edge)
+  - Desired: Accent bar should be able to extend horizontally along top edge
+  - **Implementation Requirements:**
+    1. Modify card HTML structure to support horizontal bar element
+    2. Add `accent_bar_wrap` or `accent_bar_extension` property to settings/cards
+    3. Update `getAccentBarStyle()` or create new function for horizontal bar
+    4. Handle corner radius when bar wraps around corner
+    5. Add UI control for wrap distance
+    6. Ensure email client compatibility
 
 ### Potential Improvements
+- [ ] Fix card spacing control (see Critical Issues above)
 - [ ] Add error boundaries for better error handling
 - [ ] Add loading states for API calls
 - [ ] Improve mobile responsiveness for org chart editor
@@ -301,6 +500,17 @@ Currently none required. All configuration is in `lib/config.ts`.
 - **Preview not updating:** Check browser console, verify `/api/preview` route
 - **Import/Export issues:** Check Base64 encoding/decoding
 - **State not persisting:** Check localStorage in browser DevTools
+- **Card spacing not working:**
+  - Control exists in Settings panel
+  - Value is stored in `settings.card_spacing`
+  - Spacer logic exists in `renderSection()` function
+  - **Debug steps:**
+    1. Check if `settings.card_spacing` is being read correctly (add console.log)
+    2. Verify spacer HTML is being generated (check rendered HTML)
+    3. Check if preview updates when settings change
+    4. Verify `spacingBottom` variable is calculated correctly
+    5. Check if spacer table is being added to `cardHtml` array
+    6. Verify spacer HTML renders correctly in email clients
 
 ## Code Style & Conventions
 
