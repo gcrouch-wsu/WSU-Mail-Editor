@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: Vercel deployment documentation, GitHub integration)  
+**Last Updated:** December 2025 (Latest: List line-height/spacing control, browser auto-open)  
 **Project Version:** 8.0 (Next.js/TypeScript)  
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
@@ -92,6 +92,37 @@ wsu-mail-editor/
 
 ## Recent Changes (December 2025)
 
+### List Line-Height/Spacing Control
+- **Added:** Line-height (spacing) control for lists in the rich text editor
+- **Location:** TiptapEditor toolbar (appears when lists are active or present in document)
+- **Implementation:**
+  - Control appears as "Spacing:" input field (0.5-2.0 range, step 0.1)
+  - Applies line-height to `<ul>` and `<ol>` elements as inline styles
+  - Preserves line-height values in preview and exported HTML
+  - Uses `processListStyles()` function in `lib/utils.ts` to preserve line-height during HTML processing
+  - List items (`<li>`) use `line-height:inherit` to respect parent list's line-height
+- **Files Modified:**
+  - `components/editor/TiptapEditor.tsx` - Added spacing control UI and `handleListSpacingChange()` function
+  - `lib/utils.ts` - Updated `processListStyles()` to preserve line-height from editor
+  - `lib/email-templates.ts` - Calls `processListStyles()` via `processBodyHtmlForEmail()`
+  - `app/globals.css` - Added CSS to support line-height inheritance on list items
+- **Tiptap Extensions:** Configured BulletList and OrderedList separately to preserve HTMLAttributes
+- ✅ **Status:** Working in editor, preview, and export
+
+### Browser Auto-Open on Dev Server Start
+- **Added:** Automatic browser opening when starting development server
+- **Implementation:**
+  - Created `scripts/dev-with-browser.js` script
+  - Uses PowerShell `Start-Process` on Windows to open in external browser (outside Cursor)
+  - Cross-platform support (Windows, macOS, Linux)
+  - Waits 3 seconds for server to initialize before opening browser
+- **Scripts:**
+  - `npm run dev` - Starts server and opens browser automatically
+  - `npm run dev:no-open` - Starts server without opening browser
+- **Files Added:**
+  - `scripts/dev-with-browser.js` - Browser opening script
+- ✅ **Status:** Working
+
 ### Org Chart Integration
 - **Added:** Complete org chart editor integration into the Next.js app
 - **Location:** `/orgchart` route
@@ -160,11 +191,15 @@ wsu-mail-editor/
     - Heading styles
 - **Content Editing:**
   - **Rich Text Editor (Tiptap):**
-    - Bold, italic, underline
-    - Headings (H1-H6)
-    - Lists (bulleted, numbered) with custom spacing control
-    - Links
-    - Tables (insert, edit, format cells, multi-cell selection)
+    - Bold, italic, underline, strikethrough
+    - Headings (H1-H3)
+    - Lists (bulleted, numbered) with line-height/spacing control (0.5-2.0)
+      - Spacing control appears in toolbar when lists are active or present
+      - Applies line-height to list containers (`<ul>`/`<ol>`)
+      - Preserved in preview and exported HTML
+    - Text alignment (left, center, right)
+    - Links (insert, remove)
+    - Tables (insert, edit, format cells, add/delete rows/columns)
     - Code view toggle (direct HTML editing)
     - Undo/redo
   - **Table Editor:**
@@ -270,6 +305,8 @@ Defined in `lib/config.ts`:
    ```bash
    npm run dev
    ```
+   - Automatically opens browser in external window (outside Cursor)
+   - Use `npm run dev:no-open` to start without opening browser
 
 3. **Access the application:**
    - Homepage: http://localhost:3000
@@ -277,7 +314,8 @@ Defined in `lib/config.ts`:
    - Org Chart Editor: http://localhost:3000/orgchart
 
 4. **Available scripts:**
-   - `npm run dev` - Start development server
+   - `npm run dev` - Start development server and open browser automatically
+   - `npm run dev:no-open` - Start development server without opening browser
    - `npm run build` - Build for production
    - `npm run start` - Start production server
    - `npm run lint` - Run ESLint

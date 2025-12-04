@@ -4,6 +4,9 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import BulletList from '@tiptap/extension-bullet-list'
+import OrderedList from '@tiptap/extension-ordered-list'
+import ListItem from '@tiptap/extension-list-item'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
@@ -56,10 +59,28 @@ export default function TiptapEditor({
   const [codeView, setCodeView] = useState(false)
   const [htmlCode, setHtmlCode] = useState('')
   const [listSpacing, setListSpacing] = useState('1.0')
+  const [hasLists, setHasLists] = useState(false)
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        // Exclude default list extensions so we can configure them separately
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+      }),
+      // Configure list extensions to preserve HTMLAttributes (for line-height)
+      BulletList.configure({
+        HTMLAttributes: {
+          class: 'bullet-list',
+        },
+      }),
+      OrderedList.configure({
+        HTMLAttributes: {
+          class: 'ordered-list',
+        },
+      }),
+      ListItem,
       Underline,
       Placeholder.configure({
         placeholder,
@@ -89,29 +110,16 @@ export default function TiptapEditor({
     onUpdate: ({ editor }) => {
       if (codeView) return // Don't update from editor when in code view
       const html = editor.getHTML()
+      
+      // Check if document has lists (for showing spacing control)
+      const documentHasLists = /<(ul|ol)([^>]*)>/gi.test(html)
+      setHasLists(documentHasLists)
+      
       // Normalize empty content
       const normalizedValue =
         html === '<p></p>' || html.trim() === '' ? '' : html
       onChange(normalizedValue)
       setHtmlCode(normalizedValue) // Keep code view in sync
-      
-      // Apply current list spacing to any new list items
-      const spacingValue = parseFloat(listSpacing) || 1.0
-      editor.chain().command(({ tr, state }) => {
-        let modified = false
-        state.doc.descendants((node, pos) => {
-          if (node.type.name === 'listItem') {
-            const attrs = node.attrs
-            const currentStyle = attrs.style || ''
-            if (!currentStyle.includes('line-height:')) {
-              const newStyle = currentStyle ? `${currentStyle} line-height:${spacingValue};` : `line-height:${spacingValue};`
-              tr.setNodeMarkup(pos, undefined, { ...attrs, style: newStyle })
-              modified = true
-            }
-          }
-        })
-        return modified
-      }).run()
     },
   })
 
@@ -121,11 +129,16 @@ export default function TiptapEditor({
       const currentHtml = editor.getHTML()
       const normalizedCurrent =
         currentHtml === '<p></p>' || currentHtml.trim() === '' ? '' : currentHtml
+      const normalizedValue =
+        value === '<p></p>' || (value || '').trim() === '' ? '' : (value || '')
 
       // Only update if the value is different (to avoid infinite loops)
-      if (normalizedCurrent !== value) {
-        editor.commands.setContent(value || '', { emitUpdate: false })
-        setHtmlCode(value || '')
+      if (normalizedCurrent !== normalizedValue) {
+        editor.commands.setContent(normalizedValue, { emitUpdate: false })
+        setHtmlCode(normalizedValue)
+        // Check if content has lists
+        const documentHasLists = /<(ul|ol)([^>]*)>/gi.test(normalizedValue)
+        setHasLists(documentHasLists)
       }
     }
   }, [value, editor, codeView])
@@ -176,43 +189,59 @@ export default function TiptapEditor({
     setListSpacing(spacing)
     if (editor) {
       const spacingValue = parseFloat(spacing) || 1.0
-      // Also update CSS variable for new list items
+      
+      // Update CSS variable for visual feedback in editor
       if (editor.view.dom) {
         const editorElement = editor.view.dom.closest('.tiptap-editor') || editor.view.dom
         if (editorElement instanceof HTMLElement) {
           editorElement.style.setProperty('--list-line-height', spacingValue.toString())
         }
       }
-      // Apply spacing to all list items in the entire document
-      editor.chain().focus().command(({ tr, state }) => {
-        let modified = false
-
-        // Process entire document to update all list items
-        state.doc.descendants((node, pos) => {
-          if (node.type.name === 'listItem') {
-            const attrs = node.attrs
-            const currentStyle = attrs.style || ''
-            
-            // Update or add line-height in style
-            let newStyle = currentStyle
-            if (currentStyle.includes('line-height:')) {
-              newStyle = currentStyle.replace(/line-height:\s*[\d.]+;?/g, `line-height:${spacingValue};`)
-            } else {
-              newStyle = currentStyle ? `${currentStyle} line-height:${spacingValue};` : `line-height:${spacingValue};`
-            }
-            
-            if (newStyle !== currentStyle) {
-              tr.setNodeMarkup(pos, undefined, { ...attrs, style: newStyle })
-              modified = true
-            }
+      
+      // Get current HTML and update list styles directly
+      // This approach ensures styles are preserved in the HTML output
+      const currentHtml = editor.getHTML()
+      
+      // Update all <ul> and <ol> tags to include line-height
+      const updatedHtml = currentHtml.replace(
+        /<(ul|ol)([^>]*)>/gi,
+        (match, tag, attrs) => {
+          // Extract existing style if present
+          let existingStyle = ''
+          const styleMatch = attrs.match(/style="([^"]*)"/i)
+          if (styleMatch) {
+            existingStyle = styleMatch[1]
           }
-        })
-
-        if (modified) {
-          tr.setMeta('addToHistory', true)
+          
+          // Update or add line-height
+          let newStyle = existingStyle
+          if (existingStyle.includes('line-height:')) {
+            // Replace existing line-height
+            newStyle = existingStyle.replace(/line-height:\s*[^;]+;?/gi, `line-height: ${spacingValue};`)
+          } else {
+            // Add line-height to existing style or create new style
+            newStyle = existingStyle 
+              ? `${existingStyle} line-height: ${spacingValue};` 
+              : `line-height: ${spacingValue};`
+          }
+          
+          // Replace or add style attribute
+          if (styleMatch) {
+            return match.replace(/style="[^"]*"/i, `style="${newStyle.trim()}"`)
+          } else {
+            const trimmedAttrs = attrs.trim()
+            const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
+            return `<${tag}${newAttrs} style="${newStyle.trim()}">`
+          }
         }
-        return modified
-      }).run()
+      )
+      
+      // Update editor content if HTML changed
+      if (updatedHtml !== currentHtml) {
+        editor.commands.setContent(updatedHtml, { emitUpdate: false })
+        // Trigger onChange to sync with parent
+        onChange(updatedHtml)
+      }
     }
   }
 
@@ -357,8 +386,8 @@ export default function TiptapEditor({
         >
           <ListOrdered className="w-4 h-4" />
         </button>
-        {(editor.isActive('bulletList') || editor.isActive('orderedList')) && !codeView && (
-          <div className="flex items-center gap-1 px-2">
+        {((editor.isActive('bulletList') || editor.isActive('orderedList') || hasLists) && !codeView) && (
+          <div className="flex items-center gap-1 px-2 border border-wsu-border-light rounded bg-white">
             <label className="text-xs text-wsu-text-muted whitespace-nowrap">Spacing:</label>
             <input
               type="number"
@@ -378,7 +407,7 @@ export default function TiptapEditor({
               min="0.5"
               max="2.0"
               step="0.1"
-              className="text-xs border border-wsu-border-light rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-16"
+              className="text-xs border-0 rounded px-2 py-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-16"
               title="List line spacing (0.5-2.0)"
               placeholder="1.0"
             />

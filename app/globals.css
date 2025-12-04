@@ -57,6 +57,18 @@
   list-style-position: outside;
 }
 
+/* Respect inline line-height styles on ul/ol for spacing control */
+.ProseMirror ul[style*="line-height"],
+.ProseMirror ol[style*="line-height"] {
+  /* Inline styles take precedence - line-height on ul/ol affects spacing between items */
+}
+
+/* Apply line-height to list items based on parent list's line-height */
+.ProseMirror ul[style*="line-height"] li,
+.ProseMirror ol[style*="line-height"] li {
+  line-height: inherit;
+}
+
 .ProseMirror ul {
   list-style-type: disc;
 }

@@ -40,6 +40,7 @@ export function escapeHtml(text: string | null | undefined): string {
 /**
  * Process HTML to add email-safe inline styles to lists
  * This ensures proper line spacing in email clients
+ * Preserves line-height from TiptapEditor's spacing control
  */
 export function processListStyles(html: string): string {
   if (!html || typeof html !== 'string') return html
@@ -48,19 +49,45 @@ export function processListStyles(html: string): string {
   let processed = html.replace(
     /<ul([^>]*)>/gi,
     (match, attrs) => {
-      // Check if style attribute already exists
+      // Extract existing style if present
+      let existingStyle = ''
+      let lineHeight = ''
       if (attrs && attrs.includes('style=')) {
-        // Add to existing style
-        return match.replace(
-          /style="([^"]*)"/i,
-          (styleMatch, existingStyles) => {
-            const listStyles = 'margin:0.5em 0; padding-left:1.5em;'
-            return `style="${existingStyles} ${listStyles}"`
+        const styleMatch = attrs.match(/style="([^"]*)"/i)
+        if (styleMatch) {
+          existingStyle = styleMatch[1]
+          // Extract line-height if it exists (from TiptapEditor spacing control)
+          // Match: line-height: VALUE; or line-height:VALUE (with or without semicolon)
+          const lineHeightMatch = existingStyle.match(/line-height\s*:\s*([^;]+?)(;|$)/i)
+          if (lineHeightMatch) {
+            // Preserve the exact value from the editor
+            lineHeight = `line-height: ${lineHeightMatch[1].trim()};`
           }
-        )
+        }
+      }
+
+      // Default email-safe styles (only add if not already present)
+      const defaultStyles = 'margin: 0.5em 0; padding-left: 1.5em;'
+      const finalLineHeight = lineHeight || 'line-height: 1.6;' // default if not set
+
+      if (existingStyle) {
+        // If line-height exists, preserve it and just ensure defaults are present
+        if (lineHeight) {
+          // Remove old line-height from existing style
+          const cleanedStyle = existingStyle.replace(/line-height\s*:\s*[^;]+;?/gi, '').trim()
+          // Merge: defaults first, then preserved line-height, then rest
+          const mergedStyle = `${defaultStyles} ${finalLineHeight} ${cleanedStyle}`.trim()
+          return match.replace(/style="[^"]*"/i, `style="${mergedStyle}"`)
+        } else {
+          // No line-height in existing style, add defaults and default line-height
+          const mergedStyle = `${existingStyle} ${defaultStyles} ${finalLineHeight}`.trim()
+          return match.replace(/style="[^"]*"/i, `style="${mergedStyle}"`)
+        }
       } else {
-        // Add new style attribute
-        return `<ul${attrs} style="margin:0.5em 0; padding-left:1.5em;">`
+        // Add new style attribute with defaults
+        const trimmedAttrs = attrs.trim()
+        const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
+        return `<ul${newAttrs} style="${defaultStyles} ${finalLineHeight}">`
       }
     }
   )
@@ -68,21 +95,50 @@ export function processListStyles(html: string): string {
   processed = processed.replace(
     /<ol([^>]*)>/gi,
     (match, attrs) => {
+      // Extract existing style if present
+      let existingStyle = ''
+      let lineHeight = ''
       if (attrs && attrs.includes('style=')) {
-        return match.replace(
-          /style="([^"]*)"/i,
-          (styleMatch, existingStyles) => {
-            const listStyles = 'margin:0.5em 0; padding-left:1.5em;'
-            return `style="${existingStyles} ${listStyles}"`
+        const styleMatch = attrs.match(/style="([^"]*)"/i)
+        if (styleMatch) {
+          existingStyle = styleMatch[1]
+          // Extract line-height if it exists (from TiptapEditor spacing control)
+          // Match: line-height: VALUE; or line-height:VALUE (with or without semicolon)
+          const lineHeightMatch = existingStyle.match(/line-height\s*:\s*([^;]+?)(;|$)/i)
+          if (lineHeightMatch) {
+            // Preserve the exact value from the editor
+            lineHeight = `line-height: ${lineHeightMatch[1].trim()};`
           }
-        )
+        }
+      }
+
+      // Default email-safe styles (only add if not already present)
+      const defaultStyles = 'margin: 0.5em 0; padding-left: 1.5em;'
+      const finalLineHeight = lineHeight || 'line-height: 1.6;' // default if not set
+
+      if (existingStyle) {
+        // If line-height exists, preserve it and just ensure defaults are present
+        if (lineHeight) {
+          // Remove old line-height from existing style
+          const cleanedStyle = existingStyle.replace(/line-height\s*:\s*[^;]+;?/gi, '').trim()
+          // Merge: defaults first, then preserved line-height, then rest
+          const mergedStyle = `${defaultStyles} ${finalLineHeight} ${cleanedStyle}`.trim()
+          return match.replace(/style="[^"]*"/i, `style="${mergedStyle}"`)
+        } else {
+          // No line-height in existing style, add defaults and default line-height
+          const mergedStyle = `${existingStyle} ${defaultStyles} ${finalLineHeight}`.trim()
+          return match.replace(/style="[^"]*"/i, `style="${mergedStyle}"`)
+        }
       } else {
-        return `<ol${attrs} style="margin:0.5em 0; padding-left:1.5em;">`
+        // Add new style attribute with defaults
+        const trimmedAttrs = attrs.trim()
+        const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
+        return `<ol${newAttrs} style="${defaultStyles} ${finalLineHeight}">`
       }
     }
   )
 
-  // Process <li> elements
+  // Process <li> elements - use inherit so they respect parent ul/ol line-height
   processed = processed.replace(
     /<li([^>]*)>/gi,
     (match, attrs) => {
@@ -90,12 +146,15 @@ export function processListStyles(html: string): string {
         return match.replace(
           /style="([^"]*)"/i,
           (styleMatch, existingStyles) => {
-            const itemStyles = 'margin:0; padding:0; line-height:1.2;'
-            return `style="${existingStyles} ${itemStyles}"`
+            // Remove any existing line-height and use inherit to respect parent
+            const cleanedStyles = existingStyles.replace(/line-height\s*:\s*[^;]+;?/gi, '').trim()
+            const itemStyles = 'margin:0; padding:0; line-height:inherit;'
+            const mergedStyles = `${cleanedStyles} ${itemStyles}`.trim()
+            return `style="${mergedStyles}"`
           }
         )
       } else {
-        return `<li${attrs} style="margin:0; padding:0; line-height:1.2;">`
+        return `<li${attrs} style="margin:0; padding:0; line-height:inherit;">`
       }
     }
   )
