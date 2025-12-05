@@ -617,17 +617,6 @@ Currently none required. All configuration is in `lib/config.ts`.
 - **Preview not updating:** Check browser console, verify `/api/preview` route
 - **Import/Export issues:** Check Base64 encoding/decoding
 - **State not persisting:** Check localStorage in browser DevTools
-- **Card spacing not working:**
-  - Control exists in Settings panel
-  - Value is stored in `settings.card_spacing`
-  - Spacer logic exists in `renderSection()` function
-  - **Debug steps:**
-    1. Check if `settings.card_spacing` is being read correctly (add console.log)
-    2. Verify spacer HTML is being generated (check rendered HTML)
-    3. Check if preview updates when settings change
-    4. Verify `spacingBottom` variable is calculated correctly
-    5. Check if spacer table is being added to `cardHtml` array
-    6. Verify spacer HTML renders correctly in email clients
 
 ## Code Style & Conventions
 
