@@ -734,9 +734,17 @@ function renderEventCard(
     contentParts.push(`<h3 style="${STYLE_H3}">${esc(title)}</h3>`)
   }
 
-  // Body
+  // Body (allow raw HTML from rich text editor)
   if (bodyHtml) {
-    contentParts.push(`<div style="${STYLE_BODY_TEXT}">${bodyHtml}</div>`)
+    const processedBody = processBodyHtmlForEmail(bodyHtml, {
+      borderStyle: card.table_border_style,
+      borderColor: card.table_border_color,
+      fontSize: card.table_font_size,
+      headerBgColor: card.table_header_bg_color,
+      headerUnderline: card.table_header_underline,
+      headerUnderlineColor: card.table_header_underline_color,
+    })
+    contentParts.push(`<div style="${STYLE_BODY_TEXT}">${processedBody}</div>`)
   }
 
   // Date/Time meta (without location since it's already shown)
@@ -826,7 +834,15 @@ function renderResourceCard(
     textParts.push(`<h3 style="${STYLE_H3}">${esc(title)}</h3>`)
   }
   if (bodyHtml) {
-    textParts.push(`<div style="${STYLE_BODY_TEXT}">${bodyHtml}</div>`)
+    const processedBody = processBodyHtmlForEmail(bodyHtml, {
+      borderStyle: card.table_border_style,
+      borderColor: card.table_border_color,
+      fontSize: card.table_font_size,
+      headerBgColor: card.table_header_bg_color,
+      headerUnderline: card.table_header_underline,
+      headerUnderlineColor: card.table_header_underline_color,
+    })
+    textParts.push(`<div style="${STYLE_BODY_TEXT}">${processedBody}</div>`)
   }
 
   const meta = renderCardMeta(card)

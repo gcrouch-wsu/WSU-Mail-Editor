@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: Per-card padding controls, accent bar toggle)
+**Last Updated:** December 2025 (Latest: Fixed list line-height for Event and Resource cards)
 **Project Version:** 8.0 (Next.js/TypeScript)
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
