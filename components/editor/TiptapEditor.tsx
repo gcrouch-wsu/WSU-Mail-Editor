@@ -15,6 +15,8 @@ import TextAlign from '@tiptap/extension-text-align'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
+import SubscriptExtension from '@tiptap/extension-subscript'
+import SuperscriptExtension from '@tiptap/extension-superscript'
 import { useEffect, useState } from 'react'
 import PromptModal from './PromptModal'
 import {
@@ -27,6 +29,8 @@ import {
   Heading3,
   List,
   ListOrdered,
+  Indent,
+  Outdent,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -40,6 +44,11 @@ import {
   Redo,
   Code,
   Eye,
+  Quote,
+  RemoveFormatting,
+  Code2,
+  Subscript,
+  Superscript,
 } from 'lucide-react'
 
 interface TiptapEditorProps {
@@ -58,8 +67,10 @@ export default function TiptapEditor({
   const [linkPromptOpen, setLinkPromptOpen] = useState(false)
   const [codeView, setCodeView] = useState(false)
   const [htmlCode, setHtmlCode] = useState('')
-  const [listSpacing, setListSpacing] = useState('1.0')
+  const [listLineHeight, setListLineHeight] = useState('1.0')
+  const [listItemSpacing, setListItemSpacing] = useState('4')
   const [hasLists, setHasLists] = useState(false)
+  const [isInList, setIsInList] = useState(false)
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -82,6 +93,8 @@ export default function TiptapEditor({
       }),
       ListItem,
       Underline,
+      SubscriptExtension,
+      SuperscriptExtension,
       Placeholder.configure({
         placeholder,
       }),
@@ -106,20 +119,65 @@ export default function TiptapEditor({
       attributes: {
         class: 'tiptap-editor focus:outline-none',
       },
+      handleKeyDown: (view, event) => {
+        // Handle Tab for indent/outdent in lists
+        if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey) {
+          const { state } = view
+          const { $from } = state.selection
+
+          // Check if we're in a list item
+          for (let d = $from.depth; d > 0; d--) {
+            if ($from.node(d).type.name === 'listItem') {
+              event.preventDefault()
+
+              if (event.shiftKey) {
+                // Shift+Tab: outdent using liftListItem
+                const listItemType = state.schema.nodes.listItem
+                if (listItemType) {
+                  // Use Tiptap's sinkListItem command via editor
+                  if (editor) {
+                    editor.chain().focus().liftListItem('listItem').run()
+                  }
+                }
+              } else {
+                // Tab: indent using sinkListItem
+                const listItemType = state.schema.nodes.listItem
+                if (listItemType) {
+                  // Use Tiptap's sinkListItem command via editor
+                  if (editor) {
+                    editor.chain().focus().sinkListItem('listItem').run()
+                  }
+                }
+              }
+              return true
+            }
+          }
+        }
+        return false
+      },
     },
     onUpdate: ({ editor }) => {
       if (codeView) return // Don't update from editor when in code view
       const html = editor.getHTML()
-      
+
       // Check if document has lists (for showing spacing control)
       const documentHasLists = /<(ul|ol)([^>]*)>/gi.test(html)
       setHasLists(documentHasLists)
-      
+
+      // Check if cursor is in a list
+      const inList = editor.isActive('bulletList') || editor.isActive('orderedList')
+      setIsInList(inList)
+
       // Normalize empty content
       const normalizedValue =
         html === '<p></p>' || html.trim() === '' ? '' : html
       onChange(normalizedValue)
       setHtmlCode(normalizedValue) // Keep code view in sync
+    },
+    onSelectionUpdate: ({ editor }) => {
+      // Track cursor position for showing list controls
+      const inList = editor.isActive('bulletList') || editor.isActive('orderedList')
+      setIsInList(inList)
     },
   })
 
@@ -139,6 +197,30 @@ export default function TiptapEditor({
         // Check if content has lists
         const documentHasLists = /<(ul|ol)([^>]*)>/gi.test(normalizedValue)
         setHasLists(documentHasLists)
+        
+        // Extract existing list styles from loaded content to sync controls
+        if (documentHasLists) {
+          const firstLiMatch = normalizedValue.match(/<li([^>]*)>/i)
+          if (firstLiMatch && firstLiMatch[1]) {
+            const attrs = firstLiMatch[1]
+            const styleMatch = attrs.match(/style="([^"]*)"/i)
+            if (styleMatch) {
+              const styles = styleMatch[1]
+              // Extract line-height
+              const lineHeightMatch = styles.match(/line-height\s*:\s*([^;]+?)(;|$)/i)
+              if (lineHeightMatch) {
+                const lhValue = lineHeightMatch[1].trim()
+                setListLineHeight(lhValue)
+              }
+              // Extract margin-bottom
+              const marginMatch = styles.match(/margin-bottom\s*:\s*([^;]+?)(;|$)/i)
+              if (marginMatch) {
+                const mbValue = marginMatch[1].trim().replace('px', '')
+                setListItemSpacing(mbValue)
+              }
+            }
+          }
+        }
       }
     }
   }, [value, editor, codeView])
@@ -149,6 +231,45 @@ export default function TiptapEditor({
       setHtmlCode(value || '')
     }
   }, [value])
+
+  // Auto-initialize list item styles when entering a list
+  useEffect(() => {
+    if (editor && isInList && !codeView) {
+      const currentHtml = editor.getHTML()
+
+      // Check if there are list items without inline styles
+      const listItems = currentHtml.match(/<li[^>]*>/gi) || []
+      const hasUnstyled = listItems.some(li => !li.includes('style='))
+
+      // If there are unstyled list items, apply defaults
+      if (hasUnstyled) {
+        const lineHeightValue = parseFloat(listLineHeight) || 1.0
+        const itemSpacingValue = parseInt(listItemSpacing) || 0
+
+        // Update all <li> tags with both line-height and margin-bottom
+        const updatedHtml = currentHtml.replace(
+          /<li([^>]*)>/gi,
+          (match, attrs) => {
+            // Check if this specific <li> already has styles
+            if (match.includes('style=')) {
+              return match // Don't modify if already styled
+            }
+
+            // Add default styles
+            const trimmedAttrs = attrs.trim()
+            const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
+            return `<li${newAttrs} style="line-height: ${lineHeightValue}; margin-bottom: ${itemSpacingValue}px;">`
+          }
+        )
+
+        if (updatedHtml !== currentHtml) {
+          editor.commands.setContent(updatedHtml, { emitUpdate: false })
+          onChange(updatedHtml)
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInList, editor, codeView])
 
   // Handle code view toggle
   const handleToggleCodeView = () => {
@@ -184,58 +305,66 @@ export default function TiptapEditor({
     onChange(newCode)
   }
 
-  // Handle list spacing change
-  const handleListSpacingChange = (spacing: string) => {
-    setListSpacing(spacing)
+  // Handle list line-height change (for wrapped text within list items)
+  const handleListLineHeightChange = (lineHeight: string) => {
+    setListLineHeight(lineHeight)
+    applyListStyles(lineHeight, listItemSpacing)
+  }
+
+  // Handle list item spacing change (spacing between list items)
+  const handleListItemSpacingChange = (spacing: string) => {
+    setListItemSpacing(spacing)
+    applyListStyles(listLineHeight, spacing)
+  }
+
+  // Apply both line-height and margin-bottom to list items
+  const applyListStyles = (lineHeight: string, itemSpacing: string) => {
     if (editor) {
-      const spacingValue = parseFloat(spacing) || 1.0
-      
-      // Update CSS variable for visual feedback in editor
-      if (editor.view.dom) {
-        const editorElement = editor.view.dom.closest('.tiptap-editor') || editor.view.dom
-        if (editorElement instanceof HTMLElement) {
-          editorElement.style.setProperty('--list-line-height', spacingValue.toString())
-        }
-      }
-      
-      // Get current HTML and update list styles directly
-      // This approach ensures styles are preserved in the HTML output
+      const lineHeightValue = parseFloat(lineHeight) || 1.0
+      const itemSpacingValue = parseInt(itemSpacing) || 0
+
+      // Get current HTML and update list item styles
       const currentHtml = editor.getHTML()
-      
-      // Update all <ul> and <ol> tags to include line-height
+
+      // Update all <li> tags with both line-height and margin-bottom
       const updatedHtml = currentHtml.replace(
-        /<(ul|ol)([^>]*)>/gi,
-        (match, tag, attrs) => {
+        /<li([^>]*)>/gi,
+        (match, attrs) => {
           // Extract existing style if present
           let existingStyle = ''
           const styleMatch = attrs.match(/style="([^"]*)"/i)
           if (styleMatch) {
             existingStyle = styleMatch[1]
           }
-          
-          // Update or add line-height
+
+          // Build new style with both line-height and margin-bottom
           let newStyle = existingStyle
+
+          // Update or add line-height
           if (existingStyle.includes('line-height:')) {
-            // Replace existing line-height
-            newStyle = existingStyle.replace(/line-height:\s*[^;]+;?/gi, `line-height: ${spacingValue};`)
+            newStyle = newStyle.replace(/line-height:\s*[^;]+;?/gi, `line-height: ${lineHeightValue};`)
           } else {
-            // Add line-height to existing style or create new style
-            newStyle = existingStyle 
-              ? `${existingStyle} line-height: ${spacingValue};` 
-              : `line-height: ${spacingValue};`
+            newStyle = newStyle ? `${newStyle} line-height: ${lineHeightValue};` : `line-height: ${lineHeightValue};`
           }
-          
+
+          // Update or add margin-bottom
+          if (existingStyle.includes('margin-bottom:')) {
+            newStyle = newStyle.replace(/margin-bottom:\s*[^;]+;?/gi, `margin-bottom: ${itemSpacingValue}px;`)
+          } else {
+            newStyle = `${newStyle} margin-bottom: ${itemSpacingValue}px;`
+          }
+
           // Replace or add style attribute
           if (styleMatch) {
             return match.replace(/style="[^"]*"/i, `style="${newStyle.trim()}"`)
           } else {
             const trimmedAttrs = attrs.trim()
             const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
-            return `<${tag}${newAttrs} style="${newStyle.trim()}">`
+            return `<li${newAttrs} style="${newStyle.trim()}">`
           }
         }
       )
-      
+
       // Update editor content if HTML changed
       if (updatedHtml !== currentHtml) {
         editor.commands.setContent(updatedHtml, { emitUpdate: false })
@@ -313,6 +442,41 @@ export default function TiptapEditor({
         >
           <Strikethrough className="w-4 h-4" />
         </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleSubscript().run()}
+          disabled={codeView}
+          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
+            editor.isActive('subscript')
+              ? 'bg-wsu-crimson text-white'
+              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
+          } border border-wsu-border-light disabled:opacity-50`}
+          title="Subscript"
+        >
+          <Subscript className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleSuperscript().run()}
+          disabled={codeView}
+          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
+            editor.isActive('superscript')
+              ? 'bg-wsu-crimson text-white'
+              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
+          } border border-wsu-border-light disabled:opacity-50`}
+          title="Superscript"
+        >
+          <Superscript className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().unsetAllMarks().run()}
+          disabled={codeView}
+          className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
+          title="Clear Formatting"
+        >
+          <RemoveFormatting className="w-4 h-4" />
+        </button>
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />
 
@@ -356,6 +520,32 @@ export default function TiptapEditor({
         >
           <Heading3 className="w-4 h-4" />
         </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          disabled={codeView}
+          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
+            editor.isActive('blockquote')
+              ? 'bg-wsu-crimson text-white'
+              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
+          } border border-wsu-border-light disabled:opacity-50`}
+          title="Blockquote"
+        >
+          <Quote className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          disabled={codeView}
+          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
+            editor.isActive('codeBlock')
+              ? 'bg-wsu-crimson text-white'
+              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
+          } border border-wsu-border-light disabled:opacity-50`}
+          title="Code Block"
+        >
+          <Code2 className="w-4 h-4" />
+        </button>
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />
 
@@ -386,32 +576,77 @@ export default function TiptapEditor({
         >
           <ListOrdered className="w-4 h-4" />
         </button>
-        {((editor.isActive('bulletList') || editor.isActive('orderedList') || hasLists) && !codeView) && (
-          <div className="flex items-center gap-1 px-2 border border-wsu-border-light rounded bg-white">
-            <label className="text-xs text-wsu-text-muted whitespace-nowrap">Spacing:</label>
-            <input
-              type="number"
-              value={listSpacing}
-              onChange={(e) => handleListSpacingChange(e.target.value)}
-              onBlur={(e) => {
-                // Validate and apply on blur
-                const value = parseFloat(e.target.value)
-                if (isNaN(value) || value < 0.5 || value > 2.0) {
-                  // Reset to default if invalid
-                  setListSpacing('1.0')
-                  handleListSpacingChange('1.0')
-                } else {
-                  handleListSpacingChange(e.target.value)
-                }
-              }}
-              min="0.5"
-              max="2.0"
-              step="0.1"
-              className="text-xs border-0 rounded px-2 py-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-16"
-              title="List line spacing (0.5-2.0)"
-              placeholder="1.0"
-            />
-          </div>
+        {(isInList || hasLists) && !codeView && (
+          <>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().liftListItem('listItem').run()}
+              disabled={!editor.can().liftListItem('listItem') || codeView}
+              className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
+              title="Outdent (Shift+Tab)"
+            >
+              <Outdent className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().sinkListItem('listItem').run()}
+              disabled={!editor.can().sinkListItem('listItem') || codeView}
+              className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
+              title="Indent (Tab)"
+            >
+              <Indent className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1 px-2 border border-wsu-border-light rounded bg-white">
+              <label className="text-xs text-wsu-text-muted whitespace-nowrap">Line height:</label>
+              <input
+                type="number"
+                value={listLineHeight}
+                onChange={(e) => handleListLineHeightChange(e.target.value)}
+                onBlur={(e) => {
+                  // Validate and apply on blur
+                  const value = parseFloat(e.target.value)
+                  if (isNaN(value) || value < 0.5 || value > 3.0) {
+                    // Reset to default if invalid
+                    setListLineHeight('1.0')
+                    handleListLineHeightChange('1.0')
+                  } else {
+                    handleListLineHeightChange(e.target.value)
+                  }
+                }}
+                min="0.5"
+                max="3.0"
+                step="0.1"
+                className="text-xs border-0 rounded px-2 py-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-14"
+                title="Line height for wrapped text (0.5-3.0)"
+                placeholder="1.0"
+              />
+            </div>
+            <div className="flex items-center gap-1 px-2 border border-wsu-border-light rounded bg-white">
+              <label className="text-xs text-wsu-text-muted whitespace-nowrap">Item spacing:</label>
+              <input
+                type="number"
+                value={listItemSpacing}
+                onChange={(e) => handleListItemSpacingChange(e.target.value)}
+                onBlur={(e) => {
+                  // Validate and apply on blur
+                  const value = parseInt(e.target.value)
+                  if (isNaN(value) || value < 0 || value > 50) {
+                    // Reset to default if invalid
+                    setListItemSpacing('4')
+                    handleListItemSpacingChange('4')
+                  } else {
+                    handleListItemSpacingChange(e.target.value)
+                  }
+                }}
+                min="0"
+                max="50"
+                step="1"
+                className="text-xs border-0 rounded px-2 py-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-14"
+                title="Spacing between list items in pixels (0-50)"
+                placeholder="4"
+              />
+            </div>
+          </>
         )}
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />
@@ -455,6 +690,15 @@ export default function TiptapEditor({
           title="Align Right"
         >
           <AlignRight className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          disabled={codeView}
+          className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
+          title="Horizontal Rule"
+        >
+          <Minus className="w-4 h-4" />
         </button>
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />
