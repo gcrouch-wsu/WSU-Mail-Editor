@@ -99,7 +99,12 @@ export default function EditorPage() {
               // Only show prompt if backup is at least 1 minute old (prevents "0 minutes ago")
               if (ageMinutes >= 1 && ageMinutes < 1440) {
                 // Less than 24 hours old and at least 1 minute old
-                const message = `Found an auto-saved draft from ${ageMinutes} minutes ago. Restore it?`
+                const backupTemplate = backup.state?.template || 'ff'
+                const templateName = 
+                  backupTemplate === 'briefing' ? 'Briefing' :
+                  backupTemplate === 'letter' ? 'Slate Campaign' :
+                  'Friday Focus'
+                const message = `Found an auto-saved ${templateName} draft from ${ageMinutes} minutes ago. Restore it?`
                 setBackupConfirmModal({
                   isOpen: true,
                   message,
@@ -566,6 +571,9 @@ export default function EditorPage() {
         variant="info"
         onConfirm={async () => {
           if (backupConfirmModal.backupData) {
+            // Update templateType to match the backup's template
+            const backupTemplate = backupConfirmModal.backupData.template || 'ff'
+            setTemplateType(backupTemplate)
             setInitialData(backupConfirmModal.backupData)
             setLoading(false)
           }
