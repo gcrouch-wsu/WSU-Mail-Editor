@@ -11,6 +11,9 @@ export interface Padding {
   left: number
 }
 
+// Partial padding for card-level overrides (only specify values you want to override)
+export type PartialPadding = Partial<Padding>
+
 export interface Typography {
   font_family?: string
   h2_size?: number
@@ -110,7 +113,7 @@ export interface StandardCard {
   links: Link[]
   spacing_bottom?: number
   background_color?: string
-  padding?: Padding
+  padding?: PartialPadding
   border_width?: number
   border_color?: string
   border_radius?: number
@@ -133,7 +136,7 @@ export interface EventCard {
   links: Link[]
   spacing_bottom?: number
   background_color?: string
-  padding?: Padding
+  padding?: PartialPadding
   border_width?: number
   border_color?: string
   border_radius?: number
@@ -160,7 +163,7 @@ export interface ResourceCard {
   icon_size?: number
   spacing_bottom?: number
   background_color?: string
-  padding?: Padding
+  padding?: PartialPadding
   border_width?: number
   border_color?: string
   border_radius?: number
@@ -190,7 +193,7 @@ export interface CTACard {
   text_alignment?: TitleAlign
   spacing_bottom?: number
   background_color?: string
-  padding?: Padding
+  padding?: PartialPadding
   border_width?: number
   border_color?: string
   border_radius?: number
@@ -216,7 +219,7 @@ export interface LetterCard {
   links: Link[]
   spacing_bottom?: number
   background_color?: string
-  padding?: Padding
+  padding?: PartialPadding
   border_width?: number
   border_color?: string
   border_radius?: number
