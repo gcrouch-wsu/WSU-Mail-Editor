@@ -194,9 +194,11 @@ wsu-mail-editor/
   - `components/editor/TiptapEditor.tsx` - Added spacing control UI and `handleListSpacingChange()` function
   - `lib/utils.ts` - Updated `processListStyles()` to preserve line-height from editor
   - `lib/email-templates.ts` - Calls `processListStyles()` via `processBodyHtmlForEmail()`
+    - **Fixed (Dec 2025):** Event cards (`renderEventCard()`) and Resource cards (`renderResourceCard()`) now process body HTML through `processBodyHtmlForEmail()` to ensure list line-height works in all card types
+    - Previously, only Standard, Letter, and CTA cards processed body HTML; Event and Resource cards used raw HTML, causing list spacing to not work
   - `app/globals.css` - Added CSS to support line-height inheritance on list items
 - **Tiptap Extensions:** Configured BulletList and OrderedList separately to preserve HTMLAttributes
-- ✅ **Status:** Working in editor, preview, and export
+- ✅ **Status:** Working in editor, preview, and export for all card types (Standard, Event, Resource, CTA, Letter)
 
 ### Browser Auto-Open on Dev Server Start
 - **Added:** Automatic browser opening when starting development server
