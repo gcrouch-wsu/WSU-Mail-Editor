@@ -86,21 +86,25 @@ div[style*="margin: 16px 0"] {
 body, table, td { 
   font-family: Arial, Helvetica, sans-serif; 
 }
+li p {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
 @media screen and (max-width: 600px) {
-  .container { 
-    width: 100% !important; 
+  .container {
+    width: 100% !important;
   }
-  .content { 
-    padding: 18px 15px 24px !important; 
+  .content {
+    padding: 18px 15px 24px !important;
   }
-  h2 { 
-    font-size: 20px !important; 
+  h2 {
+    font-size: 20px !important;
   }
-  h3 { 
-    font-size: 17px !important; 
+  h3 {
+    font-size: 17px !important;
   }
   p, li {
-    font-size: 15px !important; 
+    font-size: 15px !important;
   }
 }
 `

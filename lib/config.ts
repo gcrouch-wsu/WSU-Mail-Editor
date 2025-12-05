@@ -135,27 +135,7 @@ export const LAYOUT_DEFAULTS = {
   padding_text: { top: 20, right: 20, bottom: 20, left: 20 },
   padding_image: { top: 20, right: 15, bottom: 20, left: 0 },
   card_border_radius: 0, // Default border radius for all cards (0 = sharp corners)
-  accent_bar_enabled: true, // Show accent bar on standard and event cards
   accent_bar_width: 4, // Width of the accent bar on standard and event cards
-  accent_bar_color: '#A60F2D', // Color of the accent bar on standard and event cards (WSU Crimson)
-  accent_bar_shadow: {
-    enabled: false,
-    color: '#A60F2D',
-    blur: 8,
-    spread: 0,
-    offset_x: 0,
-    offset_y: 2,
-    opacity: 0.3,
-  },
-  card_shadow: {
-    enabled: false,
-    color: '#000000',
-    blur: 8,
-    spread: 0,
-    offset_x: 0,
-    offset_y: 2,
-    opacity: 0.1,
-  },
   divider_color: '#e0e0e0', // Default color for section divider lines
 } as const
 

@@ -5,14 +5,11 @@ export type TemplateType = 'ff' | 'briefing' | 'letter'
 export type TitleAlign = 'left' | 'center' | 'right'
 
 export interface Padding {
-  top: number
-  right: number
-  bottom: number
-  left: number
+  top?: number
+  right?: number
+  bottom?: number
+  left?: number
 }
-
-// Partial padding for card-level overrides (only specify values you want to override)
-export type PartialPadding = Partial<Padding>
 
 export interface Typography {
   font_family?: string
@@ -33,16 +30,6 @@ export interface Colors {
   text_muted: string
 }
 
-export interface Shadow {
-  enabled: boolean
-  color: string
-  blur: number
-  spread: number
-  offset_x: number
-  offset_y: number
-  opacity: number
-}
-
 export interface Settings {
   container_width: number
   section_spacing: number
@@ -52,11 +39,7 @@ export interface Settings {
   typography: Typography
   colors: Colors
   card_border_radius?: number
-  accent_bar_enabled?: boolean
   accent_bar_width?: number
-  accent_bar_color?: string
-  accent_bar_shadow?: Shadow
-  card_shadow?: Shadow
   divider_margin_top?: number
   divider_margin_bottom?: number
   divider_color?: string
@@ -113,7 +96,7 @@ export interface StandardCard {
   links: Link[]
   spacing_bottom?: number
   background_color?: string
-  padding?: PartialPadding
+  padding?: Padding
   border_width?: number
   border_color?: string
   border_radius?: number
@@ -136,7 +119,7 @@ export interface EventCard {
   links: Link[]
   spacing_bottom?: number
   background_color?: string
-  padding?: PartialPadding
+  padding?: Padding
   border_width?: number
   border_color?: string
   border_radius?: number
@@ -163,7 +146,7 @@ export interface ResourceCard {
   icon_size?: number
   spacing_bottom?: number
   background_color?: string
-  padding?: PartialPadding
+  padding?: Padding
   border_width?: number
   border_color?: string
   border_radius?: number
@@ -193,7 +176,7 @@ export interface CTACard {
   text_alignment?: TitleAlign
   spacing_bottom?: number
   background_color?: string
-  padding?: PartialPadding
+  padding?: Padding
   border_width?: number
   border_color?: string
   border_radius?: number
@@ -219,7 +202,7 @@ export interface LetterCard {
   links: Link[]
   spacing_bottom?: number
   background_color?: string
-  padding?: PartialPadding
+  padding?: Padding
   border_width?: number
   border_color?: string
   border_radius?: number

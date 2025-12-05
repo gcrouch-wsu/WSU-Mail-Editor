@@ -40,61 +40,49 @@ export function escapeHtml(text: string | null | undefined): string {
 /**
  * Process HTML to add email-safe inline styles to lists
  * This ensures proper line spacing in email clients
- * Preserves line-height and margin-bottom from TiptapEditor's spacing controls
- * Note: Editor applies styles to <li> elements (line-height for wrapped text, margin-bottom for item spacing)
  */
 export function processListStyles(html: string): string {
   if (!html || typeof html !== 'string') return html
 
-  // Process <ul> and <ol> elements - add email-safe container styles only
-  // Note: Editor applies line-height and margin-bottom to <li> elements, not containers
+  // Process <ul> and <ol> elements
   let processed = html.replace(
     /<ul([^>]*)>/gi,
     (match, attrs) => {
-      // Default email-safe styles for container
-      const defaultStyles = 'margin: 0.5em 0; padding-left: 1.5em;'
-
+      // Check if style attribute already exists
       if (attrs && attrs.includes('style=')) {
-        const styleMatch = attrs.match(/style="([^"]*)"/i)
-        if (styleMatch) {
-          const existingStyle = styleMatch[1]
-          // Merge defaults with existing styles (don't override)
-          const mergedStyle = `${defaultStyles} ${existingStyle}`.trim()
-          return match.replace(/style="[^"]*"/i, `style="${mergedStyle}"`)
-        }
+        // Add to existing style
+        return match.replace(
+          /style="([^"]*)"/i,
+          (styleMatch, existingStyles) => {
+            const listStyles = 'margin:0.5em 0; padding-left:1.5em;'
+            return `style="${existingStyles} ${listStyles}"`
+          }
+        )
+      } else {
+        // Add new style attribute
+        return `<ul${attrs} style="margin:0.5em 0; padding-left:1.5em;">`
       }
-      
-      // Add new style attribute with defaults
-      const trimmedAttrs = attrs.trim()
-      const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
-      return `<ul${newAttrs} style="${defaultStyles}">`
     }
   )
 
   processed = processed.replace(
     /<ol([^>]*)>/gi,
     (match, attrs) => {
-      // Default email-safe styles for container
-      const defaultStyles = 'margin: 0.5em 0; padding-left: 1.5em;'
-
       if (attrs && attrs.includes('style=')) {
-        const styleMatch = attrs.match(/style="([^"]*)"/i)
-        if (styleMatch) {
-          const existingStyle = styleMatch[1]
-          // Merge defaults with existing styles (don't override)
-          const mergedStyle = `${defaultStyles} ${existingStyle}`.trim()
-          return match.replace(/style="[^"]*"/i, `style="${mergedStyle}"`)
-        }
+        return match.replace(
+          /style="([^"]*)"/i,
+          (styleMatch, existingStyles) => {
+            const listStyles = 'margin:0.5em 0; padding-left:1.5em;'
+            return `style="${existingStyles} ${listStyles}"`
+          }
+        )
+      } else {
+        return `<ol${attrs} style="margin:0.5em 0; padding-left:1.5em;">`
       }
-      
-      // Add new style attribute with defaults
-      const trimmedAttrs = attrs.trim()
-      const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
-      return `<ol${newAttrs} style="${defaultStyles}">`
     }
   )
 
-  // Process <li> elements - preserve line-height and margin-bottom from editor, add email-safe defaults
+  // Process <li> elements - preserve margin-bottom and line-height from editor
   processed = processed.replace(
     /<li([^>]*)>/gi,
     (match, attrs) => {
@@ -102,37 +90,44 @@ export function processListStyles(html: string): string {
         return match.replace(
           /style="([^"]*)"/i,
           (styleMatch, existingStyles) => {
-            // Extract line-height and margin-bottom if they exist (from editor controls)
-            let preservedLineHeight = ''
+            // Extract existing margin-bottom and line-height if they exist (from editor controls)
             let preservedMarginBottom = ''
+            let preservedLineHeight = ''
+            
+            const marginBottomMatch = existingStyles.match(/margin-bottom\s*:\s*([^;!]+?)(\s*!important)?\s*(;|$)/i)
+            if (marginBottomMatch) {
+              // Preserve the value, always add !important to ensure it overrides CSS
+              const value = marginBottomMatch[1].trim()
+              preservedMarginBottom = `margin-bottom: ${value} !important;`
+            }
             
             const lineHeightMatch = existingStyles.match(/line-height\s*:\s*([^;]+?)(;|$)/i)
             if (lineHeightMatch) {
               preservedLineHeight = `line-height: ${lineHeightMatch[1].trim()};`
             }
             
-            const marginBottomMatch = existingStyles.match(/margin-bottom\s*:\s*([^;]+?)(;|$)/i)
-            if (marginBottomMatch) {
-              preservedMarginBottom = `margin-bottom: ${marginBottomMatch[1].trim()};`
-            }
-            
-            // Remove line-height and margin-bottom from existing styles (we'll add them back)
+            // Remove margin-bottom and line-height from existing styles (we'll add them back)
+            // Must match with or without !important
             const cleanedStyles = existingStyles
-              .replace(/line-height\s*:\s*[^;]+;?/gi, '')
-              .replace(/margin-bottom\s*:\s*[^;]+;?/gi, '')
+              .replace(/margin-bottom\s*:\s*[^;!]+(!important)?\s*;?\s*/gi, '')
+              .replace(/line-height\s*:\s*[^;!]+(!important)?\s*;?\s*/gi, '')
               .trim()
             
             // Build final style: preserved values + email-safe defaults + any other styles
-            const itemStyles = 'margin:0; padding:0;'
-            const preservedStyles = `${preservedLineHeight} ${preservedMarginBottom}`.trim()
+            // Use individual margin properties instead of margin:0 to avoid overriding margin-bottom
+            // Ensure margin-bottom has !important to override any CSS defaults
+            const itemStyles = 'padding:0; margin-top:0; margin-left:0; margin-right:0;'
+            // If margin-bottom was preserved, it already has !important; if not, add default with !important
+            const marginBottomStyle = preservedMarginBottom || 'margin-bottom: 0 !important;'
+            const preservedStyles = `${marginBottomStyle} ${preservedLineHeight}`.trim()
             const mergedStyles = `${itemStyles} ${preservedStyles} ${cleanedStyles}`.trim()
             
             return `style="${mergedStyles}"`
           }
         )
       } else {
-        // No existing styles - add email-safe defaults only (editor will add line-height/margin-bottom when user interacts)
-        return `<li${attrs} style="margin:0; padding:0;">`
+        // No existing styles - add email-safe defaults only (no margin-bottom, let editor set it)
+        return `<li${attrs} style="padding:0; margin-top:0; margin-left:0; margin-right:0;">`
       }
     }
   )

@@ -1,50 +1,86 @@
-// scripts/dev-with-browser.js - Start dev server and open browser
+// scripts/dev-with-browser.js - Start Next.js dev server and open browser automatically
+
 const { spawn } = require('child_process')
 const { exec } = require('child_process')
+const os = require('os')
+
+const platform = os.platform()
+const url = 'http://localhost:3000'
 
 // Start Next.js dev server
-const nextDev = spawn('next', ['dev'], {
+console.log('Starting Next.js development server...')
+const devServer = spawn('npx', ['next', 'dev'], {
   stdio: 'inherit',
   shell: true,
-  cwd: process.cwd(),
 })
 
-// Wait a bit for server to start, then open browser
+// Wait for server to start, then open browser
 setTimeout(() => {
-  const url = 'http://localhost:3000'
-  const platform = process.platform
-
-  let command
+  console.log(`Opening ${url} in your default browser...`)
+  
   if (platform === 'win32') {
-    // Windows - Use PowerShell Start-Process to force opening in external browser window
-    // This ensures it opens outside of Cursor's embedded browser
-    command = `powershell -Command "Start-Process '${url}'"`
+    // Windows: Use PowerShell to open in external browser (not Cursor's embedded browser)
+    exec(`powershell -Command "Start-Process '${url}'"`, (error) => {
+      if (error) {
+        console.error('Failed to open browser:', error)
+      }
+    })
   } else if (platform === 'darwin') {
     // macOS
-    command = `open ${url}`
+    exec(`open ${url}`, (error) => {
+      if (error) {
+        console.error('Failed to open browser:', error)
+      }
+    })
   } else {
     // Linux
-    command = `xdg-open ${url}`
+    exec(`xdg-open ${url}`, (error) => {
+      if (error) {
+        console.error('Failed to open browser:', error)
+      }
+    })
   }
-
-  exec(command, (error) => {
-    if (error) {
-      console.log(`Could not automatically open browser. Please navigate to ${url}`)
-      console.log(`Error: ${error.message}`)
-    } else {
-      console.log(`Opening browser at ${url} in external window`)
-    }
-  })
 }, 3000) // Wait 3 seconds for server to start
 
-// Handle process termination
+// Handle server process exit
+devServer.on('exit', (code) => {
+  console.log('Dev server exited')
+  process.exit(code)
+})
+
+// Handle Ctrl+C - properly kill the dev server and its child processes
 process.on('SIGINT', () => {
-  nextDev.kill('SIGINT')
-  process.exit()
+  console.log('\nShutting down dev server...')
+  if (platform === 'win32') {
+    // Windows: Kill the process tree
+    devServer.kill('SIGTERM')
+    // Give it a moment, then force kill if needed
+    setTimeout(() => {
+      if (!devServer.killed) {
+        devServer.kill('SIGKILL')
+      }
+      process.exit(0)
+    }, 1000)
+  } else {
+    devServer.kill('SIGINT')
+    process.exit(0)
+  }
 })
 
 process.on('SIGTERM', () => {
-  nextDev.kill('SIGTERM')
-  process.exit()
+  console.log('Shutting down dev server...')
+  devServer.kill('SIGTERM')
+  setTimeout(() => {
+    if (!devServer.killed) {
+      devServer.kill('SIGKILL')
+    }
+    process.exit(0)
+  }, 1000)
+})
+
+// Handle uncaught errors
+devServer.on('error', (error) => {
+  console.error('Dev server error:', error)
+  process.exit(1)
 })
 

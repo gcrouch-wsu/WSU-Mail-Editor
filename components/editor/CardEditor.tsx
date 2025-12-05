@@ -3,7 +3,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Card, Link, Padding } from '@/types/newsletter'
+import type { Card, Link } from '@/types/newsletter'
 import { Plus, Trash2 } from 'lucide-react'
 import { CTA_BUTTON_DEFAULTS } from '@/lib/config'
 import dynamic from 'next/dynamic'
@@ -41,8 +41,7 @@ export default function CardEditor({
   // Helper to update padding - filters out undefined values
   const updatePadding = (key: 'top' | 'right' | 'bottom' | 'left', value: string) => {
     const numValue = value === '' ? undefined : parseInt(value) || 0
-    const currentPadding = editedCard.padding || {}
-    const newPadding: Partial<Padding> = { ...currentPadding }
+    const newPadding = { ...editedCard.padding }
 
     if (numValue === undefined) {
       // Remove the key entirely if value is empty
@@ -54,7 +53,7 @@ export default function CardEditor({
 
     // Only set padding if there are any keys left, otherwise set to undefined
     updateCard({
-      padding: Object.keys(newPadding).length > 0 ? (newPadding as Padding | undefined) : undefined,
+      padding: Object.keys(newPadding).length > 0 ? newPadding : undefined,
     })
   }
 

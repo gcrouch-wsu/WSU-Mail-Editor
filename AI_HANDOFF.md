@@ -1,7 +1,7 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: Template type detection fixes, TypeScript build fixes)
-**Project Version:** 8.0 (Next.js/TypeScript)
+**Last Updated:** December 2025 (Latest: List spacing fixes attempt, port cleanup reminder)  
+**Project Version:** 8.0 (Next.js/TypeScript)  
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
 ## Project Overview
@@ -92,268 +92,6 @@ wsu-mail-editor/
 
 ## Recent Changes (December 2025)
 
-### Rich Text Editor UX Improvements & Feature Additions (Latest)
-- **Added:** Comprehensive improvements to TiptapEditor and CardEditor user experience
-- **Summary:** Fixed critical UX issues and added standard editor features that were missing
-
-#### TiptapEditor Enhancements (components/editor/TiptapEditor.tsx)
-
-**1. List Spacing Controls Refactor (Dec 2025)**
-- **Problem (Original):** When list item text wrapped to multiple lines, the lines would crash together
-- **Root Cause:** Confusion between two different types of spacing:
-  1. Line-height within a list item (for wrapped text)
-  2. Spacing between different list items
-- **Solution:** Split into TWO separate controls with different purposes:
-  - **Line Height Control** - Controls spacing for wrapped text WITHIN a single list item (applies `line-height` to `<li>` elements)
-  - **Item Spacing Control** - Controls spacing BETWEEN list items (applies `margin-bottom` to `<li>` elements)
-- **Implementation:**
-  - Added two state variables: `listLineHeight` (default 1.0) and `listItemSpacing` (default 4px)
-  - Created two separate toolbar inputs that appear when cursor is in a list OR document has lists
-  - Created `applyListStyles()` function that applies both styles to `<li>` elements inline
-  - Removed line-height from `<ul>`/`<ol>` containers (no longer needed)
-  - Line height range: 0.5-3.0 (for wrapped text)
-  - Item spacing range: 0-50px (for spacing between items)
-  - **Fixed (Dec 2025):** Controls now show immediately when cursor enters a list
-  - **Fixed (Dec 2025):** Auto-initialization of default styles when entering a list (ensures controls work on newly created lists)
-  - Added `isInList` state tracking with `onSelectionUpdate` callback
-  - Added useEffect to auto-apply default styles to unstyled list items
-- **Result:**
-  - Users can keep wrapped text single-spaced (line-height: 1.0) while adding breathing room between list items
-  - Clear separation of concerns between intra-item and inter-item spacing
-  - Both styles preserved in preview and export HTML
-  - Controls appear immediately when cursor is in any list
-  - Controls work immediately on both new and existing lists
-
-**2. Nested List Hierarchy Visualization (Dec 2025)**
-- **Problem:** Nested lists showed the same bullet/number style at all levels, making hierarchy unclear
-- **Solution:** Added CSS rules for different list styles at different nesting levels
-- **Bullet List Hierarchy:**
-  - Level 1: Filled circle (disc)
-  - Level 2: Hollow circle (circle)
-  - Level 3+: Square
-- **Ordered List Hierarchy:**
-  - Level 1: Numbers (1, 2, 3...)
-  - Level 2: Lowercase letters (a, b, c...)
-  - Level 3+: Lowercase Roman numerals (i, ii, iii...)
-- **Implementation:** Added CSS selectors in `app/globals.css`:
-  - `.ProseMirror ul ul { list-style-type: circle; }`
-  - `.ProseMirror ul ul ul { list-style-type: square; }`
-  - `.ProseMirror ol ol { list-style-type: lower-alpha; }`
-  - `.ProseMirror ol ol ol { list-style-type: lower-roman; }`
-- **Result:** Visual hierarchy is now immediately clear when indenting lists
-
-**3. List Indent/Outdent Functionality**
-- **Added:** Full support for nested/hierarchical lists with keyboard shortcuts and toolbar buttons
-- **Keyboard Shortcuts:**
-  - **Tab** - Indent list item (create sub-list)
-  - **Shift+Tab** - Outdent list item (lift to parent level)
-- **Toolbar Buttons:**
-  - Indent button (IndentIncrease icon) - appears when in list
-  - Outdent button (IndentDecrease icon) - appears when in list
-  - Both buttons are conditionally shown only when active in a list
-- **Implementation:**
-  - Added `handleKeyDown` in `editorProps` to intercept Tab key
-  - **Fixed (Dec 2025):** Changed from using low-level ProseMirror transactions (lift/wrap) to Tiptap's proper commands (`sinkListItem`/`liftListItem`)
-  - Previous implementation was incorrectly wrapping list items directly, causing errors with ordered lists
-  - Now uses `editor.chain().focus().sinkListItem('listItem').run()` for indenting
-  - Now uses `editor.chain().focus().liftListItem('listItem').run()` for outdenting
-  - Same fix applied to toolbar button handlers
-  - Buttons now properly check if commands can execute using `editor.can().sinkListItem('listItem')`
-- **Result:** Users can now create structured multi-level lists for both bullet and ordered lists without errors
-
-**4. New Text Formatting Options**
-- **Subscript** - `H₂O` formatting (added SubscriptExtension from @tiptap/extension-subscript)
-- **Superscript** - `E=mc²` formatting (added SuperscriptExtension from @tiptap/extension-superscript)
-- **Clear Formatting** - Remove all formatting from selected text (uses `.unsetAllMarks()`)
-- **Toolbar Location:** Added after Strikethrough button, before Headings section
-
-**5. Structural Elements**
-- **Blockquote** - For citations and callouts (already in StarterKit, just needed toolbar button)
-- **Code Block** - For code snippets (already in StarterKit, just needed toolbar button)
-- **Horizontal Rule** - Section dividers (already in StarterKit, just needed toolbar button)
-- **Toolbar Location:** Blockquote and Code Block after Heading 3, Horizontal Rule after text alignment
-
-**6. Icons Added**
-- Import additions: `IndentIncrease`, `IndentDecrease`, `Quote`, `Separator`, `RemoveFormatting`, `Code2`, `Subscript`, `Superscript`
-- All from lucide-react icon library
-
-#### CardEditor Modal UX Improvements (components/editor/CardEditor.tsx)
-
-**1. Sticky Footer for Action Buttons**
-- **Problem:** Long card content required scrolling back to top to click Save/Cancel buttons
-- **Solution:** Moved Save/Cancel buttons from sticky header to sticky footer at bottom
-- **Implementation:**
-  - Changed modal container to `flex flex-col` layout
-  - Content area uses `overflow-y-auto flex-1` for scrolling
-  - Footer is separate div with `border-t` at bottom
-  - Delete button remains in header (destructive actions should be separate)
-- **Result:** Save/Cancel always visible at bottom, no scrolling needed
-
-**2. Text Overflow Handling**
-- **Problem:** Long URLs and titles could overflow container boundaries
-- **Solution:** Added `overflow-hidden text-ellipsis` classes to text inputs
-- **Affected Inputs:**
-  - Title input (card title field)
-  - All URL inputs (icon URLs, signature image URLs, link URLs)
-- **Result:** Long text is truncated with ellipsis (...) instead of breaking layout
-
-#### Files Modified
-- **components/editor/TiptapEditor.tsx**
-  - Added 7 new icon imports
-  - Added SubscriptExtension and SuperscriptExtension imports
-  - Added extensions to editor configuration
-  - Added `handleKeyDown` for Tab/Shift+Tab in lists (fixed Dec 2025 to use proper Tiptap commands)
-  - Refactored list spacing controls (Dec 2025):
-    - Split single spacing control into two: line-height and item spacing
-    - Added `listLineHeight` and `listItemSpacing` state variables
-    - Created `applyListStyles()` function to apply both styles inline to `<li>` elements
-    - Removed line-height from `<ul>` and `<ol>` containers
-  - Added 8 new toolbar buttons (indent, outdent, subscript, superscript, clear formatting, blockquote, code block, horizontal rule)
-- **app/globals.css**
-  - Added nested list hierarchy styles (Dec 2025):
-    - Bullet lists: disc → circle → square
-    - Ordered lists: decimal → lower-alpha → lower-roman
-  - Removed obsolete line-height inheritance rules (Dec 2025)
-  - Fixed default line-height for `<li>` to 1.0 (from CSS variable)
-- **components/editor/CardEditor.tsx**
-  - Restructured modal layout (flex-col with sticky footer)
-  - Moved Save/Cancel buttons from header to footer
-  - Added overflow handling classes to 4 input fields
-
-#### Missing Features Analysis (Completed)
-- Investigated three UX issues reported by user
-- Identified and cataloged missing standard editor features
-- Prioritized features into High/Medium/Low categories
-- Implemented all High and Medium priority features
-
-#### Dependencies Added
-- `@tiptap/extension-subscript` - Subscript text formatting
-- `@tiptap/extension-superscript` - Superscript text formatting
-
-✅ **Status:** All features working in editor, preview, and export. Tested with nested lists (including hierarchy visualization), text formatting, and long URLs. List spacing controls refactored (Dec 2025) for better separation between line-height and item spacing.
-
-### Per-Card Padding Controls
-- **Added:** Individual padding override controls for each card
-- **Location:** Card editor → "Card Styling" section
-- **Implementation:**
-  - 4-input grid layout (top, right, bottom, left)
-  - Empty fields use global padding settings
-  - Fixed bug where empty fields would override global settings with `undefined` values
-  - Smart padding management: only saves non-empty values, removes entire padding object if all fields cleared
-  - Default resource cards now include `padding: { bottom: 20 }` for better spacing below icons/links
-- **Use Case:** Improve resource card layout by increasing bottom padding to add breathing room after links/images
-- **Files Modified:**
-  - `components/editor/CardEditor.tsx` - Added padding override controls with proper undefined handling
-  - `lib/defaults.ts` - Set bottom padding to 20px for all default resource cards
-- **Data Model:** Already existed in types (`padding?: Padding` on all card types) - just needed UI controls
-- ✅ **Status:** Working in editor, preview, and export
-
-### Accent Bar Toggle
-- **Added:** Global toggle to enable/disable accent bar on standard and event cards
-- **Location:** Settings panel → "Accent Bar" section
-- **Implementation:**
-  - Checkbox: "Show accent bar on standard/event cards"
-  - When disabled: Cards render as single-column table with all corners properly rounded
-  - When enabled: Two-column table with accent bar + content (existing behavior)
-  - Width and color controls are collapsible (only show when enabled)
-  - Default: Enabled (true) for backwards compatibility
-- **Files Modified:**
-  - `types/newsletter.ts` - Added `accent_bar_enabled?: boolean` to Settings interface
-  - `lib/config.ts` - Added default value (true)
-  - `components/editor/SettingsEditor.tsx` - Added toggle with collapsible width/color controls
-  - `lib/email-templates.ts` - Updated `renderStandardCard()` and `renderEventCard()` to conditionally render accent bar
-- ✅ **Status:** Working in editor, preview, and export
-
-### Customizable Shadow Controls
-- **Added:** Comprehensive shadow customization system to replace simple on/off toggles
-- **Location:** Settings panel → "Shadow Effects" section
-- **Implementation:**
-  - **Shadow Properties:**
-    - **Color** - Full color picker support (hex values)
-    - **Blur** - 0-50px range for shadow softness
-    - **Spread** - -20 to 50px range for shadow size
-    - **Offset X** - -50 to 50px horizontal positioning
-    - **Offset Y** - -50 to 50px vertical positioning
-    - **Opacity** - 0-1 range for shadow intensity
-  - **Two Shadow Types:**
-    - **Accent Bar Shadow** - Applied to the crimson accent bar on standard/event cards
-    - **Card Shadow** - Applied to the entire card container
-  - **UI Design:**
-    - Collapsible controls (only show when shadow is enabled)
-    - 3-column grid for blur/spread/opacity
-    - 2-column grid for offset X/Y
-    - Color picker with hex input field
-    - Visual indicator (crimson accent border) when expanded
-  - **Technical Details:**
-    - Created new `Shadow` interface with 7 properties (enabled, color, blur, spread, offset_x, offset_y, opacity)
-    - Added `getShadowStyle()` helper function in `lib/email-templates.ts`
-    - Backwards compatible with legacy boolean shadow values
-    - Converts hex colors to rgba format with opacity
-    - Generates proper CSS `box-shadow` property
-  - **Use Case:** Create glowing "frame" effects around cards using colored shadows (e.g., crimson glow) as an alternative to the impossible accent bar wrap feature
-- **Files Modified:**
-  - `types/newsletter.ts` - Added `Shadow` interface, updated `Settings` interface
-  - `lib/config.ts` - Updated defaults with Shadow objects (enabled: false, default colors/values)
-  - `lib/email-templates.ts` - Added `getShadowStyle()` function, updated `getCardStyle()` and `getAccentBarStyle()`
-  - `components/editor/SettingsEditor.tsx` - Complete reorganization with new shadow controls
-- ✅ **Status:** Working in editor, preview, and export
-
-### Settings Editor Reorganization
-- **Added:** Visual clustering and improved organization of settings panel
-- **Implementation:**
-  - **Grouped into logical sections** with bordered cards:
-    1. **Layout** - Container width, section spacing, card spacing (2-column grid)
-    2. **Section Borders** - Toggle, color, vertical spacing (collapsible when disabled)
-    3. **Global Padding** - Text padding and image padding (4-column grids)
-    4. **Card Styling** - Border radius
-    5. **Accent Bar** - Width and color (2-column grid)
-    6. **Shadow Effects** - Accent bar shadow and card shadow (collapsible controls)
-  - **Visual Design:**
-    - Each section has bordered card with header and underline
-    - Consistent spacing between sections (space-y-6)
-    - Collapsible sub-controls only show when parent feature is enabled
-    - Better use of grid layouts to reduce vertical space
-    - Reduced excessive help text
-  - **Removed Controls:**
-    - **Accent Bar Extension** controls removed from UI (feature abandoned - see Known Issues)
-    - Extension settings still exist in data model but have no UI controls
-- **Files Modified:**
-  - `components/editor/SettingsEditor.tsx` - Complete rewrite with new organization
-- ✅ **Status:** Working, much cleaner layout with less wasted space
-
-### List Line-Height/Spacing Control
-- **Added:** Line-height (spacing) control for lists in the rich text editor
-- **Location:** TiptapEditor toolbar (appears when lists are active or present in document)
-- **Implementation:**
-  - Control appears as "Spacing:" input field (0.5-2.0 range, step 0.1)
-  - Applies line-height to `<ul>` and `<ol>` elements as inline styles
-  - Preserves line-height values in preview and exported HTML
-  - Uses `processListStyles()` function in `lib/utils.ts` to preserve line-height during HTML processing
-  - List items (`<li>`) use `line-height:inherit` to respect parent list's line-height
-- **Files Modified:**
-  - `components/editor/TiptapEditor.tsx` - Added spacing control UI and `handleListSpacingChange()` function
-  - `lib/utils.ts` - Updated `processListStyles()` to preserve line-height from editor
-  - `lib/email-templates.ts` - Calls `processListStyles()` via `processBodyHtmlForEmail()`
-    - **Fixed (Dec 2025):** Event cards (`renderEventCard()`) and Resource cards (`renderResourceCard()`) now process body HTML through `processBodyHtmlForEmail()` to ensure list line-height works in all card types
-    - Previously, only Standard, Letter, and CTA cards processed body HTML; Event and Resource cards used raw HTML, causing list spacing to not work
-  - `app/globals.css` - Added CSS to support line-height inheritance on list items
-- **Tiptap Extensions:** Configured BulletList and OrderedList separately to preserve HTMLAttributes
-- ✅ **Status:** Working in editor, preview, and export for all card types (Standard, Event, Resource, CTA, Letter)
-
-### Browser Auto-Open on Dev Server Start
-- **Added:** Automatic browser opening when starting development server
-- **Implementation:**
-  - Created `scripts/dev-with-browser.js` script
-  - Uses PowerShell `Start-Process` on Windows to open in external browser (outside Cursor)
-  - Cross-platform support (Windows, macOS, Linux)
-  - Waits 3 seconds for server to initialize before opening browser
-- **Scripts:**
-  - `npm run dev` - Starts server and opens browser automatically
-  - `npm run dev:no-open` - Starts server without opening browser
-- **Files Added:**
-  - `scripts/dev-with-browser.js` - Browser opening script
-- ✅ **Status:** Working
-
 ### Org Chart Integration
 - **Added:** Complete org chart editor integration into the Next.js app
 - **Location:** `/orgchart` route
@@ -413,13 +151,7 @@ wsu-mail-editor/
     - Divider vertical spacing (above/below divider, default 0px)
     - Card spacing (NOT WORKING - see Known Issues, default 20px)
     - Card border radius (global, can be overridden per card, default 0px)
-    - Accent bar width (for standard/event cards, default 4px, vertical only)
-    - Accent bar color (default WSU crimson #A60F2D)
-  - **Shadow Effects:**
-    - **Accent Bar Shadow** - Customizable shadow for accent bars (color, blur, spread, offset X/Y, opacity)
-    - **Card Shadow** - Customizable shadow for card containers (color, blur, spread, offset X/Y, opacity)
-    - Can create glowing "frame" effects using colored shadows (e.g., crimson glow)
-    - Email-safe implementation using CSS box-shadow
+    - Accent bar width (for standard/event cards, default 4px, vertical only - wrap feature NOT IMPLEMENTED)
   - **Padding:**
     - Text padding (top, right, bottom, left, default 20px)
     - Image padding (top, right, bottom, left, default varies)
@@ -428,15 +160,11 @@ wsu-mail-editor/
     - Heading styles
 - **Content Editing:**
   - **Rich Text Editor (Tiptap):**
-    - Bold, italic, underline, strikethrough
-    - Headings (H1-H3)
-    - Lists (bulleted, numbered) with line-height/spacing control (0.5-2.0)
-      - Spacing control appears in toolbar when lists are active or present
-      - Applies line-height to list containers (`<ul>`/`<ol>`)
-      - Preserved in preview and exported HTML
-    - Text alignment (left, center, right)
-    - Links (insert, remove)
-    - Tables (insert, edit, format cells, add/delete rows/columns)
+    - Bold, italic, underline
+    - Headings (H1-H6)
+    - Lists (bulleted, numbered) with custom spacing control
+    - Links
+    - Tables (insert, edit, format cells, multi-cell selection)
     - Code view toggle (direct HTML editing)
     - Undo/redo
   - **Table Editor:**
@@ -542,58 +270,29 @@ Defined in `lib/config.ts`:
    ```bash
    npm run dev
    ```
-   - Automatically opens browser in external window (outside Cursor)
-   - Use `npm run dev:no-open` to start without opening browser
+   The server will start on http://localhost:3000 and automatically open in your default browser.
 
 3. **Access the application:**
    - Homepage: http://localhost:3000
    - Newsletter Editor: http://localhost:3000/editor
    - Org Chart Editor: http://localhost:3000/orgchart
 
-4. **Available scripts:**
-   - `npm run dev` - Start development server and open browser automatically
-   - `npm run dev:no-open` - Start development server without opening browser
+4. **IMPORTANT - Port Cleanup After Testing:**
+   - **ALWAYS kill all dev server processes after testing to free up ports**
+   - If ports aren't released, Next.js will try the next port (3001, 3002, etc.), creating multiple instances
+   - To check which ports are in use: `netstat -ano | findstr ":300"`
+   - To kill a specific process: `taskkill /F /PID [PID_NUMBER]`
+   - To kill all node processes (use with caution): `taskkill /F /IM node.exe`
+   - **Always verify ports are free before starting a new dev server**
+
+5. **Available scripts:**
+   - `npm run dev` - Start development server (opens browser automatically)
+   - `npm run dev:no-open` - Start dev server without opening browser
    - `npm run build` - Build for production
    - `npm run start` - Start production server
    - `npm run lint` - Run ESLint
    - `npm run format` - Format code with Prettier
    - `npm run checkfmt` - Check code formatting
-
-## Design Decisions
-
-### Shadow Effects vs. Accent Bar Wrap (December 2025)
-
-**Problem:** Users wanted a way to create visual "frames" around cards that wrap around the border radius, particularly when using rounded corners. Initial attempts focused on extending the accent bar horizontally to wrap around corners.
-
-**Attempts Made:**
-- Multiple table-based approaches tried (2-row, 3-row, nested tables, fixed column widths)
-- All failed due to fundamental limitations of email-safe HTML
-- Email clients only support tables and inline styles (no modern CSS Grid, Flexbox, or SVG)
-- Horizontal and vertical bars rendered in separate table cells couldn't visually connect
-- Rounded corners require continuous curves that table-based layouts can't produce
-
-**Decision:** Abandon accent bar wrap feature entirely and implement customizable shadow controls instead
-
-**Rationale:**
-1. **Technical Feasibility:** Shadows work reliably across email clients using standard CSS `box-shadow`
-2. **Visual Effect:** Colored shadows (e.g., crimson glow) can create a "frame" effect similar to the desired wrapping
-3. **Simplicity:** Single CSS property vs. complex nested table structures
-4. **Flexibility:** Users can customize color, blur, spread, offsets, and opacity for creative effects
-5. **Maintenance:** No complex edge cases or email client compatibility workarounds
-
-**Implementation:**
-- Created `Shadow` interface with 7 customizable properties
-- Applied to both accent bars and card containers
-- Backwards compatible with legacy boolean shadow toggles
-- UI controls only show when shadow is enabled (collapsible design)
-
-**Alternative Use Cases:**
-- Subtle depth/elevation effects (default: black shadow with low opacity)
-- Glowing highlights (crimson shadow with high blur/spread)
-- Offset shadows for 3D card effects
-- Multiple shadow combinations (accent bar + card shadow together)
-
-**Outcome:** Feature provides the desired visual enhancement without the impossible technical constraints of the wrap approach.
 
 ## Important Implementation Details
 
@@ -645,14 +344,40 @@ Defined in `lib/config.ts`:
   - `renderCTABox()` - Generate CTA card HTML
   - `renderLetterCard()` - Generate letter card HTML
   - `renderFooter()` - Generate footer HTML
-  - `getCardStyle()` - Build card style with border radius, spacing, shadows, etc.
+  - `getCardStyle()` - Build card style with border radius, spacing, etc.
   - `getCardPadding()` - Calculate card padding from global/section/card settings
-  - `getShadowStyle()` - Generate CSS box-shadow from Shadow object (added December 2025)
-  - `getAccentBarStyle()` - Generate accent bar styles with optional shadow support
   - All functions use email-safe inline styles
   - Padding applied to `<td>` elements, not `<table>` elements (for email compatibility)
 
 ## Recent Editor Features (December 2025)
+
+### List Controls (Ordered and Bullet Lists) - ✅ WORKING
+- **Added:** Dynamic controls for list formatting that appear when cursor is in a list
+- **Location:** TiptapEditor toolbar (appears after list buttons when cursor is in a list)
+- **Controls:**
+  - **Line Height:** Controls spacing within list items when text wraps (1.0-3.0, default: 1.5)
+    - Prevents wrapped lines from colliding with each other
+    - Applied as `line-height` CSS property on `<li>` elements
+  - **Item Gap:** Controls vertical spacing between list items (0-50px, default: 8px)
+    - Applied as `margin-bottom` CSS property on `<li>` elements
+  - **Indent/Outdent:** Tab/Shift+Tab or toolbar buttons to create nested lists
+- **Implementation:**
+  - Custom ListItem extension with style attribute support (TiptapEditor.tsx:68-94)
+  - Uses `onSelectionUpdate` callback to detect cursor position in lists
+  - State variable `isInList` tracks whether cursor is in bullet or ordered list
+  - Styles applied inline via custom extension's `style` attribute with `!important`
+  - Tab/Shift+Tab keyboard shortcuts for indent/outdent (TiptapEditor.tsx:113-133)
+- **CSS Changes:**
+  - **CRITICAL FIX for Item Gap below 16px:**
+    - **Root Cause:** TipTap wraps list item content in `<p>` tags which had `margin: 1em 0` (~16px)
+    - CSS margin collapse between `<li>` and `<p>` margins caused the larger value to win
+    - This prevented Item Gap values below 16px from working
+    - **Solution:** Remove paragraph margins inside list items:
+      - Editor CSS (globals.css:111-114): `.ProseMirror li p { margin-top: 0; margin-bottom: 0; }`
+      - Preview CSS (styles.ts:89-92): `li p { margin-top: 0 !important; margin-bottom: 0 !important; }`
+  - Set explicit margins on `<li>` elements: `margin-top: 0; margin-left: 0; margin-right: 0; margin-bottom: 0;`
+  - Inline styles use `!important` to override browser defaults
+- ✅ **Status:** FULLY WORKING - All controls functional, Item Gap works for all values 0-50px, nested lists indent properly
 
 ### Divider Line Controls
 - **Added:** Global controls for section divider lines (horizontal lines between sections)
@@ -701,158 +426,35 @@ Defined in `lib/config.ts`:
 - **Default:** 24px
 - ✅ **Status:** Working correctly
 
-### Accent Bar Wrap Control (FEATURE ABANDONED - UI CONTROLS REMOVED)
-- **Intended Feature:** Allow the crimson accent bar on standard and event cards to wrap around the card perimeter (top and bottom edges) when border radius is applied, creating a continuous U-shaped frame
-- **Decision (December 2025):** Feature deemed impossible with email-safe HTML/table constraints. UI controls removed from SettingsEditor. Data model properties remain for backwards compatibility but are not exposed to users.
+### Accent Bar Wrap Control (NOT IMPLEMENTED)
+- **Intended Feature:** Allow the crimson accent bar on standard and event cards to extend horizontally along the top edge
 - **Current Behavior:** Accent bar is a vertical bar on the left side of cards (4px wide by default)
 - **Desired Behavior:** 
   - Accent bar starts as a vertical bar on the left edge (as it currently does)
-  - When border radius > 0 and extension is enabled, horizontal bars wrap around the top and bottom edges
-  - User can control:
-    - Enable/disable extension (toggle)
-    - Top extension distance (pixels)
-    - Bottom extension distance (pixels, independent from top)
-  - Visual: The red accent bar would wrap around the rounded corners continuously, creating a U-shaped frame
-  - Horizontal bars should wrap around the outside of the card, not extend into content area
-  - Bars should follow the border radius and be continuous (no gaps)
+  - User can control how far the accent bar extends horizontally along the top edge
+  - Visual: The red accent bar would wrap around the top-left corner and continue horizontally
+  - Control would specify the horizontal extension distance (in pixels)
 - **Visual Description:**
   - **Default (current):** Red vertical bar on left edge only
-  - **With wrap:** Red vertical bar on left edge + red horizontal bars extending along top and bottom edges, wrapping around rounded corners
-  - The horizontal extension creates a U-shaped frame around the card perimeter
-- **Implementation Attempts (All Failed):**
-  
-  **Attempt 1 - Initial Structure:**
-  - Added `accent_bar_extension` (single value) to settings
-  - Created 2-row table structure (top bar row + card row)
-  - Issue: Horizontal bar didn't align properly with vertical bar
-  - Issue: Didn't handle bottom extension
-  
-  **Attempt 2 - U-Shape Structure:**
-  - Changed to `accent_bar_extension_top` and `accent_bar_extension_bottom` (separate controls)
-  - Created 3-row table structure (top bar + card + bottom bar)
-  - Added `getHorizontalAccentBarStyle()` helper function
-  - Issue: Horizontal bars were constrained to vertical bar width instead of extending horizontally
-  - Issue: Bars didn't wrap around corners continuously
-  
-  **Attempt 3 - Outer Wrapper Approach:**
-  - Created outer wrapper table with horizontal bars outside the card
-  - Used nested tables to position bars
-  - Issue: Horizontal bars lost their horizontal extension (were constrained)
-  - Issue: Structure became too complex with nested tables
-  
-  **Attempt 4 - Fixed Column Alignment:**
-  - Used fixed column widths to align all rows
-  - Horizontal bars in separate rows with proper width attributes
-  - Issue: Bars appeared but didn't visually connect/wrap around corners
-  - Issue: Continuous wrapping around border radius not achieved
-  
-  **Final Attempt - Simplified Structure:**
-  - Horizontal bars in first column, extending horizontally
-  - Vertical bar in middle row, first column
-  - Issue: Horizontal parts of wrap were lost/not rendering correctly
-  - Issue: Failed to create continuous wrap around rounded corners
-  
-- **What Was Added (All Removed December 2025):**
-  - Extension settings were added to data model but have been completely removed
-  - Function `getHorizontalAccentBarStyle()` was created but has been removed
-  - UI controls were never added (feature abandoned before UI implementation)
-  - Shadow support added: `accent_bar_shadow` and `card_shadow` (these work correctly)
-  
-- **Current Status:** ❌ **FEATURE ABANDONED - COMPLETELY REMOVED**
+  - **With wrap:** Red vertical bar on left edge + red horizontal bar extending from top-left corner along the top edge
+  - The horizontal extension would be controlled by a "wrap" or "extension" value
+- **Implementation Attempt:**
+  - Attempted to add `accent_bar_wrap` property to card types and settings
+  - Attempted to modify `getAccentBarHtml()` function to support horizontal extension
+  - Changes were reverted due to errors
+- **Current Status:** ❌ **NOT IMPLEMENTED**
   - Only vertical accent bar exists (left edge)
   - No horizontal extension capability
-  - Extension settings completely removed from data model (December 2025)
-  - No UI controls (never implemented)
-  - `accent_bar_width` control exists and works (affects vertical bar width)
-  - `accent_bar_color` control exists and works
-  - **Alternative Solution:** Use customizable shadow controls (added December 2025) to create glowing "frame" effects around cards with colored shadows
-  
+  - `accent_bar_width` control exists but only affects vertical bar width
 - **Code Location:**
-  - Accent bar rendering: `lib/email-templates.ts` (`getAccentBarStyle()`)
-  - Used in: `renderStandardCard()` and `renderEventCard()` (vertical bar only)
-  - Extension code: All removed (no longer exists in codebase)
-  
-- **Why It Failed:**
-  - Email HTML limitations: Complex table structures don't render consistently across clients
-  - Alignment challenges: Horizontal bars need to align with vertical bar while extending horizontally
-  - Corner wrapping: Difficult to create continuous curve around rounded corners with table-based layout
-  - Visual continuity: Bars appeared disconnected or didn't wrap smoothly around corners
-  - Structure complexity: Multiple nested tables caused rendering issues
-  
+  - Accent bar rendering: `lib/email-templates.ts:507-510` (`getAccentBarStyle()`)
+  - Used in: `renderStandardCard()` and `renderEventCard()`
+  - Settings: `lib/config.ts:138` (`accent_bar_width: 4`)
 - **Future Implementation Notes:**
-  - Would need a fundamentally different approach - possibly using background images or SVG
-  - Email client compatibility is a major constraint (tables, inline styles only)
-  - May need to accept that continuous wrapping around corners isn't feasible with email-safe HTML
-  - Alternative: Could implement as separate decorative elements rather than continuous wrap
-  - Consider if feature is essential or if vertical bar alone is sufficient
-
-- **Implementation Prompt (for future attempts):**
-  
-  **Goal:** Create a U-shaped accent bar that wraps around the perimeter of newsletter cards with rounded corners, forming a continuous frame that follows the border radius.
-  
-  **Visual Description:**
-  - Cards have a vertical accent bar on the left edge (currently working, 4px wide by default)
-  - When border radius > 0 and extension is enabled, horizontal bars should extend from the vertical bar along the top and bottom edges
-  - The horizontal bars must wrap around the rounded corners continuously, following the border radius curve
-  - Result: A U-shaped frame around the card perimeter (vertical left + horizontal top + horizontal bottom)
-  - The bars should wrap around the OUTSIDE of the card, not extend into the content area
-  - No text/content space should be lost - horizontal bars are decorative elements outside the card
-  
-  **Technical Requirements:**
-  - Must use email-safe HTML (tables, inline styles only - no CSS Grid, Flexbox, or modern CSS)
-  - Must work across major email clients (Gmail, Outlook, Apple Mail, Yahoo)
-  - Cards are rendered using table-based layout with `border-collapse:separate` when border radius > 0
-  - Current card structure: Single-row table with `<td>` for vertical accent bar and `<td>` for content
-  - Border radius is applied using `border-radius` CSS with corner-specific styles via `getCornerCellStyle()`
-  
-  **User Controls Needed:**
-  1. Toggle: Enable/disable horizontal extension (boolean: `accent_bar_extension_enabled`)
-  2. Top Extension: Horizontal distance for top bar (number: `accent_bar_extension_top`, 0-200px)
-  3. Bottom Extension: Horizontal distance for bottom bar (number: `accent_bar_extension_bottom`, 0-200px, independent from top)
-  4. Extension only applies when `card_border_radius > 0` (no wrapping without rounded corners)
-  
-  **Current Implementation Context:**
-  - Vertical accent bar works perfectly (left edge, full height)
-  - Settings exist: `accent_bar_width`, `accent_bar_color`, `accent_bar_shadow` (all working)
-  - Extension settings have been completely removed from data model (December 2025)
-  - No UI controls exist (feature abandoned before UI implementation)
-  - Function `getHorizontalAccentBarStyle()` has been removed
-  
-  **Key Challenges from Previous Attempts:**
-  1. **Alignment:** Horizontal bars need to align with vertical bar position while extending horizontally
-  2. **Corner Continuity:** Bars must wrap around rounded corners smoothly, following the border radius curve
-  3. **Table Structure:** Email HTML requires table-based layout - complex nested structures caused rendering issues
-  4. **Visual Connection:** Bars appeared disconnected or didn't create continuous wrap around corners
-  5. **Column Widths:** Fixed column widths for alignment conflicted with horizontal extension needs
-  
-  **What Didn't Work:**
-  - 2-row structure (top bar + card) - alignment issues
-  - 3-row structure (top bar + card + bottom bar) - bars constrained to vertical bar width
-  - Outer wrapper tables - horizontal extension lost
-  - Nested tables - too complex, rendering failures
-  - Fixed column widths - prevented horizontal extension
-  
-  **Potential Approaches to Consider:**
-  - Background images/SVG for the horizontal bars (email-safe if embedded as data URIs)
-  - Single table with carefully calculated cell widths and positioning
-  - Overlapping table cells to create visual continuity
-  - Using `colspan` strategically to span horizontal bars
-  - Accepting that perfect continuity may not be achievable - implement as close approximation
-  
-  **Success Criteria:**
-  - Horizontal bars extend horizontally from vertical bar position
-  - Bars wrap around rounded corners following border radius
-  - Bars appear continuous (no visible gaps or disconnection)
-  - Works in live preview and HTML export
-  - Compatible with major email clients
-  - Content area remains unchanged (no space loss)
-  
-  **Files to Modify (if attempting implementation):**
-  - `lib/email-templates.ts`: `renderStandardCard()`, `renderEventCard()` (would need to add wrapping logic)
-  - `types/newsletter.ts`: Would need to add extension settings back to Settings interface
-  - `lib/config.ts`: Would need to add default values
-  - `lib/defaults.ts`: Would need to add to default newsletter creation
-  - `components/editor/SettingsEditor.tsx`: Would need to add UI controls (toggle + top/bottom inputs)
+  - Would need to modify card HTML structure to include a top horizontal bar
+  - Would need to handle corner radius if card has rounded corners
+  - Would need UI control in Settings or Card Editor for wrap distance
+  - Would need to ensure email client compatibility (tables, inline styles)
 
 ## Known Issues & TODOs
 
@@ -862,14 +464,44 @@ Defined in `lib/config.ts`:
 - ✅ JavaScript errors resolved
 - ✅ Download functionality working
 - ✅ Divider line controls working (color, spacing)
-- ✅ Customizable shadow controls implemented (December 2025)
-- ✅ Settings editor reorganized with better clustering (December 2025)
-- ✅ Per-card padding controls added (December 2025)
-- ✅ Accent bar toggle implemented (December 2025)
+- ✅ List controls fully working (line height, item gap, and indentation all functional)
 - ❌ Card spacing control NOT working (see Critical Issues)
-- ❌ Accent bar wrap control ABANDONED (feature deemed impossible with email HTML constraints)
+- ❌ Accent bar wrap control NOT implemented (see Critical Issues)
 
 ### Critical Issues
+- **List Controls Issues - ✅ FIXED (December 2025):**
+  - **Item Gap below 16px was ignored - NOW FIXED:**
+    - **Root Cause Identified:**
+      - TipTap wraps list item content in `<p>` tags: `<li><p>content</p></li>`
+      - The `<p>` tags had `margin: 1em 0` (approximately 16px) from global CSS
+      - **CSS margin collapse** between `<li>` margin-bottom and `<p>` margin-bottom caused the larger value to win
+      - When setting Item Gap to 5px: `max(5px from li, 16px from p) = 16px` due to margin collapse
+      - This is why values below 16px appeared to have no effect
+    - **Failed Attempts (for future reference - don't repeat these):**
+      1. ❌ Setting inline styles on `<li>` without addressing `<p>` margins
+      2. ❌ Using `!important` on `<li>` styles (margin collapse happens before specificity)
+      3. ❌ Removing margins from `ul/ol` containers (didn't address the paragraph issue)
+      4. ❌ Setting explicit margins on `<li>` (still overridden by paragraph margin collapse)
+    - **Successful Fix:**
+      - Remove paragraph margins inside list items in BOTH editor and preview CSS:
+      - **Editor CSS** (globals.css:111-114): `.ProseMirror li p { margin-top: 0; margin-bottom: 0; }`
+      - **Preview CSS** (styles.ts:89-92): `li p { margin-top: 0 !important; margin-bottom: 0 !important; }`
+      - This prevents margin collapse and allows the `<li>` inline styles to fully control spacing
+    - **Code Locations:**
+      - TiptapEditor.tsx:68-94 (custom ListItem extension with style attribute support)
+      - TiptapEditor.tsx:222-240 (updateListItemStyles function that applies inline styles)
+      - globals.css:111-114 (paragraph margin fix for editor)
+      - styles.ts:89-92 (paragraph margin fix for preview/email)
+    - **Lesson Learned:** Always check for margin collapse when dealing with nested block elements
+    - ✅ **Status:** FIXED - Item Gap now works for all values 0-50px in both editor and preview
+
+  - **Nested list indentation - ✅ WORKING:**
+    - Tab/Shift+Tab keyboard shortcuts work (TiptapEditor.tsx:113-133)
+    - Indent/Outdent toolbar buttons work when cursor is in a list
+    - TipTap's built-in `sinkListItem` and `liftListItem` commands handle nesting
+    - CSS provides proper indentation via `padding-left: 1.5em` on ul/ol (globals.css:53-66)
+    - ✅ **Status:** WORKING - Nested lists indent correctly
+
 - **Card Spacing Control Not Working:**
   - Control exists and updates state correctly
   - Spacer logic is implemented
@@ -882,92 +514,20 @@ Defined in `lib/config.ts`:
     5. Check browser console for any errors
     6. Verify `settings.card_spacing` is being read correctly (not always undefined)
 
-- **Accent Bar Wrap Control - ABANDONED AND REMOVED (December 2025):**
-  - Feature attempted multiple times but deemed impossible with email HTML constraints
-  - **Reason for Abandonment:**
-    - Email HTML (tables + inline styles only) cannot create continuous curved elements
-    - Horizontal and vertical bars in separate table cells don't connect smoothly
-    - Rounded corners require curves that table-based layouts can't produce
-    - Email client compatibility issues with complex nested table structures
-  - **Alternative Solution Implemented:**
-    - Customizable shadow controls (December 2025) can create glowing "frame" effects
-    - Users can set shadow color to crimson, increase blur/spread, and create visual "wrapping"
-    - Much simpler implementation with better email client compatibility
-  - **Cleanup Status:**
-    - Extension settings completely removed from data model (December 2025)
-    - No UI controls ever existed (feature abandoned before UI implementation)
-    - Unused function `getHorizontalAccentBarStyle()` removed
-    - All extension-related code has been cleaned up
-  - **No Further Action Needed** - Feature officially abandoned and removed
-
-### Future Development Suggestions
-
-#### Resource Card Layout Enhancements
-**Problem:** Resource cards with images can feel cramped, especially when images are followed by links without adequate spacing.
-
-**Current Solution:** Use per-card padding controls (added December 2025) to increase bottom padding on individual resource cards.
-
-**Future Enhancement Options:**
-
-1. **Image-Specific Spacing Controls**
-   - **Image Bottom Margin** - Dedicated control for space between image and content
-   - **Image Container Padding** - Add breathing room around the image itself
-   - **Image Border/Shadow** - Visual separation options (rounded corners, subtle shadows)
-   - **Implementation:** Add `image_bottom_margin?: number` to card types and UI controls
-
-2. **Image Style Presets**
-   - **Circular Treatment** - Round images with optional colored border
-   - **Card Style** - Image with background, padding, and shadow
-   - **Minimal** - Current behavior (image as-is)
-   - **Implementation:** Add `image_style?: 'default' | 'circular' | 'card'` property
-
-3. **Content Block Spacing**
-   - Separate controls for spacing between different content sections:
-     - Image → Title spacing
-     - Title → Body spacing
-     - Body → Links spacing
-   - More granular than overall padding controls
-   - **Implementation:** Add `content_spacing?: { image_to_title?: number, title_to_body?: number, body_to_links?: number }` to card types
-
-4. **Image Size Controls**
-   - Currently only `icon_size` exists for resource cards
-   - Add width/height controls for main images
-   - Add alignment options (left, center, right)
-   - **Implementation:** Extend existing `icon_size` or add separate `image_width/image_height` properties
-
-**Recommendation:** Start with #1 (Image Bottom Margin) as a quick win, then consider #2 (Image Style Presets) for visual polish.
-
-#### Email Client Compatibility Testing
-- Add automated testing against major email clients (Litmus or Email on Acid integration)
-- Document tested/supported email clients
-- Add email client compatibility warnings in UI
-
-#### Performance Optimizations
-- Debounce preview updates (currently regenerates on every keystroke)
-- Add loading indicators for slow operations
-- Optimize image handling (lazy loading, compression)
-
-#### Workflow Enhancements
-- **Card Templates** - Save frequently used card configurations as templates
-- **Bulk Card Operations** - Apply settings to multiple cards at once
-- **Card Duplication** - Quick duplicate button for cards
-- **Section Templates** - Save entire sections as reusable templates
-
-#### Accessibility Improvements
-- Enhanced validation for WCAG compliance
-- Automated alt text suggestions (AI-powered)
-- Color contrast checker for custom colors
-- Screen reader preview mode
-
-#### Version Control & Collaboration
-- Save multiple versions of newsletters
-- Compare versions side-by-side
-- Collaborative editing (multiple users)
-- Comment system for feedback
+- **Accent Bar Wrap Control Not Implemented:**
+  - Feature was attempted but reverted due to errors
+  - Current implementation only supports vertical accent bar (left edge)
+  - Desired: Accent bar should be able to extend horizontally along top edge
+  - **Implementation Requirements:**
+    1. Modify card HTML structure to support horizontal bar element
+    2. Add `accent_bar_wrap` or `accent_bar_extension` property to settings/cards
+    3. Update `getAccentBarStyle()` or create new function for horizontal bar
+    4. Handle corner radius when bar wraps around corner
+    5. Add UI control for wrap distance
+    6. Ensure email client compatibility
 
 ### Potential Improvements
 - [ ] Fix card spacing control (see Critical Issues above)
-- [ ] Add image bottom margin control for resource cards (see Future Development Suggestions)
 - [ ] Add error boundaries for better error handling
 - [ ] Add loading states for API calls
 - [ ] Improve mobile responsiveness for org chart editor
@@ -1127,11 +687,4 @@ Currently none required. All configuration is in `lib/config.ts`.
 3. Update this document if architecture changes
 4. Write clear commit messages
 5. Verify both editors still work after changes
-
-**Important - Accent Bar Wrap Feature:**
-- DO NOT attempt to implement accent bar wrapping/extension around card corners
-- This feature has been attempted multiple times and is impossible with email-safe HTML
-- All extension-related code has been removed from the codebase (December 2025)
-- If users request this, direct them to use customizable shadow controls instead (crimson glow effect)
-- The data model no longer contains any `accent_bar_extension_*` properties
 

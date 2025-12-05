@@ -4,9 +4,6 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import BulletList from '@tiptap/extension-bullet-list'
-import OrderedList from '@tiptap/extension-ordered-list'
-import ListItem from '@tiptap/extension-list-item'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
@@ -15,9 +12,8 @@ import TextAlign from '@tiptap/extension-text-align'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
-import SubscriptExtension from '@tiptap/extension-subscript'
-import SuperscriptExtension from '@tiptap/extension-superscript'
-import { useEffect, useState } from 'react'
+import ListItem from '@tiptap/extension-list-item'
+import { useEffect, useState, useCallback } from 'react'
 import PromptModal from './PromptModal'
 import {
   Bold,
@@ -44,11 +40,6 @@ import {
   Redo,
   Code,
   Eye,
-  Quote,
-  RemoveFormatting,
-  Code2,
-  Subscript,
-  Superscript,
 } from 'lucide-react'
 
 interface TiptapEditorProps {
@@ -67,34 +58,43 @@ export default function TiptapEditor({
   const [linkPromptOpen, setLinkPromptOpen] = useState(false)
   const [codeView, setCodeView] = useState(false)
   const [htmlCode, setHtmlCode] = useState('')
-  const [listLineHeight, setListLineHeight] = useState('1.0')
-  const [listItemSpacing, setListItemSpacing] = useState('4')
-  const [hasLists, setHasLists] = useState(false)
-  const [isInList, setIsInList] = useState(false)
+  const [listLineHeight, setListLineHeight] = useState('1.5')
+  const [listItemSpacing, setListItemSpacing] = useState('8')
+  const [isInList, setIsInList] = useState(false) // Track if cursor is in a list
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
-        // Exclude default list extensions so we can configure them separately
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
+        listItem: false, // Disable default ListItem to use our custom one
       }),
-      // Configure list extensions to preserve HTMLAttributes (for line-height)
-      BulletList.configure({
-        HTMLAttributes: {
-          class: 'bullet-list',
+      // Custom ListItem extension with style support
+      ListItem.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            style: {
+              default: null,
+              parseHTML: element => {
+                // Always preserve the style attribute exactly as it is
+                const style = element.getAttribute('style')
+                return style || null
+              },
+              renderHTML: attributes => {
+                // Always render the style attribute if it exists
+                if (!attributes.style) {
+                  return {}
+                }
+                return {
+                  style: attributes.style,
+                }
+              },
+              // Ensure style is preserved through all operations
+              keepOnSplit: true,
+            },
+          }
         },
       }),
-      OrderedList.configure({
-        HTMLAttributes: {
-          class: 'ordered-list',
-        },
-      }),
-      ListItem,
       Underline,
-      SubscriptExtension,
-      SuperscriptExtension,
       Placeholder.configure({
         placeholder,
       }),
@@ -120,37 +120,23 @@ export default function TiptapEditor({
         class: 'tiptap-editor focus:outline-none',
       },
       handleKeyDown: (view, event) => {
-        // Handle Tab for indent/outdent in lists
-        if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey) {
-          const { state } = view
-          const { $from } = state.selection
-
-          // Check if we're in a list item
-          for (let d = $from.depth; d > 0; d--) {
-            if ($from.node(d).type.name === 'listItem') {
-              event.preventDefault()
-
-              if (event.shiftKey) {
-                // Shift+Tab: outdent using liftListItem
-                const listItemType = state.schema.nodes.listItem
-                if (listItemType) {
-                  // Use Tiptap's sinkListItem command via editor
-                  if (editor) {
-                    editor.chain().focus().liftListItem('listItem').run()
-                  }
-                }
-              } else {
-                // Tab: indent using sinkListItem
-                const listItemType = state.schema.nodes.listItem
-                if (listItemType) {
-                  // Use Tiptap's sinkListItem command via editor
-                  if (editor) {
-                    editor.chain().focus().sinkListItem('listItem').run()
-                  }
-                }
-              }
-              return true
-            }
+        if (!editor) return false
+        // Handle Tab key for list indenting
+        if (event.key === 'Tab' && !event.shiftKey) {
+          // Tab - indent list item (create sub-list)
+          if (editor.isActive('bulletList') || editor.isActive('orderedList')) {
+            event.preventDefault()
+            editor.chain().focus().sinkListItem('listItem').run()
+            return true
+          }
+        }
+        // Handle Shift+Tab for list outdenting
+        if (event.key === 'Tab' && event.shiftKey) {
+          // Shift+Tab - outdent list item (lift to parent level)
+          if (editor.isActive('bulletList') || editor.isActive('orderedList')) {
+            event.preventDefault()
+            editor.chain().focus().liftListItem('listItem').run()
+            return true
           }
         }
         return false
@@ -159,23 +145,24 @@ export default function TiptapEditor({
     onUpdate: ({ editor }) => {
       if (codeView) return // Don't update from editor when in code view
       const html = editor.getHTML()
-
-      // Check if document has lists (for showing spacing control)
-      const documentHasLists = /<(ul|ol)([^>]*)>/gi.test(html)
-      setHasLists(documentHasLists)
-
-      // Check if cursor is in a list
-      const inList = editor.isActive('bulletList') || editor.isActive('orderedList')
-      setIsInList(inList)
-
       // Normalize empty content
       const normalizedValue =
         html === '<p></p>' || html.trim() === '' ? '' : html
+
+      // Debug: Log HTML to check if list styles are preserved
+      if (normalizedValue.includes('<li')) {
+        console.log('[TiptapEditor] Extracted HTML with list items:', normalizedValue)
+      }
+
       onChange(normalizedValue)
       setHtmlCode(normalizedValue) // Keep code view in sync
+
+      // Update list detection state
+      const inList = editor.isActive('bulletList') || editor.isActive('orderedList')
+      setIsInList(inList)
     },
     onSelectionUpdate: ({ editor }) => {
-      // Track cursor position for showing list controls
+      // Update list detection when cursor moves
       const inList = editor.isActive('bulletList') || editor.isActive('orderedList')
       setIsInList(inList)
     },
@@ -187,40 +174,11 @@ export default function TiptapEditor({
       const currentHtml = editor.getHTML()
       const normalizedCurrent =
         currentHtml === '<p></p>' || currentHtml.trim() === '' ? '' : currentHtml
-      const normalizedValue =
-        value === '<p></p>' || (value || '').trim() === '' ? '' : (value || '')
 
       // Only update if the value is different (to avoid infinite loops)
-      if (normalizedCurrent !== normalizedValue) {
-        editor.commands.setContent(normalizedValue, { emitUpdate: false })
-        setHtmlCode(normalizedValue)
-        // Check if content has lists
-        const documentHasLists = /<(ul|ol)([^>]*)>/gi.test(normalizedValue)
-        setHasLists(documentHasLists)
-        
-        // Extract existing list styles from loaded content to sync controls
-        if (documentHasLists) {
-          const firstLiMatch = normalizedValue.match(/<li([^>]*)>/i)
-          if (firstLiMatch && firstLiMatch[1]) {
-            const attrs = firstLiMatch[1]
-            const styleMatch = attrs.match(/style="([^"]*)"/i)
-            if (styleMatch) {
-              const styles = styleMatch[1]
-              // Extract line-height
-              const lineHeightMatch = styles.match(/line-height\s*:\s*([^;]+?)(;|$)/i)
-              if (lineHeightMatch) {
-                const lhValue = lineHeightMatch[1].trim()
-                setListLineHeight(lhValue)
-              }
-              // Extract margin-bottom
-              const marginMatch = styles.match(/margin-bottom\s*:\s*([^;]+?)(;|$)/i)
-              if (marginMatch) {
-                const mbValue = marginMatch[1].trim().replace('px', '')
-                setListItemSpacing(mbValue)
-              }
-            }
-          }
-        }
+      if (normalizedCurrent !== value) {
+        editor.commands.setContent(value || '', { emitUpdate: false })
+        setHtmlCode(value || '')
       }
     }
   }, [value, editor, codeView])
@@ -231,45 +189,6 @@ export default function TiptapEditor({
       setHtmlCode(value || '')
     }
   }, [value])
-
-  // Auto-initialize list item styles when entering a list
-  useEffect(() => {
-    if (editor && isInList && !codeView) {
-      const currentHtml = editor.getHTML()
-
-      // Check if there are list items without inline styles
-      const listItems = currentHtml.match(/<li[^>]*>/gi) || []
-      const hasUnstyled = listItems.some(li => !li.includes('style='))
-
-      // If there are unstyled list items, apply defaults
-      if (hasUnstyled) {
-        const lineHeightValue = parseFloat(listLineHeight) || 1.0
-        const itemSpacingValue = parseInt(listItemSpacing) || 0
-
-        // Update all <li> tags with both line-height and margin-bottom
-        const updatedHtml = currentHtml.replace(
-          /<li([^>]*)>/gi,
-          (match, attrs) => {
-            // Check if this specific <li> already has styles
-            if (match.includes('style=')) {
-              return match // Don't modify if already styled
-            }
-
-            // Add default styles
-            const trimmedAttrs = attrs.trim()
-            const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
-            return `<li${newAttrs} style="line-height: ${lineHeightValue}; margin-bottom: ${itemSpacingValue}px;">`
-          }
-        )
-
-        if (updatedHtml !== currentHtml) {
-          editor.commands.setContent(updatedHtml, { emitUpdate: false })
-          onChange(updatedHtml)
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInList, editor, codeView])
 
   // Handle code view toggle
   const handleToggleCodeView = () => {
@@ -305,74 +224,79 @@ export default function TiptapEditor({
     onChange(newCode)
   }
 
-  // Handle list line-height change (for wrapped text within list items)
-  const handleListLineHeightChange = (lineHeight: string) => {
-    setListLineHeight(lineHeight)
-    applyListStyles(lineHeight, listItemSpacing)
-  }
+  // Helper function to update style attribute
+  const updateListItemStyles = useCallback((lineHeight?: string, itemSpacing?: string) => {
+    if (!editor) return
 
-  // Handle list item spacing change (spacing between list items)
-  const handleListItemSpacingChange = (spacing: string) => {
-    setListItemSpacing(spacing)
-    applyListStyles(listLineHeight, spacing)
-  }
+    const lineHeightValue = lineHeight !== undefined ? lineHeight : listLineHeight
+    const itemSpacingValue = itemSpacing !== undefined ? itemSpacing : listItemSpacing
 
-  // Apply both line-height and margin-bottom to list items
-  const applyListStyles = (lineHeight: string, itemSpacing: string) => {
-    if (editor) {
-      const lineHeightValue = parseFloat(lineHeight) || 1.0
-      const itemSpacingValue = parseInt(itemSpacing) || 0
+    editor.chain().command(({ tr, state }) => {
+      let modified = false
 
-      // Get current HTML and update list item styles
-      const currentHtml = editor.getHTML()
+      state.doc.descendants((node, pos) => {
+        if (node.type.name === 'listItem') {
+          const attrs = node.attrs
+          let currentStyle = attrs.style || ''
 
-      // Update all <li> tags with both line-height and margin-bottom
-      const updatedHtml = currentHtml.replace(
-        /<li([^>]*)>/gi,
-        (match, attrs) => {
-          // Extract existing style if present
-          let existingStyle = ''
-          const styleMatch = attrs.match(/style="([^"]*)"/i)
-          if (styleMatch) {
-            existingStyle = styleMatch[1]
+          // Remove ALL existing line-height and margin-bottom (including with !important)
+          // Use a more comprehensive regex that handles all variations
+          currentStyle = currentStyle
+            .replace(/line-height\s*:\s*[^;]+(!important\s*)?;?\s*/gi, '')
+            .replace(/margin-bottom\s*:\s*[^;]+(!important\s*)?;?\s*/gi, '')
+            .trim()
+
+          // Build new style string - always set margin-bottom first with !important
+          const styles: string[] = []
+          // CRITICAL: Set margin-bottom FIRST with !important to ensure it overrides everything
+          styles.push(`margin-bottom: ${itemSpacingValue}px !important`)
+          if (lineHeightValue) styles.push(`line-height: ${lineHeightValue} !important`)
+          // Add any other existing styles after
+          if (currentStyle) {
+            // Remove any trailing semicolons and add remaining styles
+            const cleaned = currentStyle.replace(/;\s*$/, '').trim()
+            if (cleaned) styles.push(cleaned)
           }
 
-          // Build new style with both line-height and margin-bottom
-          let newStyle = existingStyle
+          const newStyle = styles.filter(s => s).join('; ')
 
-          // Update or add line-height
-          if (existingStyle.includes('line-height:')) {
-            newStyle = newStyle.replace(/line-height:\s*[^;]+;?/gi, `line-height: ${lineHeightValue};`)
-          } else {
-            newStyle = newStyle ? `${newStyle} line-height: ${lineHeightValue};` : `line-height: ${lineHeightValue};`
-          }
-
-          // Update or add margin-bottom
-          if (existingStyle.includes('margin-bottom:')) {
-            newStyle = newStyle.replace(/margin-bottom:\s*[^;]+;?/gi, `margin-bottom: ${itemSpacingValue}px;`)
-          } else {
-            newStyle = `${newStyle} margin-bottom: ${itemSpacingValue}px;`
-          }
-
-          // Replace or add style attribute
-          if (styleMatch) {
-            return match.replace(/style="[^"]*"/i, `style="${newStyle.trim()}"`)
-          } else {
-            const trimmedAttrs = attrs.trim()
-            const newAttrs = trimmedAttrs ? ` ${trimmedAttrs}` : ''
-            return `<li${newAttrs} style="${newStyle.trim()}">`
-          }
+          // Always update to ensure styles are applied (even if they appear the same)
+          tr.setNodeMarkup(pos, undefined, { ...attrs, style: newStyle || null })
+          modified = true
         }
-      )
+      })
 
-      // Update editor content if HTML changed
-      if (updatedHtml !== currentHtml) {
-        editor.commands.setContent(updatedHtml, { emitUpdate: false })
-        // Trigger onChange to sync with parent
-        onChange(updatedHtml)
+      if (modified) {
+        tr.setMeta('addToHistory', true)
       }
+      return modified
+    }).run()
+  }, [editor, listLineHeight, listItemSpacing])
+
+  // Handle line-height change (spacing within list item when text wraps)
+  const handleLineHeightChange = (lineHeight: string) => {
+    setListLineHeight(lineHeight)
+    updateListItemStyles(lineHeight, undefined)
+  }
+
+  // Handle item spacing change (spacing between list items)
+  const handleItemSpacingChange = (spacing: string) => {
+    setListItemSpacing(spacing)
+    // Apply styles immediately with the new spacing value
+    updateListItemStyles(undefined, spacing)
+    // Force editor update to ensure styles are rendered
+    if (editor) {
+      editor.view.dom.dispatchEvent(new Event('input', { bubbles: true }))
     }
   }
+
+  // Apply list styles when entering a list
+  useEffect(() => {
+    if (isInList && editor) {
+      // Apply current list styles to all list items in the document
+      updateListItemStyles()
+    }
+  }, [isInList, editor, updateListItemStyles])
 
   if (!editor) {
     return (
@@ -442,41 +366,6 @@ export default function TiptapEditor({
         >
           <Strikethrough className="w-4 h-4" />
         </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleSubscript().run()}
-          disabled={codeView}
-          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
-            editor.isActive('subscript')
-              ? 'bg-wsu-crimson text-white'
-              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light disabled:opacity-50`}
-          title="Subscript"
-        >
-          <Subscript className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleSuperscript().run()}
-          disabled={codeView}
-          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
-            editor.isActive('superscript')
-              ? 'bg-wsu-crimson text-white'
-              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light disabled:opacity-50`}
-          title="Superscript"
-        >
-          <Superscript className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().unsetAllMarks().run()}
-          disabled={codeView}
-          className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
-          title="Clear Formatting"
-        >
-          <RemoveFormatting className="w-4 h-4" />
-        </button>
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />
 
@@ -520,32 +409,6 @@ export default function TiptapEditor({
         >
           <Heading3 className="w-4 h-4" />
         </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          disabled={codeView}
-          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
-            editor.isActive('blockquote')
-              ? 'bg-wsu-crimson text-white'
-              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light disabled:opacity-50`}
-          title="Blockquote"
-        >
-          <Quote className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          disabled={codeView}
-          className={`px-2 py-1 text-sm rounded flex items-center justify-center ${
-            editor.isActive('codeBlock')
-              ? 'bg-wsu-crimson text-white'
-              : 'bg-white text-wsu-text-dark hover:bg-wsu-bg-light'
-          } border border-wsu-border-light disabled:opacity-50`}
-          title="Code Block"
-        >
-          <Code2 className="w-4 h-4" />
-        </button>
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />
 
@@ -576,7 +439,7 @@ export default function TiptapEditor({
         >
           <ListOrdered className="w-4 h-4" />
         </button>
-        {(isInList || hasLists) && !codeView && (
+        {isInList && !codeView && (
           <>
             <button
               type="button"
@@ -596,55 +459,48 @@ export default function TiptapEditor({
             >
               <Indent className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-1 px-2 border border-wsu-border-light rounded bg-white">
-              <label className="text-xs text-wsu-text-muted whitespace-nowrap">Line height:</label>
+            <div className="flex items-center gap-1 px-2 border-l border-wsu-border-light">
+              <label className="text-xs text-wsu-text-muted whitespace-nowrap">Line Height:</label>
               <input
                 type="number"
                 value={listLineHeight}
-                onChange={(e) => handleListLineHeightChange(e.target.value)}
+                onChange={(e) => handleLineHeightChange(e.target.value)}
                 onBlur={(e) => {
-                  // Validate and apply on blur
                   const value = parseFloat(e.target.value)
-                  if (isNaN(value) || value < 0.5 || value > 3.0) {
-                    // Reset to default if invalid
-                    setListLineHeight('1.0')
-                    handleListLineHeightChange('1.0')
-                  } else {
-                    handleListLineHeightChange(e.target.value)
+                  if (isNaN(value) || value < 1.0 || value < 3.0) {
+                    setListLineHeight('1.5')
+                    handleLineHeightChange('1.5')
                   }
                 }}
-                min="0.5"
+                min="1.0"
                 max="3.0"
                 step="0.1"
-                className="text-xs border-0 rounded px-2 py-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-14"
-                title="Line height for wrapped text (0.5-3.0)"
-                placeholder="1.0"
+                className="text-xs border border-wsu-border-light rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-14"
+                title="Line height within list items (1.0-3.0). Controls spacing when text wraps."
+                placeholder="1.5"
               />
             </div>
-            <div className="flex items-center gap-1 px-2 border border-wsu-border-light rounded bg-white">
-              <label className="text-xs text-wsu-text-muted whitespace-nowrap">Item spacing:</label>
+            <div className="flex items-center gap-1 px-2">
+              <label className="text-xs text-wsu-text-muted whitespace-nowrap">Item Gap:</label>
               <input
                 type="number"
                 value={listItemSpacing}
-                onChange={(e) => handleListItemSpacingChange(e.target.value)}
+                onChange={(e) => handleItemSpacingChange(e.target.value)}
                 onBlur={(e) => {
-                  // Validate and apply on blur
                   const value = parseInt(e.target.value)
                   if (isNaN(value) || value < 0 || value > 50) {
-                    // Reset to default if invalid
-                    setListItemSpacing('4')
-                    handleListItemSpacingChange('4')
-                  } else {
-                    handleListItemSpacingChange(e.target.value)
+                    setListItemSpacing('8')
+                    handleItemSpacingChange('8')
                   }
                 }}
                 min="0"
                 max="50"
                 step="1"
-                className="text-xs border-0 rounded px-2 py-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-14"
-                title="Spacing between list items in pixels (0-50)"
-                placeholder="4"
+                className="text-xs border border-wsu-border-light rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-wsu-crimson w-14"
+                title="Vertical spacing between list items (0-50px)"
+                placeholder="8"
               />
+              <span className="text-xs text-wsu-text-muted">px</span>
             </div>
           </>
         )}
@@ -690,15 +546,6 @@ export default function TiptapEditor({
           title="Align Right"
         >
           <AlignRight className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          disabled={codeView}
-          className="px-2 py-1 text-sm rounded flex items-center justify-center bg-white text-wsu-text-dark hover:bg-wsu-bg-light border border-wsu-border-light disabled:opacity-50"
-          title="Horizontal Rule"
-        >
-          <Minus className="w-4 h-4" />
         </button>
 
         <div className="w-px h-6 bg-wsu-border-light mx-1" />

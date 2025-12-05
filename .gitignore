@@ -40,3 +40,6 @@ __pycache__/
 
 # Claude AI
 .claude/
+
+# Test files
+test-list.html

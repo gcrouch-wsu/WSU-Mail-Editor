@@ -52,36 +52,65 @@
 
 .ProseMirror ul,
 .ProseMirror ol {
-  margin: 0.5em 0;
+  margin: 0;
   padding-left: 1.5em;
   list-style-position: outside;
 }
 
-/* Respect inline line-height styles on ul/ol for spacing control */
-.ProseMirror ul[style*="line-height"],
-.ProseMirror ol[style*="line-height"] {
-  /* Inline styles take precedence - line-height on ul/ol affects spacing between items */
-}
-
-/* Apply line-height to list items based on parent list's line-height */
-.ProseMirror ul[style*="line-height"] li,
-.ProseMirror ol[style*="line-height"] li {
-  line-height: inherit;
+/* Nested lists - ensure they have proper indentation */
+.ProseMirror li > ul,
+.ProseMirror li > ol {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+  padding-left: 1.5em;
 }
 
 .ProseMirror ul {
   list-style-type: disc;
 }
 
+/* Nested bullet list hierarchy - different icons at different levels */
+.ProseMirror ul ul {
+  list-style-type: circle;
+}
+
+.ProseMirror ul ul ul {
+  list-style-type: square;
+}
+
 .ProseMirror ol {
   list-style-type: decimal;
 }
 
+/* Nested ordered list hierarchy - different numbering at different levels */
+.ProseMirror ol ol {
+  list-style-type: lower-alpha;
+}
+
+.ProseMirror ol ol ol {
+  list-style-type: lower-roman;
+}
+
 .ProseMirror li {
-  margin: 0;
-  padding: 0;
-  line-height: var(--list-line-height, 1.0);
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-right: 0;
+  /* padding-left is NOT reset - nested lists need it for indentation */
   display: list-item;
+  margin-top: 0;
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 0; /* Reset browser defaults - inline styles with !important will override */
+  /* margin-bottom is controlled by inline styles from the editor */
+  /* Inline styles use !important to ensure values below 16px work */
+}
+
+/* CRITICAL FIX: Remove paragraph margins inside list items */
+/* Without this, the paragraph's 1em (16px) margin-bottom creates a minimum spacing */
+/* through CSS margin collapse, preventing Item Gap values below 16px from working */
+.ProseMirror li p {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .ProseMirror a {

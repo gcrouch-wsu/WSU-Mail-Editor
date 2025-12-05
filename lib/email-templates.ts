@@ -9,6 +9,7 @@ import {
   STYLE_BODY_TEXT,
   STYLE_META,
   STYLE_LOCATION_LABEL,
+  STYLE_CARD_ACCENT,
   STYLE_CARD_BODY,
   STYLE_RESET,
   STYLE_SOCIAL_ICON_CELL,
@@ -24,7 +25,6 @@ import {
   BORDER_MEDIUM,
 } from './styles'
 import { SLATE_VARIABLES } from './config'
-import { processListStyles } from './utils'
 import type {
   NewsletterData,
   Masthead,
@@ -72,16 +72,8 @@ function processBodyHtmlForEmail(
     headerUnderlineColor?: string
   }
 ): string {
-  if (!html) {
+  if (!html || !html.includes('<table')) {
     return html
-  }
-
-  // Always process list styles for email compatibility
-  let processed = processListStyles(html)
-
-  // Only process tables if they exist
-  if (!processed.includes('<table')) {
-    return processed
   }
 
   // Default values
@@ -103,7 +95,7 @@ function processBodyHtmlForEmail(
           : 3
 
   // Add styles to tables, table rows, and table cells
-  // (processed already has list styles applied above)
+  let processed = html
 
   // Style tables: add border-collapse, width, and email-safe attributes
   const tableBorderStyle =
@@ -153,7 +145,6 @@ function processBodyHtmlForEmail(
   )
 
   // Style table headers (th): add padding, borders, background color, and underline
-  // Also add scope attribute for accessibility (default to "col" if not specified)
   const headerBorderStyle =
     borderWidth > 0 ? `border:${borderWidth}px solid ${borderColor};` : ''
   const headerUnderlineStyle =
@@ -164,25 +155,18 @@ function processBodyHtmlForEmail(
   processed = processed.replace(
     /<th([^>]*)>/gi,
     (match, attrs) => {
-      // Check if scope attribute already exists
-      let scopeAttr = ''
-      if (!attrs.includes('scope=')) {
-        // Default to "col" for column headers (most common case)
-        scopeAttr = ' scope="col"'
-      }
-      
       if (attrs.includes('style=')) {
         // Add to existing style
         return match.replace(
           /style="([^"]*)"/i,
           (styleMatch, existingStyle) => {
             const newStyle = `${existingStyle}; ${headerStyle}`
-            return `style="${newStyle}"${scopeAttr}`
+            return `style="${newStyle}"`
           }
         )
       } else {
         // Add new style attribute
-        return `<th style="${headerStyle}"${scopeAttr}${attrs}>`
+        return `<th style="${headerStyle}"${attrs}>`
       }
     }
   )
@@ -224,8 +208,7 @@ export function renderViewInBrowser(): string {
  */
 export function renderMasthead(data: Masthead, containerWidth = 640): string {
   const bannerUrl = data.banner_url || ''
-  // Provide default alt text for accessibility if empty
-  const bannerAlt = data.banner_alt || 'Washington State University Graduate School'
+  const bannerAlt = data.banner_alt || ''
   const bannerAlign = data.banner_align || 'center'
   const bannerPadding = data.banner_padding || {
     top: 20,
@@ -283,8 +266,7 @@ export function renderSectionStart(
   title: string,
   layout: SectionLayout | null = null,
   showBorder = true,
-  isLast = false,
-  settings: Settings | null = null
+  isLast = false
 ): string {
   if (!layout) {
     layout = {
@@ -294,7 +276,7 @@ export function renderSectionStart(
       border_radius: 0,
       divider_enabled: true,
       divider_thickness: 2,
-      // Don't set divider_color here - let it fall back to global settings
+      divider_color: BORDER_LIGHT,
       divider_spacing: 24,
       title_align: 'left',
     }
@@ -308,16 +290,7 @@ export function renderSectionStart(
   const borderRadius = layout.border_radius || 0
   const dividerEnabled = layout.divider_enabled !== false
   const dividerThickness = layout.divider_thickness || 2
-  // Use section-level divider color if set, otherwise global settings, otherwise default
-  // Use section-level divider color if explicitly set, otherwise global settings, otherwise default
-  const dividerColor = layout.divider_color !== undefined 
-    ? layout.divider_color 
-    : (settings?.divider_color !== undefined ? settings.divider_color : BORDER_LIGHT)
-  // Get divider margin top - use section-level if set, otherwise global settings, otherwise 0
-  // Note: dividerMarginBottom is calculated and used in renderSection, not here
-  const dividerMarginTop = layout.divider_margin_top !== undefined 
-    ? layout.divider_margin_top 
-    : (settings?.divider_margin_top !== undefined ? settings.divider_margin_top : 0)
+  const dividerColor = layout.divider_color || BORDER_LIGHT
 
   // Validate title_align
   if (!['left', 'center', 'right'].includes(titleAlign)) {
@@ -325,44 +298,25 @@ export function renderSectionStart(
   }
 
   // Hide border on last section
-  // Adjust padding to account for divider margins
   let border = ''
-  let adjustedPaddingBottom = paddingBottom
-  
-  // paddingTop is already adjusted in renderSection to account for margin below previous divider
-  // So we use it directly here
-  
   if (showBorder && dividerEnabled && !isLast) {
-    // Add margin above divider (space before the line) - increase bottom padding
-    adjustedPaddingBottom = paddingBottom + dividerMarginTop
-    // Add margin below divider (space after the line) - this will be added to next section's padding-top
-    // Note: dividerMarginBottom is applied to the next section's padding-top in renderSection
     border = `border-bottom:${dividerThickness}px solid ${dividerColor};`
-  } else {
-    // Even if no divider, we might still want to apply margin if it was set
-    // But this is less common, so we'll only apply it when there's a divider
   }
 
-  // Build container style (table style without padding - padding goes on td)
-  let containerStyle = `${STYLE_TABLE}`
+  // Build container style
+  let containerStyle = `${STYLE_TABLE} padding-top:${paddingTop}px; padding-bottom:${paddingBottom}px; ${border}`
   if (bgColor) {
     containerStyle += ` background-color:${bgColor};`
   }
   if (borderRadius > 0) {
     containerStyle += ` border-radius:${borderRadius}px;`
   }
-  
-  // Build td style with padding and border
-  let tdStyle = `padding-top:${paddingTop}px; padding-bottom:${adjustedPaddingBottom}px;`
-  if (border) {
-    tdStyle += ` ${border}`
-  }
 
   // If title is empty, don't render H2
   if (!title || !title.trim()) {
     return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${containerStyle}">
   <tr>
-    <td style="${tdStyle}">`
+    <td>`
   }
 
   // H2 style with spacing and alignment
@@ -370,7 +324,7 @@ export function renderSectionStart(
 
   return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${containerStyle}">
   <tr>
-    <td style="${tdStyle}">
+    <td>
       <h2 style="${h2Style}">${esc(title)}</h2>`
 }
 
@@ -421,8 +375,7 @@ function renderCardLinks(card: Card): string {
   for (const link of links) {
     const label = (link.label || '').trim()
     const url = (link.url || '').trim()
-    // Only render links with both label and valid URL (not just "#")
-    if (label && url && url !== '#') {
+    if (label && url) {
       linkHtml.push(
         `<a href="${esc(url)}" style="${STYLE_LINK}">${esc(label)}</a>`
       )
@@ -444,110 +397,25 @@ function renderCardLinks(card: Card): string {
 
 /**
  * Build card style with per-card customization
- * Uses global card_border_radius from settings as default, but allows per-card override
  */
-function getCardStyle(card: Card, settings: Settings | null = null): string {
+function getCardStyle(card: Card): string {
   const bgColor = card.background_color || '#f9f9f9'
-  // Note: Card spacing is handled by spacer elements between cards, not in cardStyle
+  const spacingBottom = card.spacing_bottom || 20
   const borderWidth = card.border_width || 0
   const borderColor = card.border_color || '#e0e0e0'
-  // Use per-card border_radius if set, otherwise fall back to global setting, otherwise 0
-  const borderRadius = card.border_radius !== undefined 
-    ? card.border_radius 
-    : (settings?.card_border_radius || 0)
+  const borderRadius = card.border_radius || 0
 
-  // For border-radius to work in email clients, we need border-collapse:separate
-  // Otherwise use the standard border-collapse:collapse
-  const tableCollapse = borderRadius > 0 
-    ? 'border-collapse:separate; border-spacing:0;' 
-    : 'border-collapse:collapse;'
-  
-  // Don't include margin-bottom in cardStyle - spacing is handled by spacer elements between cards
-  let style = `${tableCollapse} mso-table-lspace:0pt; mso-table-rspace:0pt; background-color:${bgColor};`
+  let style = `${STYLE_TABLE} background-color:${bgColor}; margin-bottom:${spacingBottom}px;`
 
   if (borderWidth > 0) {
     style += ` border:${borderWidth}px solid ${borderColor};`
   }
 
   if (borderRadius > 0) {
-    style += ` border-radius:${borderRadius}px; overflow:hidden;`
+    style += ` border-radius:${borderRadius}px;`
   }
-
-  // Add card shadow if enabled
-  style += getShadowStyle(settings?.card_shadow)
 
   return style
-}
-
-/**
- * Generate box-shadow CSS from Shadow object
- */
-function getShadowStyle(shadow?: { enabled: boolean; color: string; blur: number; spread: number; offset_x: number; offset_y: number; opacity: number } | boolean): string {
-  // Handle legacy boolean shadow values
-  if (typeof shadow === 'boolean') {
-    if (!shadow) return ''
-    // Legacy default shadow
-    return ' box-shadow: 0 2px 4px rgba(0,0,0,0.1);'
-  }
-
-  // Handle new Shadow object
-  if (!shadow || !shadow.enabled) return ''
-
-  // Convert hex color to rgba with opacity
-  const hexToRgba = (hex: string, opacity: number): string => {
-    const r = parseInt(hex.slice(1, 3), 16)
-    const g = parseInt(hex.slice(3, 5), 16)
-    const b = parseInt(hex.slice(5, 7), 16)
-    return `rgba(${r},${g},${b},${opacity})`
-  }
-
-  const color = hexToRgba(shadow.color, shadow.opacity)
-  return ` box-shadow: ${shadow.offset_x}px ${shadow.offset_y}px ${shadow.blur}px ${shadow.spread}px ${color};`
-}
-
-/**
- * Get border-radius style for corner cells to ensure proper rendering in email clients
- */
-function getCornerCellStyle(
-  borderRadius: number,
-  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-): string {
-  if (borderRadius <= 0) return ''
-
-  const radiusMap: Record<string, string> = {
-    'top-left': `border-top-left-radius:${borderRadius}px;`,
-    'top-right': `border-top-right-radius:${borderRadius}px;`,
-    'bottom-left': `border-bottom-left-radius:${borderRadius}px;`,
-    'bottom-right': `border-bottom-right-radius:${borderRadius}px;`,
-  }
-
-  return radiusMap[position] || ''
-}
-
-/**
- * Get accent bar style with border-radius support
- */
-function getAccentBarStyle(
-  borderRadius: number,
-  accentBarWidth: number = 4,
-  accentBarColor: string = CRIMSON,
-  accentBarShadow?: { enabled: boolean; color: string; blur: number; spread: number; offset_x: number; offset_y: number; opacity: number } | boolean
-): string {
-  // Use the specified width or default to 4px
-  const width = accentBarWidth > 0 ? accentBarWidth : 4
-  // Use the specified color or default to CRIMSON
-  const color = accentBarColor || CRIMSON
-  let baseStyle = `width:${width}px; background-color:${color};`
-
-  // Add shadow if enabled
-  baseStyle += getShadowStyle(accentBarShadow)
-
-  if (borderRadius <= 0) return baseStyle
-
-  // Apply border-radius to top-left and bottom-left corners of accent bar
-  const cornerStyles = `${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'bottom-left')}`
-  // Add overflow hidden to ensure rounded corners are visible
-  return `${baseStyle} ${cornerStyles} overflow:hidden;`
 }
 
 /**
@@ -626,7 +494,7 @@ function renderStandardCard(
   const bodyHtml = card.body_html || ''
 
   // Get card style and padding
-  const cardStyle = getCardStyle(card, settings)
+  const cardStyle = getCardStyle(card)
   const padding = getCardPadding(card, section, settings)
   const paddingStyle = `padding:${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px;`
 
@@ -665,42 +533,14 @@ function renderStandardCard(
 
   const content = contentParts.join('\n')
 
-  // Get border radius for corner cell styling
-  const borderRadius = card.border_radius !== undefined
-    ? card.border_radius
-    : (settings?.card_border_radius || 0)
-
-  // Check if accent bar is enabled (default: true)
-  const accentBarEnabled = settings?.accent_bar_enabled !== false
-
-  if (accentBarEnabled) {
-    // Get accent bar settings from global settings
-    const accentBarWidth = settings?.accent_bar_width || 4
-    const accentBarColor = settings?.accent_bar_color || CRIMSON
-    const accentBarShadow = settings?.accent_bar_shadow || false
-    const accentCellStyle = getAccentBarStyle(borderRadius, accentBarWidth, accentBarColor, accentBarShadow)
-    const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
-
-    return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
+  return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
-    <td style="${accentCellStyle}"></td>
-    <td style="${contentCellStyle}">
+    <td style="${STYLE_CARD_ACCENT}"></td>
+    <td style="${paddingStyle}">
       ${content}
     </td>
   </tr>
 </table>`
-  } else {
-    // No accent bar - single column with all corners rounded
-    const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-left')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
-
-    return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
-  <tr>
-    <td style="${contentCellStyle}">
-      ${content}
-    </td>
-  </tr>
-</table>`
-  }
 }
 
 /**
@@ -716,7 +556,7 @@ function renderEventCard(
   const location = card.location || ''
 
   // Get card style and padding
-  const cardStyle = getCardStyle(card, settings)
+  const cardStyle = getCardStyle(card)
   const padding = getCardPadding(card, section, settings)
   const paddingStyle = `padding:${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px;`
 
@@ -734,17 +574,9 @@ function renderEventCard(
     contentParts.push(`<h3 style="${STYLE_H3}">${esc(title)}</h3>`)
   }
 
-  // Body (allow raw HTML from rich text editor)
+  // Body
   if (bodyHtml) {
-    const processedBody = processBodyHtmlForEmail(bodyHtml, {
-      borderStyle: card.table_border_style,
-      borderColor: card.table_border_color,
-      fontSize: card.table_font_size,
-      headerBgColor: card.table_header_bg_color,
-      headerUnderline: card.table_header_underline,
-      headerUnderlineColor: card.table_header_underline_color,
-    })
-    contentParts.push(`<div style="${STYLE_BODY_TEXT}">${processedBody}</div>`)
+    contentParts.push(`<div style="${STYLE_BODY_TEXT}">${bodyHtml}</div>`)
   }
 
   // Date/Time meta (without location since it's already shown)
@@ -770,42 +602,14 @@ function renderEventCard(
 
   const content = contentParts.join('\n')
 
-  // Get border radius for corner cell styling
-  const borderRadius = card.border_radius !== undefined
-    ? card.border_radius
-    : (settings?.card_border_radius || 0)
-
-  // Check if accent bar is enabled (default: true)
-  const accentBarEnabled = settings?.accent_bar_enabled !== false
-
-  if (accentBarEnabled) {
-    // Get accent bar settings from global settings
-    const accentBarWidth = settings?.accent_bar_width || 4
-    const accentBarColor = settings?.accent_bar_color || CRIMSON
-    const accentBarShadow = settings?.accent_bar_shadow || false
-    const accentCellStyle = getAccentBarStyle(borderRadius, accentBarWidth, accentBarColor, accentBarShadow)
-    const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
-
-    return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
+  return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
-    <td style="${accentCellStyle}"></td>
-    <td style="${contentCellStyle}">
+    <td style="${STYLE_CARD_ACCENT}"></td>
+    <td style="${paddingStyle}">
       ${content}
     </td>
   </tr>
 </table>`
-  } else {
-    // No accent bar - single column with all corners rounded
-    const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-left')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
-
-    return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
-  <tr>
-    <td style="${contentCellStyle}">
-      ${content}
-    </td>
-  </tr>
-</table>`
-  }
 }
 
 /**
@@ -820,12 +624,11 @@ function renderResourceCard(
   const bodyHtml = card.body_html || ''
   const showIcon = card.show_icon || false
   const iconUrl = card.icon_url || ''
-  // Provide default alt text for accessibility if empty
-  const iconAlt = card.icon_alt || (title ? `${title} icon` : 'Resource icon')
+  const iconAlt = card.icon_alt || ''
   const iconSize = card.icon_size || 80
 
   // Get card style and padding
-  const cardStyle = getCardStyle(card, settings)
+  const cardStyle = getCardStyle(card)
   const padding = getCardPadding(card, section, settings)
 
   // Build text content
@@ -834,15 +637,7 @@ function renderResourceCard(
     textParts.push(`<h3 style="${STYLE_H3}">${esc(title)}</h3>`)
   }
   if (bodyHtml) {
-    const processedBody = processBodyHtmlForEmail(bodyHtml, {
-      borderStyle: card.table_border_style,
-      borderColor: card.table_border_color,
-      fontSize: card.table_font_size,
-      headerBgColor: card.table_header_bg_color,
-      headerUnderline: card.table_header_underline,
-      headerUnderlineColor: card.table_header_underline_color,
-    })
-    textParts.push(`<div style="${STYLE_BODY_TEXT}">${processedBody}</div>`)
+    textParts.push(`<div style="${STYLE_BODY_TEXT}">${bodyHtml}</div>`)
   }
 
   const meta = renderCardMeta(card)
@@ -872,15 +667,9 @@ function renderResourceCard(
 
     const iconHtml = `<img src="${esc(iconUrl)}" alt="${esc(iconAlt)}" width="${iconSize}" height="${iconSize}" style="${iconStyle}" />`
 
-    // Get border radius for corner cell styling
-    const borderRadius = card.border_radius !== undefined 
-      ? card.border_radius 
-      : (settings?.card_border_radius || 0)
-    const outerCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-left')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
-    
     return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
-    <td style="${outerCellStyle}">
+    <td style="${paddingStyle}">
       <table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${STYLE_TABLE}">
         <tr>
           <td style="${iconCellStyle}">
@@ -896,16 +685,10 @@ function renderResourceCard(
 </table>`
   } else {
     // No icon, render as standard card without accent bar
-    const paddingStyleNoIcon = `padding:${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px;`
-    // Get border radius for corner cell styling
-    const borderRadius = card.border_radius !== undefined 
-      ? card.border_radius 
-      : (settings?.card_border_radius || 0)
-    const singleCellStyle = `${paddingStyleNoIcon} ${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-left')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
-    
+    const paddingStyle = `padding:${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px;`
     return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
-    <td style="${singleCellStyle}">
+    <td style="${paddingStyle}">
       ${textContent}
     </td>
   </tr>
@@ -930,7 +713,7 @@ function renderLetterCard(
   const signatureImageAlt = (card.signature_image_alt || 'Signature').trim()
   const signatureImageWidth = card.signature_image_width || 220
 
-  const cardStyle = getCardStyle(card, settings)
+  const cardStyle = getCardStyle(card)
   const padding = getCardPadding(card, section, settings)
   const paddingStyle = `padding:${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px;`
 
@@ -993,16 +776,10 @@ function renderLetterCard(
   }
 
   const content = contentParts.join('\n')
-  
-  // Get border radius for corner cell styling
-  const borderRadius = card.border_radius !== undefined 
-    ? card.border_radius 
-    : (settings?.card_border_radius || 0)
-  const singleCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-left')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
 
   return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
-    <td style="${singleCellStyle}">
+    <td style="${paddingStyle}">
       ${content}
     </td>
   </tr>
@@ -1068,7 +845,7 @@ function renderCTABox(
   let cardStyle: string
   let padding: Padding
   if (card) {
-    cardStyle = getCardStyle(card, settings)
+    cardStyle = getCardStyle(card)
     padding = getCardPadding(card, section, settings)
   } else {
     // Fallback for direct calls without card object
@@ -1118,19 +895,13 @@ function renderCTABox(
         headerUnderlineColor: card.table_header_underline_color,
       }
     : undefined)
-  // Get border radius for corner cell styling
-  const borderRadius = card && card.border_radius !== undefined 
-    ? card.border_radius 
-    : (settings?.card_border_radius || 0)
-  const ctaCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-left')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
-  
   return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
-    <td style="${ctaCellStyle}">
+    <td style="${paddingStyle}">
       <h2 style="${STYLE_H2} margin:0 0 16px 0; text-align:${textAlignment};">${esc(title)}</h2>
       <div style="${STYLE_BODY_TEXT} margin:0 0 8px 0; text-align:${textAlignment};">${processedBody}</div>
       <div style="${buttonWrapperStyle}">
-        <a href="${esc(buttonUrl)}" data-role="cta" style="${buttonStyle}" aria-label="${esc(buttonLabel || 'Call to action button')}">${esc(buttonLabel || 'Learn more')}</a>
+        <a href="${esc(buttonUrl)}" data-role="cta" style="${buttonStyle}">${esc(buttonLabel)}</a>
       </div>
     </td>
   </tr>
@@ -1274,57 +1045,32 @@ function renderSection(
   spacing = 24,
   showBorder = true,
   settings: Settings | null = null,
-  isLast = false,
-  dividerMarginBelowPrevious: number = 0
+  isLast = false
 ): string {
   const title = section.title || ''
   const key = section.key || ''
-  // Create layout with defaults, but don't set divider_color if not in section layout
-  // This allows global settings.divider_color to be used
-  const sectionLayout = section.layout || {}
-  const layout = {
-    padding_top: sectionLayout.padding_top || 18,
-    padding_bottom: sectionLayout.padding_bottom || 28,
-    background_color: sectionLayout.background_color || '',
-    border_radius: sectionLayout.border_radius || 0,
-    divider_enabled: sectionLayout.divider_enabled !== undefined ? sectionLayout.divider_enabled : true,
-    divider_thickness: sectionLayout.divider_thickness || 2,
-    divider_color: sectionLayout.divider_color, // Only use if explicitly set in section
-    divider_spacing: sectionLayout.divider_spacing || 24,
-    title_align: sectionLayout.title_align || 'left',
-    divider_margin_top: sectionLayout.divider_margin_top,
-    divider_margin_bottom: sectionLayout.divider_margin_bottom,
+  const layout = section.layout || {
+    padding_top: 18,
+    padding_bottom: 28,
+    background_color: '',
+    border_radius: 0,
+    divider_enabled: true,
+    divider_thickness: 2,
+    divider_color: BORDER_LIGHT,
+    divider_spacing: 24,
+    title_align: 'left',
   }
 
   // Override global spacing with section-specific if present
   if (!layout.divider_spacing) {
     layout.divider_spacing = spacing
   }
-  
-  // Get divider margins - use section-level if set, otherwise global settings, otherwise 0
-  const dividerMarginTop = layout.divider_margin_top !== undefined 
-    ? layout.divider_margin_top 
-    : (settings?.divider_margin_top !== undefined ? settings.divider_margin_top : 0)
-  const dividerMarginBottom = layout.divider_margin_bottom !== undefined 
-    ? layout.divider_margin_bottom 
-    : (settings?.divider_margin_bottom !== undefined ? settings.divider_margin_bottom : 0)
-  
-  // Adjust padding-top to account for margin below previous section's divider
-  const adjustedPaddingTop = (layout.padding_top || 18) + dividerMarginBelowPrevious
 
   // Special handling for closures
   if (key === 'closures') {
     const closures = section.closures || []
-    // Create modified layout with adjusted padding-top and margins from settings
-    // This ensures renderSectionStart can access the margins
-    const modifiedLayout = {
-      ...layout,
-      padding_top: adjustedPaddingTop,
-      divider_margin_top: dividerMarginTop,
-      divider_margin_bottom: dividerMarginBottom,
-    }
     return (
-      renderSectionStart(title, modifiedLayout, showBorder, isLast, settings) +
+      renderSectionStart(title, layout, showBorder, isLast) +
       '\n' +
       renderClosuresSection(closures) +
       '\n' +
@@ -1336,18 +1082,7 @@ function renderSection(
   const cards = section.cards || []
   const cardHtml: string[] = []
 
-  for (let i = 0; i < cards.length; i++) {
-    const card = cards[i]
-    const isLastCard = i === cards.length - 1
-    
-    // Get spacing for this card
-    // Use card-level spacing_bottom if explicitly set, otherwise global card_spacing, otherwise default 20
-    let spacingBottom = 20 // default
-    if (card.spacing_bottom !== undefined) {
-      spacingBottom = card.spacing_bottom
-    } else if (settings?.card_spacing !== undefined) {
-      spacingBottom = settings.card_spacing
-    }
+  for (const card of cards) {
     if (card.type === 'cta') {
       // CTA box with full button customization AND padding support
       const ctaTitle = card.title || ''
@@ -1387,26 +1122,10 @@ function renderSection(
     } else {
       cardHtml.push(renderStandardCard(card, section, settings))
     }
-    
-    // Add spacing after card (except for last card) using a spacer table
-    // This is more reliable than margin-bottom on tables in email HTML
-    if (!isLastCard && spacingBottom > 0) {
-      // Use a spacer table with explicit height for email client compatibility
-      cardHtml.push(`<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;"><tr><td style="height:${spacingBottom}px; line-height:${spacingBottom}px; font-size:1px; mso-line-height-rule:exactly;">&nbsp;</td></tr></table>`)
-    }
   }
 
-  // Create modified layout with adjusted padding-top and margins from settings
-  // This ensures renderSectionStart can access the margins
-  const modifiedLayout = {
-    ...layout,
-    padding_top: adjustedPaddingTop,
-    divider_margin_top: dividerMarginTop,
-    divider_margin_bottom: dividerMarginBottom,
-  }
-  
   return (
-    renderSectionStart(title, modifiedLayout, showBorder, isLast, settings) +
+    renderSectionStart(title, layout, showBorder, isLast) +
     '\n' +
     cardHtml.join('\n') +
     '\n' +
@@ -1450,30 +1169,16 @@ export function renderFullEmail(data: NewsletterData): string {
   const showSectionBorders = settings.show_section_borders !== false
 
   // Build sections HTML with is_last parameter
-  // Also pass divider margin from previous section to adjust padding-top
   const sectionsHtml: string[] = []
   for (let i = 0; i < sections.length; i++) {
     const isLast = i === sections.length - 1
-    const section = sections[i]
-    
-    // Calculate margin below previous section's divider
-    let dividerMarginBelowPrevious = 0
-    if (i > 0 && showSectionBorders) {
-      const prevSection = sections[i - 1]
-      const prevLayout = prevSection.layout || {}
-      dividerMarginBelowPrevious = prevLayout.divider_margin_bottom !== undefined 
-        ? prevLayout.divider_margin_bottom 
-        : (settings?.divider_margin_bottom !== undefined ? settings.divider_margin_bottom : 0)
-    }
-    
     sectionsHtml.push(
       renderSection(
-        section,
+        sections[i],
         sectionSpacing,
         showSectionBorders,
         settings,
-        isLast,
-        dividerMarginBelowPrevious
+        isLast
       )
     )
   }
@@ -1496,7 +1201,6 @@ export function renderFullEmail(data: NewsletterData): string {
   <meta name="color-scheme" content="light dark" />
   <meta name="supported-color-schemes" content="light dark" />
   <title>WSU Graduate School Newsletter</title>
-  <meta name="description" content="${esc(preheaderText || 'Washington State University Graduate School Newsletter')}" />
   <style type="text/css">
     ${EMAIL_CSS}
   </style>
