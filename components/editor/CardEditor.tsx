@@ -38,6 +38,25 @@ export default function CardEditor({
     setEditedCard((prev) => ({ ...prev, ...updates } as Card))
   }
 
+  // Helper to update padding - filters out undefined values
+  const updatePadding = (key: 'top' | 'right' | 'bottom' | 'left', value: string) => {
+    const numValue = value === '' ? undefined : parseInt(value) || 0
+    const newPadding = { ...editedCard.padding }
+
+    if (numValue === undefined) {
+      // Remove the key entirely if value is empty
+      delete newPadding[key]
+    } else {
+      // Set the value
+      newPadding[key] = numValue
+    }
+
+    // Only set padding if there are any keys left, otherwise set to undefined
+    updateCard({
+      padding: Object.keys(newPadding).length > 0 ? newPadding : undefined,
+    })
+  }
+
   const updateLink = (index: number, link: Link) => {
     const newLinks = [...(editedCard.links || [])]
     newLinks[index] = link
@@ -486,6 +505,65 @@ export default function CardEditor({
               />
               <p className="mt-1 text-xs text-wsu-text-muted">
                 Override the global border radius for this card. Leave empty to use the global setting from Settings.
+              </p>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium text-wsu-text-dark">
+                Card Padding (px) - Override
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                <div>
+                  <label className="block text-xs text-wsu-text-muted mb-1">Top</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editedCard.padding?.top !== undefined ? editedCard.padding.top : ''}
+                    onChange={(e) => updatePadding('top', e.target.value)}
+                    className="w-full px-2 py-1 text-sm border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                    placeholder="Global"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-wsu-text-muted mb-1">Right</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editedCard.padding?.right !== undefined ? editedCard.padding.right : ''}
+                    onChange={(e) => updatePadding('right', e.target.value)}
+                    className="w-full px-2 py-1 text-sm border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                    placeholder="Global"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-wsu-text-muted mb-1">Bottom</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editedCard.padding?.bottom !== undefined ? editedCard.padding.bottom : ''}
+                    onChange={(e) => updatePadding('bottom', e.target.value)}
+                    className="w-full px-2 py-1 text-sm border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                    placeholder="Global"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-wsu-text-muted mb-1">Left</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editedCard.padding?.left !== undefined ? editedCard.padding.left : ''}
+                    onChange={(e) => updatePadding('left', e.target.value)}
+                    className="w-full px-2 py-1 text-sm border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                    placeholder="Global"
+                  />
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-wsu-text-muted">
+                Override the global padding for this card. Leave empty to use global settings. Useful for adding extra space below images or links.
               </p>
             </div>
           </div>

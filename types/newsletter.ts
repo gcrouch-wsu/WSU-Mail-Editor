@@ -30,6 +30,16 @@ export interface Colors {
   text_muted: string
 }
 
+export interface Shadow {
+  enabled: boolean
+  color: string
+  blur: number
+  spread: number
+  offset_x: number
+  offset_y: number
+  opacity: number
+}
+
 export interface Settings {
   container_width: number
   section_spacing: number
@@ -39,7 +49,11 @@ export interface Settings {
   typography: Typography
   colors: Colors
   card_border_radius?: number
+  accent_bar_enabled?: boolean
   accent_bar_width?: number
+  accent_bar_color?: string
+  accent_bar_shadow?: Shadow
+  card_shadow?: Shadow
   divider_margin_top?: number
   divider_margin_bottom?: number
   divider_color?: string

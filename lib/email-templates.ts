@@ -473,7 +473,36 @@ function getCardStyle(card: Card, settings: Settings | null = null): string {
     style += ` border-radius:${borderRadius}px; overflow:hidden;`
   }
 
+  // Add card shadow if enabled
+  style += getShadowStyle(settings?.card_shadow)
+
   return style
+}
+
+/**
+ * Generate box-shadow CSS from Shadow object
+ */
+function getShadowStyle(shadow?: { enabled: boolean; color: string; blur: number; spread: number; offset_x: number; offset_y: number; opacity: number } | boolean): string {
+  // Handle legacy boolean shadow values
+  if (typeof shadow === 'boolean') {
+    if (!shadow) return ''
+    // Legacy default shadow
+    return ' box-shadow: 0 2px 4px rgba(0,0,0,0.1);'
+  }
+
+  // Handle new Shadow object
+  if (!shadow || !shadow.enabled) return ''
+
+  // Convert hex color to rgba with opacity
+  const hexToRgba = (hex: string, opacity: number): string => {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r},${g},${b},${opacity})`
+  }
+
+  const color = hexToRgba(shadow.color, shadow.opacity)
+  return ` box-shadow: ${shadow.offset_x}px ${shadow.offset_y}px ${shadow.blur}px ${shadow.spread}px ${color};`
 }
 
 /**
@@ -484,27 +513,37 @@ function getCornerCellStyle(
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 ): string {
   if (borderRadius <= 0) return ''
-  
+
   const radiusMap: Record<string, string> = {
     'top-left': `border-top-left-radius:${borderRadius}px;`,
     'top-right': `border-top-right-radius:${borderRadius}px;`,
     'bottom-left': `border-bottom-left-radius:${borderRadius}px;`,
     'bottom-right': `border-bottom-right-radius:${borderRadius}px;`,
   }
-  
+
   return radiusMap[position] || ''
 }
 
 /**
  * Get accent bar style with border-radius support
  */
-function getAccentBarStyle(borderRadius: number, accentBarWidth: number = 4): string {
+function getAccentBarStyle(
+  borderRadius: number,
+  accentBarWidth: number = 4,
+  accentBarColor: string = CRIMSON,
+  accentBarShadow?: { enabled: boolean; color: string; blur: number; spread: number; offset_x: number; offset_y: number; opacity: number } | boolean
+): string {
   // Use the specified width or default to 4px
   const width = accentBarWidth > 0 ? accentBarWidth : 4
-  const baseStyle = `width:${width}px; background-color:${CRIMSON};`
-  
+  // Use the specified color or default to CRIMSON
+  const color = accentBarColor || CRIMSON
+  let baseStyle = `width:${width}px; background-color:${color};`
+
+  // Add shadow if enabled
+  baseStyle += getShadowStyle(accentBarShadow)
+
   if (borderRadius <= 0) return baseStyle
-  
+
   // Apply border-radius to top-left and bottom-left corners of accent bar
   const cornerStyles = `${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'bottom-left')}`
   // Add overflow hidden to ensure rounded corners are visible
@@ -625,17 +664,24 @@ function renderStandardCard(
   }
 
   const content = contentParts.join('\n')
-  
-  // Get border radius for corner cell styling
-  const borderRadius = card.border_radius !== undefined 
-    ? card.border_radius 
-    : (settings?.card_border_radius || 0)
-  // Get accent bar width from global settings (default 4px)
-  const accentBarWidth = settings?.accent_bar_width || 4
-  const accentCellStyle = getAccentBarStyle(borderRadius, accentBarWidth)
-  const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
 
-  return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
+  // Get border radius for corner cell styling
+  const borderRadius = card.border_radius !== undefined
+    ? card.border_radius
+    : (settings?.card_border_radius || 0)
+
+  // Check if accent bar is enabled (default: true)
+  const accentBarEnabled = settings?.accent_bar_enabled !== false
+
+  if (accentBarEnabled) {
+    // Get accent bar settings from global settings
+    const accentBarWidth = settings?.accent_bar_width || 4
+    const accentBarColor = settings?.accent_bar_color || CRIMSON
+    const accentBarShadow = settings?.accent_bar_shadow || false
+    const accentCellStyle = getAccentBarStyle(borderRadius, accentBarWidth, accentBarColor, accentBarShadow)
+    const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
+
+    return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
     <td style="${accentCellStyle}"></td>
     <td style="${contentCellStyle}">
@@ -643,6 +689,18 @@ function renderStandardCard(
     </td>
   </tr>
 </table>`
+  } else {
+    // No accent bar - single column with all corners rounded
+    const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-left')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
+
+    return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
+  <tr>
+    <td style="${contentCellStyle}">
+      ${content}
+    </td>
+  </tr>
+</table>`
+  }
 }
 
 /**
@@ -703,17 +761,24 @@ function renderEventCard(
   }
 
   const content = contentParts.join('\n')
-  
-  // Get border radius for corner cell styling
-  const borderRadius = card.border_radius !== undefined 
-    ? card.border_radius 
-    : (settings?.card_border_radius || 0)
-  // Get accent bar width from global settings (default 4px)
-  const accentBarWidth = settings?.accent_bar_width || 4
-  const accentCellStyle = getAccentBarStyle(borderRadius, accentBarWidth)
-  const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
 
-  return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
+  // Get border radius for corner cell styling
+  const borderRadius = card.border_radius !== undefined
+    ? card.border_radius
+    : (settings?.card_border_radius || 0)
+
+  // Check if accent bar is enabled (default: true)
+  const accentBarEnabled = settings?.accent_bar_enabled !== false
+
+  if (accentBarEnabled) {
+    // Get accent bar settings from global settings
+    const accentBarWidth = settings?.accent_bar_width || 4
+    const accentBarColor = settings?.accent_bar_color || CRIMSON
+    const accentBarShadow = settings?.accent_bar_shadow || false
+    const accentCellStyle = getAccentBarStyle(borderRadius, accentBarWidth, accentBarColor, accentBarShadow)
+    const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
+
+    return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
     <td style="${accentCellStyle}"></td>
     <td style="${contentCellStyle}">
@@ -721,6 +786,18 @@ function renderEventCard(
     </td>
   </tr>
 </table>`
+  } else {
+    // No accent bar - single column with all corners rounded
+    const contentCellStyle = `${paddingStyle} ${getCornerCellStyle(borderRadius, 'top-left')} ${getCornerCellStyle(borderRadius, 'top-right')} ${getCornerCellStyle(borderRadius, 'bottom-left')} ${getCornerCellStyle(borderRadius, 'bottom-right')}`
+
+    return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
+  <tr>
+    <td style="${contentCellStyle}">
+      ${content}
+    </td>
+  </tr>
+</table>`
+  }
 }
 
 /**

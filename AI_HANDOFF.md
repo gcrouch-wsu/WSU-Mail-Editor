@@ -1,7 +1,7 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: List line-height/spacing control, browser auto-open)  
-**Project Version:** 8.0 (Next.js/TypeScript)  
+**Last Updated:** December 2025 (Latest: Per-card padding controls, accent bar toggle)
+**Project Version:** 8.0 (Next.js/TypeScript)
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
 ## Project Overview
@@ -91,6 +91,95 @@ wsu-mail-editor/
 ```
 
 ## Recent Changes (December 2025)
+
+### Per-Card Padding Controls (Latest)
+- **Added:** Individual padding override controls for each card
+- **Location:** Card editor → "Card Styling" section
+- **Implementation:**
+  - 4-input grid layout (top, right, bottom, left)
+  - Empty fields use global padding settings
+  - Fixed bug where empty fields would override global settings with `undefined` values
+  - Smart padding management: only saves non-empty values, removes entire padding object if all fields cleared
+  - Default resource cards now include `padding: { bottom: 20 }` for better spacing below icons/links
+- **Use Case:** Improve resource card layout by increasing bottom padding to add breathing room after links/images
+- **Files Modified:**
+  - `components/editor/CardEditor.tsx` - Added padding override controls with proper undefined handling
+  - `lib/defaults.ts` - Set bottom padding to 20px for all default resource cards
+- **Data Model:** Already existed in types (`padding?: Padding` on all card types) - just needed UI controls
+- ✅ **Status:** Working in editor, preview, and export
+
+### Accent Bar Toggle
+- **Added:** Global toggle to enable/disable accent bar on standard and event cards
+- **Location:** Settings panel → "Accent Bar" section
+- **Implementation:**
+  - Checkbox: "Show accent bar on standard/event cards"
+  - When disabled: Cards render as single-column table with all corners properly rounded
+  - When enabled: Two-column table with accent bar + content (existing behavior)
+  - Width and color controls are collapsible (only show when enabled)
+  - Default: Enabled (true) for backwards compatibility
+- **Files Modified:**
+  - `types/newsletter.ts` - Added `accent_bar_enabled?: boolean` to Settings interface
+  - `lib/config.ts` - Added default value (true)
+  - `components/editor/SettingsEditor.tsx` - Added toggle with collapsible width/color controls
+  - `lib/email-templates.ts` - Updated `renderStandardCard()` and `renderEventCard()` to conditionally render accent bar
+- ✅ **Status:** Working in editor, preview, and export
+
+### Customizable Shadow Controls
+- **Added:** Comprehensive shadow customization system to replace simple on/off toggles
+- **Location:** Settings panel → "Shadow Effects" section
+- **Implementation:**
+  - **Shadow Properties:**
+    - **Color** - Full color picker support (hex values)
+    - **Blur** - 0-50px range for shadow softness
+    - **Spread** - -20 to 50px range for shadow size
+    - **Offset X** - -50 to 50px horizontal positioning
+    - **Offset Y** - -50 to 50px vertical positioning
+    - **Opacity** - 0-1 range for shadow intensity
+  - **Two Shadow Types:**
+    - **Accent Bar Shadow** - Applied to the crimson accent bar on standard/event cards
+    - **Card Shadow** - Applied to the entire card container
+  - **UI Design:**
+    - Collapsible controls (only show when shadow is enabled)
+    - 3-column grid for blur/spread/opacity
+    - 2-column grid for offset X/Y
+    - Color picker with hex input field
+    - Visual indicator (crimson accent border) when expanded
+  - **Technical Details:**
+    - Created new `Shadow` interface with 7 properties (enabled, color, blur, spread, offset_x, offset_y, opacity)
+    - Added `getShadowStyle()` helper function in `lib/email-templates.ts`
+    - Backwards compatible with legacy boolean shadow values
+    - Converts hex colors to rgba format with opacity
+    - Generates proper CSS `box-shadow` property
+  - **Use Case:** Create glowing "frame" effects around cards using colored shadows (e.g., crimson glow) as an alternative to the impossible accent bar wrap feature
+- **Files Modified:**
+  - `types/newsletter.ts` - Added `Shadow` interface, updated `Settings` interface
+  - `lib/config.ts` - Updated defaults with Shadow objects (enabled: false, default colors/values)
+  - `lib/email-templates.ts` - Added `getShadowStyle()` function, updated `getCardStyle()` and `getAccentBarStyle()`
+  - `components/editor/SettingsEditor.tsx` - Complete reorganization with new shadow controls
+- ✅ **Status:** Working in editor, preview, and export
+
+### Settings Editor Reorganization
+- **Added:** Visual clustering and improved organization of settings panel
+- **Implementation:**
+  - **Grouped into logical sections** with bordered cards:
+    1. **Layout** - Container width, section spacing, card spacing (2-column grid)
+    2. **Section Borders** - Toggle, color, vertical spacing (collapsible when disabled)
+    3. **Global Padding** - Text padding and image padding (4-column grids)
+    4. **Card Styling** - Border radius
+    5. **Accent Bar** - Width and color (2-column grid)
+    6. **Shadow Effects** - Accent bar shadow and card shadow (collapsible controls)
+  - **Visual Design:**
+    - Each section has bordered card with header and underline
+    - Consistent spacing between sections (space-y-6)
+    - Collapsible sub-controls only show when parent feature is enabled
+    - Better use of grid layouts to reduce vertical space
+    - Reduced excessive help text
+  - **Removed Controls:**
+    - **Accent Bar Extension** controls removed from UI (feature abandoned - see Known Issues)
+    - Extension settings still exist in data model but have no UI controls
+- **Files Modified:**
+  - `components/editor/SettingsEditor.tsx` - Complete rewrite with new organization
+- ✅ **Status:** Working, much cleaner layout with less wasted space
 
 ### List Line-Height/Spacing Control
 - **Added:** Line-height (spacing) control for lists in the rich text editor
@@ -182,7 +271,13 @@ wsu-mail-editor/
     - Divider vertical spacing (above/below divider, default 0px)
     - Card spacing (NOT WORKING - see Known Issues, default 20px)
     - Card border radius (global, can be overridden per card, default 0px)
-    - Accent bar width (for standard/event cards, default 4px, vertical only - wrap feature NOT IMPLEMENTED)
+    - Accent bar width (for standard/event cards, default 4px, vertical only)
+    - Accent bar color (default WSU crimson #A60F2D)
+  - **Shadow Effects:**
+    - **Accent Bar Shadow** - Customizable shadow for accent bars (color, blur, spread, offset X/Y, opacity)
+    - **Card Shadow** - Customizable shadow for card containers (color, blur, spread, offset X/Y, opacity)
+    - Can create glowing "frame" effects using colored shadows (e.g., crimson glow)
+    - Email-safe implementation using CSS box-shadow
   - **Padding:**
     - Text padding (top, right, bottom, left, default 20px)
     - Image padding (top, right, bottom, left, default varies)
@@ -322,6 +417,42 @@ Defined in `lib/config.ts`:
    - `npm run format` - Format code with Prettier
    - `npm run checkfmt` - Check code formatting
 
+## Design Decisions
+
+### Shadow Effects vs. Accent Bar Wrap (December 2025)
+
+**Problem:** Users wanted a way to create visual "frames" around cards that wrap around the border radius, particularly when using rounded corners. Initial attempts focused on extending the accent bar horizontally to wrap around corners.
+
+**Attempts Made:**
+- Multiple table-based approaches tried (2-row, 3-row, nested tables, fixed column widths)
+- All failed due to fundamental limitations of email-safe HTML
+- Email clients only support tables and inline styles (no modern CSS Grid, Flexbox, or SVG)
+- Horizontal and vertical bars rendered in separate table cells couldn't visually connect
+- Rounded corners require continuous curves that table-based layouts can't produce
+
+**Decision:** Abandon accent bar wrap feature entirely and implement customizable shadow controls instead
+
+**Rationale:**
+1. **Technical Feasibility:** Shadows work reliably across email clients using standard CSS `box-shadow`
+2. **Visual Effect:** Colored shadows (e.g., crimson glow) can create a "frame" effect similar to the desired wrapping
+3. **Simplicity:** Single CSS property vs. complex nested table structures
+4. **Flexibility:** Users can customize color, blur, spread, offsets, and opacity for creative effects
+5. **Maintenance:** No complex edge cases or email client compatibility workarounds
+
+**Implementation:**
+- Created `Shadow` interface with 7 customizable properties
+- Applied to both accent bars and card containers
+- Backwards compatible with legacy boolean shadow toggles
+- UI controls only show when shadow is enabled (collapsible design)
+
+**Alternative Use Cases:**
+- Subtle depth/elevation effects (default: black shadow with low opacity)
+- Glowing highlights (crimson shadow with high blur/spread)
+- Offset shadows for 3D card effects
+- Multiple shadow combinations (accent bar + card shadow together)
+
+**Outcome:** Feature provides the desired visual enhancement without the impossible technical constraints of the wrap approach.
+
 ## Important Implementation Details
 
 ### Org Chart Admin JavaScript
@@ -372,8 +503,10 @@ Defined in `lib/config.ts`:
   - `renderCTABox()` - Generate CTA card HTML
   - `renderLetterCard()` - Generate letter card HTML
   - `renderFooter()` - Generate footer HTML
-  - `getCardStyle()` - Build card style with border radius, spacing, etc.
+  - `getCardStyle()` - Build card style with border radius, spacing, shadows, etc.
   - `getCardPadding()` - Calculate card padding from global/section/card settings
+  - `getShadowStyle()` - Generate CSS box-shadow from Shadow object (added December 2025)
+  - `getAccentBarStyle()` - Generate accent bar styles with optional shadow support
   - All functions use email-safe inline styles
   - Padding applied to `<td>` elements, not `<table>` elements (for email compatibility)
 
@@ -426,35 +559,158 @@ Defined in `lib/config.ts`:
 - **Default:** 24px
 - ✅ **Status:** Working correctly
 
-### Accent Bar Wrap Control (NOT IMPLEMENTED)
-- **Intended Feature:** Allow the crimson accent bar on standard and event cards to extend horizontally along the top edge
+### Accent Bar Wrap Control (FEATURE ABANDONED - UI CONTROLS REMOVED)
+- **Intended Feature:** Allow the crimson accent bar on standard and event cards to wrap around the card perimeter (top and bottom edges) when border radius is applied, creating a continuous U-shaped frame
+- **Decision (December 2025):** Feature deemed impossible with email-safe HTML/table constraints. UI controls removed from SettingsEditor. Data model properties remain for backwards compatibility but are not exposed to users.
 - **Current Behavior:** Accent bar is a vertical bar on the left side of cards (4px wide by default)
 - **Desired Behavior:** 
   - Accent bar starts as a vertical bar on the left edge (as it currently does)
-  - User can control how far the accent bar extends horizontally along the top edge
-  - Visual: The red accent bar would wrap around the top-left corner and continue horizontally
-  - Control would specify the horizontal extension distance (in pixels)
+  - When border radius > 0 and extension is enabled, horizontal bars wrap around the top and bottom edges
+  - User can control:
+    - Enable/disable extension (toggle)
+    - Top extension distance (pixels)
+    - Bottom extension distance (pixels, independent from top)
+  - Visual: The red accent bar would wrap around the rounded corners continuously, creating a U-shaped frame
+  - Horizontal bars should wrap around the outside of the card, not extend into content area
+  - Bars should follow the border radius and be continuous (no gaps)
 - **Visual Description:**
   - **Default (current):** Red vertical bar on left edge only
-  - **With wrap:** Red vertical bar on left edge + red horizontal bar extending from top-left corner along the top edge
-  - The horizontal extension would be controlled by a "wrap" or "extension" value
-- **Implementation Attempt:**
-  - Attempted to add `accent_bar_wrap` property to card types and settings
-  - Attempted to modify `getAccentBarHtml()` function to support horizontal extension
-  - Changes were reverted due to errors
-- **Current Status:** ❌ **NOT IMPLEMENTED**
+  - **With wrap:** Red vertical bar on left edge + red horizontal bars extending along top and bottom edges, wrapping around rounded corners
+  - The horizontal extension creates a U-shaped frame around the card perimeter
+- **Implementation Attempts (All Failed):**
+  
+  **Attempt 1 - Initial Structure:**
+  - Added `accent_bar_extension` (single value) to settings
+  - Created 2-row table structure (top bar row + card row)
+  - Issue: Horizontal bar didn't align properly with vertical bar
+  - Issue: Didn't handle bottom extension
+  
+  **Attempt 2 - U-Shape Structure:**
+  - Changed to `accent_bar_extension_top` and `accent_bar_extension_bottom` (separate controls)
+  - Created 3-row table structure (top bar + card + bottom bar)
+  - Added `getHorizontalAccentBarStyle()` helper function
+  - Issue: Horizontal bars were constrained to vertical bar width instead of extending horizontally
+  - Issue: Bars didn't wrap around corners continuously
+  
+  **Attempt 3 - Outer Wrapper Approach:**
+  - Created outer wrapper table with horizontal bars outside the card
+  - Used nested tables to position bars
+  - Issue: Horizontal bars lost their horizontal extension (were constrained)
+  - Issue: Structure became too complex with nested tables
+  
+  **Attempt 4 - Fixed Column Alignment:**
+  - Used fixed column widths to align all rows
+  - Horizontal bars in separate rows with proper width attributes
+  - Issue: Bars appeared but didn't visually connect/wrap around corners
+  - Issue: Continuous wrapping around border radius not achieved
+  
+  **Final Attempt - Simplified Structure:**
+  - Horizontal bars in first column, extending horizontally
+  - Vertical bar in middle row, first column
+  - Issue: Horizontal parts of wrap were lost/not rendering correctly
+  - Issue: Failed to create continuous wrap around rounded corners
+  
+- **What Was Added (All Removed December 2025):**
+  - Extension settings were added to data model but have been completely removed
+  - Function `getHorizontalAccentBarStyle()` was created but has been removed
+  - UI controls were never added (feature abandoned before UI implementation)
+  - Shadow support added: `accent_bar_shadow` and `card_shadow` (these work correctly)
+  
+- **Current Status:** ❌ **FEATURE ABANDONED - COMPLETELY REMOVED**
   - Only vertical accent bar exists (left edge)
   - No horizontal extension capability
-  - `accent_bar_width` control exists but only affects vertical bar width
+  - Extension settings completely removed from data model (December 2025)
+  - No UI controls (never implemented)
+  - `accent_bar_width` control exists and works (affects vertical bar width)
+  - `accent_bar_color` control exists and works
+  - **Alternative Solution:** Use customizable shadow controls (added December 2025) to create glowing "frame" effects around cards with colored shadows
+  
 - **Code Location:**
-  - Accent bar rendering: `lib/email-templates.ts:507-510` (`getAccentBarStyle()`)
-  - Used in: `renderStandardCard()` and `renderEventCard()`
-  - Settings: `lib/config.ts:138` (`accent_bar_width: 4`)
+  - Accent bar rendering: `lib/email-templates.ts` (`getAccentBarStyle()`)
+  - Used in: `renderStandardCard()` and `renderEventCard()` (vertical bar only)
+  - Extension code: All removed (no longer exists in codebase)
+  
+- **Why It Failed:**
+  - Email HTML limitations: Complex table structures don't render consistently across clients
+  - Alignment challenges: Horizontal bars need to align with vertical bar while extending horizontally
+  - Corner wrapping: Difficult to create continuous curve around rounded corners with table-based layout
+  - Visual continuity: Bars appeared disconnected or didn't wrap smoothly around corners
+  - Structure complexity: Multiple nested tables caused rendering issues
+  
 - **Future Implementation Notes:**
-  - Would need to modify card HTML structure to include a top horizontal bar
-  - Would need to handle corner radius if card has rounded corners
-  - Would need UI control in Settings or Card Editor for wrap distance
-  - Would need to ensure email client compatibility (tables, inline styles)
+  - Would need a fundamentally different approach - possibly using background images or SVG
+  - Email client compatibility is a major constraint (tables, inline styles only)
+  - May need to accept that continuous wrapping around corners isn't feasible with email-safe HTML
+  - Alternative: Could implement as separate decorative elements rather than continuous wrap
+  - Consider if feature is essential or if vertical bar alone is sufficient
+
+- **Implementation Prompt (for future attempts):**
+  
+  **Goal:** Create a U-shaped accent bar that wraps around the perimeter of newsletter cards with rounded corners, forming a continuous frame that follows the border radius.
+  
+  **Visual Description:**
+  - Cards have a vertical accent bar on the left edge (currently working, 4px wide by default)
+  - When border radius > 0 and extension is enabled, horizontal bars should extend from the vertical bar along the top and bottom edges
+  - The horizontal bars must wrap around the rounded corners continuously, following the border radius curve
+  - Result: A U-shaped frame around the card perimeter (vertical left + horizontal top + horizontal bottom)
+  - The bars should wrap around the OUTSIDE of the card, not extend into the content area
+  - No text/content space should be lost - horizontal bars are decorative elements outside the card
+  
+  **Technical Requirements:**
+  - Must use email-safe HTML (tables, inline styles only - no CSS Grid, Flexbox, or modern CSS)
+  - Must work across major email clients (Gmail, Outlook, Apple Mail, Yahoo)
+  - Cards are rendered using table-based layout with `border-collapse:separate` when border radius > 0
+  - Current card structure: Single-row table with `<td>` for vertical accent bar and `<td>` for content
+  - Border radius is applied using `border-radius` CSS with corner-specific styles via `getCornerCellStyle()`
+  
+  **User Controls Needed:**
+  1. Toggle: Enable/disable horizontal extension (boolean: `accent_bar_extension_enabled`)
+  2. Top Extension: Horizontal distance for top bar (number: `accent_bar_extension_top`, 0-200px)
+  3. Bottom Extension: Horizontal distance for bottom bar (number: `accent_bar_extension_bottom`, 0-200px, independent from top)
+  4. Extension only applies when `card_border_radius > 0` (no wrapping without rounded corners)
+  
+  **Current Implementation Context:**
+  - Vertical accent bar works perfectly (left edge, full height)
+  - Settings exist: `accent_bar_width`, `accent_bar_color`, `accent_bar_shadow` (all working)
+  - Extension settings have been completely removed from data model (December 2025)
+  - No UI controls exist (feature abandoned before UI implementation)
+  - Function `getHorizontalAccentBarStyle()` has been removed
+  
+  **Key Challenges from Previous Attempts:**
+  1. **Alignment:** Horizontal bars need to align with vertical bar position while extending horizontally
+  2. **Corner Continuity:** Bars must wrap around rounded corners smoothly, following the border radius curve
+  3. **Table Structure:** Email HTML requires table-based layout - complex nested structures caused rendering issues
+  4. **Visual Connection:** Bars appeared disconnected or didn't create continuous wrap around corners
+  5. **Column Widths:** Fixed column widths for alignment conflicted with horizontal extension needs
+  
+  **What Didn't Work:**
+  - 2-row structure (top bar + card) - alignment issues
+  - 3-row structure (top bar + card + bottom bar) - bars constrained to vertical bar width
+  - Outer wrapper tables - horizontal extension lost
+  - Nested tables - too complex, rendering failures
+  - Fixed column widths - prevented horizontal extension
+  
+  **Potential Approaches to Consider:**
+  - Background images/SVG for the horizontal bars (email-safe if embedded as data URIs)
+  - Single table with carefully calculated cell widths and positioning
+  - Overlapping table cells to create visual continuity
+  - Using `colspan` strategically to span horizontal bars
+  - Accepting that perfect continuity may not be achievable - implement as close approximation
+  
+  **Success Criteria:**
+  - Horizontal bars extend horizontally from vertical bar position
+  - Bars wrap around rounded corners following border radius
+  - Bars appear continuous (no visible gaps or disconnection)
+  - Works in live preview and HTML export
+  - Compatible with major email clients
+  - Content area remains unchanged (no space loss)
+  
+  **Files to Modify (if attempting implementation):**
+  - `lib/email-templates.ts`: `renderStandardCard()`, `renderEventCard()` (would need to add wrapping logic)
+  - `types/newsletter.ts`: Would need to add extension settings back to Settings interface
+  - `lib/config.ts`: Would need to add default values
+  - `lib/defaults.ts`: Would need to add to default newsletter creation
+  - `components/editor/SettingsEditor.tsx`: Would need to add UI controls (toggle + top/bottom inputs)
 
 ## Known Issues & TODOs
 
@@ -464,8 +720,12 @@ Defined in `lib/config.ts`:
 - ✅ JavaScript errors resolved
 - ✅ Download functionality working
 - ✅ Divider line controls working (color, spacing)
+- ✅ Customizable shadow controls implemented (December 2025)
+- ✅ Settings editor reorganized with better clustering (December 2025)
+- ✅ Per-card padding controls added (December 2025)
+- ✅ Accent bar toggle implemented (December 2025)
 - ❌ Card spacing control NOT working (see Critical Issues)
-- ❌ Accent bar wrap control NOT implemented (see Critical Issues)
+- ❌ Accent bar wrap control ABANDONED (feature deemed impossible with email HTML constraints)
 
 ### Critical Issues
 - **Card Spacing Control Not Working:**
@@ -480,20 +740,92 @@ Defined in `lib/config.ts`:
     5. Check browser console for any errors
     6. Verify `settings.card_spacing` is being read correctly (not always undefined)
 
-- **Accent Bar Wrap Control Not Implemented:**
-  - Feature was attempted but reverted due to errors
-  - Current implementation only supports vertical accent bar (left edge)
-  - Desired: Accent bar should be able to extend horizontally along top edge
-  - **Implementation Requirements:**
-    1. Modify card HTML structure to support horizontal bar element
-    2. Add `accent_bar_wrap` or `accent_bar_extension` property to settings/cards
-    3. Update `getAccentBarStyle()` or create new function for horizontal bar
-    4. Handle corner radius when bar wraps around corner
-    5. Add UI control for wrap distance
-    6. Ensure email client compatibility
+- **Accent Bar Wrap Control - ABANDONED AND REMOVED (December 2025):**
+  - Feature attempted multiple times but deemed impossible with email HTML constraints
+  - **Reason for Abandonment:**
+    - Email HTML (tables + inline styles only) cannot create continuous curved elements
+    - Horizontal and vertical bars in separate table cells don't connect smoothly
+    - Rounded corners require curves that table-based layouts can't produce
+    - Email client compatibility issues with complex nested table structures
+  - **Alternative Solution Implemented:**
+    - Customizable shadow controls (December 2025) can create glowing "frame" effects
+    - Users can set shadow color to crimson, increase blur/spread, and create visual "wrapping"
+    - Much simpler implementation with better email client compatibility
+  - **Cleanup Status:**
+    - Extension settings completely removed from data model (December 2025)
+    - No UI controls ever existed (feature abandoned before UI implementation)
+    - Unused function `getHorizontalAccentBarStyle()` removed
+    - All extension-related code has been cleaned up
+  - **No Further Action Needed** - Feature officially abandoned and removed
+
+### Future Development Suggestions
+
+#### Resource Card Layout Enhancements
+**Problem:** Resource cards with images can feel cramped, especially when images are followed by links without adequate spacing.
+
+**Current Solution:** Use per-card padding controls (added December 2025) to increase bottom padding on individual resource cards.
+
+**Future Enhancement Options:**
+
+1. **Image-Specific Spacing Controls**
+   - **Image Bottom Margin** - Dedicated control for space between image and content
+   - **Image Container Padding** - Add breathing room around the image itself
+   - **Image Border/Shadow** - Visual separation options (rounded corners, subtle shadows)
+   - **Implementation:** Add `image_bottom_margin?: number` to card types and UI controls
+
+2. **Image Style Presets**
+   - **Circular Treatment** - Round images with optional colored border
+   - **Card Style** - Image with background, padding, and shadow
+   - **Minimal** - Current behavior (image as-is)
+   - **Implementation:** Add `image_style?: 'default' | 'circular' | 'card'` property
+
+3. **Content Block Spacing**
+   - Separate controls for spacing between different content sections:
+     - Image → Title spacing
+     - Title → Body spacing
+     - Body → Links spacing
+   - More granular than overall padding controls
+   - **Implementation:** Add `content_spacing?: { image_to_title?: number, title_to_body?: number, body_to_links?: number }` to card types
+
+4. **Image Size Controls**
+   - Currently only `icon_size` exists for resource cards
+   - Add width/height controls for main images
+   - Add alignment options (left, center, right)
+   - **Implementation:** Extend existing `icon_size` or add separate `image_width/image_height` properties
+
+**Recommendation:** Start with #1 (Image Bottom Margin) as a quick win, then consider #2 (Image Style Presets) for visual polish.
+
+#### Email Client Compatibility Testing
+- Add automated testing against major email clients (Litmus or Email on Acid integration)
+- Document tested/supported email clients
+- Add email client compatibility warnings in UI
+
+#### Performance Optimizations
+- Debounce preview updates (currently regenerates on every keystroke)
+- Add loading indicators for slow operations
+- Optimize image handling (lazy loading, compression)
+
+#### Workflow Enhancements
+- **Card Templates** - Save frequently used card configurations as templates
+- **Bulk Card Operations** - Apply settings to multiple cards at once
+- **Card Duplication** - Quick duplicate button for cards
+- **Section Templates** - Save entire sections as reusable templates
+
+#### Accessibility Improvements
+- Enhanced validation for WCAG compliance
+- Automated alt text suggestions (AI-powered)
+- Color contrast checker for custom colors
+- Screen reader preview mode
+
+#### Version Control & Collaboration
+- Save multiple versions of newsletters
+- Compare versions side-by-side
+- Collaborative editing (multiple users)
+- Comment system for feedback
 
 ### Potential Improvements
 - [ ] Fix card spacing control (see Critical Issues above)
+- [ ] Add image bottom margin control for resource cards (see Future Development Suggestions)
 - [ ] Add error boundaries for better error handling
 - [ ] Add loading states for API calls
 - [ ] Improve mobile responsiveness for org chart editor
@@ -653,4 +985,11 @@ Currently none required. All configuration is in `lib/config.ts`.
 3. Update this document if architecture changes
 4. Write clear commit messages
 5. Verify both editors still work after changes
+
+**Important - Accent Bar Wrap Feature:**
+- DO NOT attempt to implement accent bar wrapping/extension around card corners
+- This feature has been attempted multiple times and is impossible with email-safe HTML
+- All extension-related code has been removed from the codebase (December 2025)
+- If users request this, direct them to use customizable shadow controls instead (crimson glow effect)
+- The data model no longer contains any `accent_bar_extension_*` properties
 
