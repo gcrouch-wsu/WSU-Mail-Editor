@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: List spacing fixes attempt, port cleanup reminder)  
+**Last Updated:** December 2025 (Latest: List item gap control FIXED - works for all values 0-50px)  
 **Project Version:** 8.0 (Next.js/TypeScript)  
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
@@ -479,14 +479,24 @@ Defined in `lib/config.ts`:
       - This is why values below 16px appeared to have no effect
     - **Failed Attempts (for future reference - don't repeat these):**
       1. ❌ Setting inline styles on `<li>` without addressing `<p>` margins
-      2. ❌ Using `!important` on `<li>` styles (margin collapse happens before specificity)
-      3. ❌ Removing margins from `ul/ol` containers (didn't address the paragraph issue)
-      4. ❌ Setting explicit margins on `<li>` (still overridden by paragraph margin collapse)
-    - **Successful Fix:**
-      - Remove paragraph margins inside list items in BOTH editor and preview CSS:
-      - **Editor CSS** (globals.css:111-114): `.ProseMirror li p { margin-top: 0; margin-bottom: 0; }`
-      - **Preview CSS** (styles.ts:89-92): `li p { margin-top: 0 !important; margin-bottom: 0 !important; }`
-      - This prevents margin collapse and allows the `<li>` inline styles to fully control spacing
+      2. ❌ Using `!important` on CSS reset (prevents inline styles from overriding)
+      3. ❌ Only updating styles when they appear different (timing issues)
+      4. ❌ Removing margins from `ul/ol` containers (didn't address the paragraph issue)
+      5. ❌ Setting explicit margins on `<li>` without removing paragraph margins (still overridden by margin collapse)
+    - **Successful Fix (December 2025):**
+      - **Step 1:** Remove paragraph margins inside list items in BOTH editor and preview CSS:
+        - **Editor CSS** (globals.css:111-113): `.ProseMirror li p { margin-top: 0; margin-bottom: 0; }`
+        - **Preview CSS** (styles.ts:89-92): `li p { margin-top: 0 !important; margin-bottom: 0 !important; }`
+        - This prevents margin collapse and allows the `<li>` inline styles to fully control spacing
+      - **Step 2:** Remove `!important` from CSS reset (globals.css:94-106):
+        - Changed `.ProseMirror li { margin-bottom: 0 !important; }` to `margin-bottom: 0;`
+        - This allows inline styles with `!important` to properly override the reset
+      - **Step 3:** Always apply styles (TiptapEditor.tsx:248-253):
+        - Changed condition from `if (newStyle !== (attrs.style || '').trim())` to always update
+        - Ensures styles are applied even if they appear the same (handles timing issues)
+      - **Step 4:** Enhanced ListItem extension (TiptapEditor.tsx:70-94):
+        - Added `keepOnSplit: true` to preserve styles through operations
+        - Improved `parseHTML` to always preserve style attribute exactly as it is
     - **Code Locations:**
       - TiptapEditor.tsx:68-94 (custom ListItem extension with style attribute support)
       - TiptapEditor.tsx:222-240 (updateListItemStyles function that applies inline styles)
