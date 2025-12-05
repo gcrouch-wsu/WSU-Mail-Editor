@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: Fixed list line-height for Event and Resource cards)
+**Last Updated:** December 2025 (Latest: Template type detection fixes, TypeScript build fixes)
 **Project Version:** 8.0 (Next.js/TypeScript)
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
@@ -92,7 +92,147 @@ wsu-mail-editor/
 
 ## Recent Changes (December 2025)
 
-### Per-Card Padding Controls (Latest)
+### Rich Text Editor UX Improvements & Feature Additions (Latest)
+- **Added:** Comprehensive improvements to TiptapEditor and CardEditor user experience
+- **Summary:** Fixed critical UX issues and added standard editor features that were missing
+
+#### TiptapEditor Enhancements (components/editor/TiptapEditor.tsx)
+
+**1. List Spacing Controls Refactor (Dec 2025)**
+- **Problem (Original):** When list item text wrapped to multiple lines, the lines would crash together
+- **Root Cause:** Confusion between two different types of spacing:
+  1. Line-height within a list item (for wrapped text)
+  2. Spacing between different list items
+- **Solution:** Split into TWO separate controls with different purposes:
+  - **Line Height Control** - Controls spacing for wrapped text WITHIN a single list item (applies `line-height` to `<li>` elements)
+  - **Item Spacing Control** - Controls spacing BETWEEN list items (applies `margin-bottom` to `<li>` elements)
+- **Implementation:**
+  - Added two state variables: `listLineHeight` (default 1.0) and `listItemSpacing` (default 4px)
+  - Created two separate toolbar inputs that appear when cursor is in a list OR document has lists
+  - Created `applyListStyles()` function that applies both styles to `<li>` elements inline
+  - Removed line-height from `<ul>`/`<ol>` containers (no longer needed)
+  - Line height range: 0.5-3.0 (for wrapped text)
+  - Item spacing range: 0-50px (for spacing between items)
+  - **Fixed (Dec 2025):** Controls now show immediately when cursor enters a list
+  - **Fixed (Dec 2025):** Auto-initialization of default styles when entering a list (ensures controls work on newly created lists)
+  - Added `isInList` state tracking with `onSelectionUpdate` callback
+  - Added useEffect to auto-apply default styles to unstyled list items
+- **Result:**
+  - Users can keep wrapped text single-spaced (line-height: 1.0) while adding breathing room between list items
+  - Clear separation of concerns between intra-item and inter-item spacing
+  - Both styles preserved in preview and export HTML
+  - Controls appear immediately when cursor is in any list
+  - Controls work immediately on both new and existing lists
+
+**2. Nested List Hierarchy Visualization (Dec 2025)**
+- **Problem:** Nested lists showed the same bullet/number style at all levels, making hierarchy unclear
+- **Solution:** Added CSS rules for different list styles at different nesting levels
+- **Bullet List Hierarchy:**
+  - Level 1: Filled circle (disc)
+  - Level 2: Hollow circle (circle)
+  - Level 3+: Square
+- **Ordered List Hierarchy:**
+  - Level 1: Numbers (1, 2, 3...)
+  - Level 2: Lowercase letters (a, b, c...)
+  - Level 3+: Lowercase Roman numerals (i, ii, iii...)
+- **Implementation:** Added CSS selectors in `app/globals.css`:
+  - `.ProseMirror ul ul { list-style-type: circle; }`
+  - `.ProseMirror ul ul ul { list-style-type: square; }`
+  - `.ProseMirror ol ol { list-style-type: lower-alpha; }`
+  - `.ProseMirror ol ol ol { list-style-type: lower-roman; }`
+- **Result:** Visual hierarchy is now immediately clear when indenting lists
+
+**3. List Indent/Outdent Functionality**
+- **Added:** Full support for nested/hierarchical lists with keyboard shortcuts and toolbar buttons
+- **Keyboard Shortcuts:**
+  - **Tab** - Indent list item (create sub-list)
+  - **Shift+Tab** - Outdent list item (lift to parent level)
+- **Toolbar Buttons:**
+  - Indent button (IndentIncrease icon) - appears when in list
+  - Outdent button (IndentDecrease icon) - appears when in list
+  - Both buttons are conditionally shown only when active in a list
+- **Implementation:**
+  - Added `handleKeyDown` in `editorProps` to intercept Tab key
+  - **Fixed (Dec 2025):** Changed from using low-level ProseMirror transactions (lift/wrap) to Tiptap's proper commands (`sinkListItem`/`liftListItem`)
+  - Previous implementation was incorrectly wrapping list items directly, causing errors with ordered lists
+  - Now uses `editor.chain().focus().sinkListItem('listItem').run()` for indenting
+  - Now uses `editor.chain().focus().liftListItem('listItem').run()` for outdenting
+  - Same fix applied to toolbar button handlers
+  - Buttons now properly check if commands can execute using `editor.can().sinkListItem('listItem')`
+- **Result:** Users can now create structured multi-level lists for both bullet and ordered lists without errors
+
+**4. New Text Formatting Options**
+- **Subscript** - `H₂O` formatting (added SubscriptExtension from @tiptap/extension-subscript)
+- **Superscript** - `E=mc²` formatting (added SuperscriptExtension from @tiptap/extension-superscript)
+- **Clear Formatting** - Remove all formatting from selected text (uses `.unsetAllMarks()`)
+- **Toolbar Location:** Added after Strikethrough button, before Headings section
+
+**5. Structural Elements**
+- **Blockquote** - For citations and callouts (already in StarterKit, just needed toolbar button)
+- **Code Block** - For code snippets (already in StarterKit, just needed toolbar button)
+- **Horizontal Rule** - Section dividers (already in StarterKit, just needed toolbar button)
+- **Toolbar Location:** Blockquote and Code Block after Heading 3, Horizontal Rule after text alignment
+
+**6. Icons Added**
+- Import additions: `IndentIncrease`, `IndentDecrease`, `Quote`, `Separator`, `RemoveFormatting`, `Code2`, `Subscript`, `Superscript`
+- All from lucide-react icon library
+
+#### CardEditor Modal UX Improvements (components/editor/CardEditor.tsx)
+
+**1. Sticky Footer for Action Buttons**
+- **Problem:** Long card content required scrolling back to top to click Save/Cancel buttons
+- **Solution:** Moved Save/Cancel buttons from sticky header to sticky footer at bottom
+- **Implementation:**
+  - Changed modal container to `flex flex-col` layout
+  - Content area uses `overflow-y-auto flex-1` for scrolling
+  - Footer is separate div with `border-t` at bottom
+  - Delete button remains in header (destructive actions should be separate)
+- **Result:** Save/Cancel always visible at bottom, no scrolling needed
+
+**2. Text Overflow Handling**
+- **Problem:** Long URLs and titles could overflow container boundaries
+- **Solution:** Added `overflow-hidden text-ellipsis` classes to text inputs
+- **Affected Inputs:**
+  - Title input (card title field)
+  - All URL inputs (icon URLs, signature image URLs, link URLs)
+- **Result:** Long text is truncated with ellipsis (...) instead of breaking layout
+
+#### Files Modified
+- **components/editor/TiptapEditor.tsx**
+  - Added 7 new icon imports
+  - Added SubscriptExtension and SuperscriptExtension imports
+  - Added extensions to editor configuration
+  - Added `handleKeyDown` for Tab/Shift+Tab in lists (fixed Dec 2025 to use proper Tiptap commands)
+  - Refactored list spacing controls (Dec 2025):
+    - Split single spacing control into two: line-height and item spacing
+    - Added `listLineHeight` and `listItemSpacing` state variables
+    - Created `applyListStyles()` function to apply both styles inline to `<li>` elements
+    - Removed line-height from `<ul>` and `<ol>` containers
+  - Added 8 new toolbar buttons (indent, outdent, subscript, superscript, clear formatting, blockquote, code block, horizontal rule)
+- **app/globals.css**
+  - Added nested list hierarchy styles (Dec 2025):
+    - Bullet lists: disc → circle → square
+    - Ordered lists: decimal → lower-alpha → lower-roman
+  - Removed obsolete line-height inheritance rules (Dec 2025)
+  - Fixed default line-height for `<li>` to 1.0 (from CSS variable)
+- **components/editor/CardEditor.tsx**
+  - Restructured modal layout (flex-col with sticky footer)
+  - Moved Save/Cancel buttons from header to footer
+  - Added overflow handling classes to 4 input fields
+
+#### Missing Features Analysis (Completed)
+- Investigated three UX issues reported by user
+- Identified and cataloged missing standard editor features
+- Prioritized features into High/Medium/Low categories
+- Implemented all High and Medium priority features
+
+#### Dependencies Added
+- `@tiptap/extension-subscript` - Subscript text formatting
+- `@tiptap/extension-superscript` - Superscript text formatting
+
+✅ **Status:** All features working in editor, preview, and export. Tested with nested lists (including hierarchy visualization), text formatting, and long URLs. List spacing controls refactored (Dec 2025) for better separation between line-height and item spacing.
+
+### Per-Card Padding Controls
 - **Added:** Individual padding override controls for each card
 - **Location:** Card editor → "Card Styling" section
 - **Implementation:**
