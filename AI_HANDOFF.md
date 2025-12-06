@@ -503,6 +503,8 @@ wsu-mail-editor/
 **Newsletter Routes:**
 - `POST /api/preview` - Generate HTML preview
 - `POST /api/export` - Export HTML file (download)
+  - Filename includes template name, date, and timestamp (HH-MM format, local time)
+  - Format: `{TemplateName}_YYYY-MM-DD_HH-MM.html` (e.g., `Briefing_2025-12-05_14-30.html`)
 - `POST /api/import` - Import from HTML (restores editor state)
 - `POST /api/validate` - Validate for accessibility
 - `POST /api/stats` - Get content statistics
