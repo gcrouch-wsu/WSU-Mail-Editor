@@ -287,9 +287,12 @@ When making changes as an AI assistant:
   - ✅ List controls (line height, item gap, indent/outdent)
   - ✅ Live preview with real-time updates
   - ✅ Export/Import HTML with round-trip editing
-  - ✅ Auto-save to localStorage
+    - Export filenames include template name and timestamp (e.g., `Briefing_2025-12-05_14-30.html`)
+  - ✅ Auto-save to localStorage with template-aware restore
+    - Restore automatically opens correct template based on backup content
   - ✅ Undo/redo functionality
   - ✅ Template switching (Friday Focus, Briefing, Slate Campaign)
+    - Template selection persists and is used for export filenames
   - ✅ Card spacing control
   - ✅ Divider line controls (color, spacing)
   - ✅ Section drag-and-drop reordering
