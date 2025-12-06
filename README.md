@@ -158,12 +158,19 @@ wsu-mail-editor/
 2. The development server will automatically reload
 3. Check the browser console for any errors
 4. Test the editor functionality:
-   - Switch between templates
-   - Edit content
-   - Preview changes
-   - Export/Import
-   - Validate accessibility
-   - Check statistics
+   - **Newsletter Editor:**
+     - Switch between templates (FF, Briefing, Slate)
+     - Edit content, sections, and cards
+     - Preview changes
+     - Export/Import
+     - Validate accessibility
+     - Check statistics
+   - **Org Chart Editor:**
+     - Create and edit organizational charts
+     - Switch between layout types
+     - Import from HTML
+     - Export WordPress-compatible HTML
+     - Download runtime files
 
 ## Key Concepts
 
