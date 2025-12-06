@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 6, 2025 (Latest: Restored accent bar and shadow controls with full customization)
+**Last Updated:** December 6, 2025 (Latest: Fixed card spacing and border radius global settings)
 **Project Version:** 8.0 (Next.js/TypeScript)
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
@@ -321,6 +321,59 @@ When making changes as an AI assistant:
 ---
 
 ## Recent Fixes (December 2025)
+
+### Card Spacing & Border Radius Fix (December 6, 2025)
+
+**Issue:** Global card spacing and card border radius settings were not being applied to rendered cards. The controls existed in the UI but had no effect on the output.
+
+**Root Cause:**
+- Global settings `card_spacing` and `card_border_radius` were defined in types and SettingsEditor
+- However, `getCardStyle()` function in `email-templates.ts` only used per-card overrides
+- Global defaults were never consulted when rendering cards
+- Result: UI controls appeared broken, users couldn't set global card styling
+
+**Solution Implemented:**
+1. **Updated `getCardStyle()` function** (`lib/email-templates.ts:465-498`)
+   - Added logic to use global `settings.card_spacing` as default for `spacing_bottom`
+   - Added logic to use global `settings.card_border_radius` as default for `border_radius`
+   - Per-card overrides still work and take precedence over global settings
+   - Proper cascading: Global default → Per-card override
+
+2. **Added Border Radius Toggle** (`components/editor/SettingsEditor.tsx:252-305`)
+   - Added enable/disable checkbox for rounded corners
+   - When enabled, defaults to 8px radius
+   - Shows value input only when enabled
+   - Prevents accidental 1px radius (minimum is 1px when enabled)
+   - Improved UX with recommended values (4-12px)
+
+**Code Changes:**
+```typescript
+// Before (lib/email-templates.ts)
+const spacingBottom = card.spacing_bottom || 20
+const borderRadius = card.border_radius || 0
+
+// After (lib/email-templates.ts)
+const globalSpacing = settings?.card_spacing !== undefined ? settings.card_spacing : 20
+const spacingBottom = card.spacing_bottom !== undefined ? card.spacing_bottom : globalSpacing
+
+const globalRadius = settings?.card_border_radius || 0
+const borderRadius = card.border_radius !== undefined ? card.border_radius : globalRadius
+```
+
+**Features Now Working:**
+- ✅ Global card spacing affects all cards (0-100px)
+- ✅ Global card border radius with enable/disable toggle
+- ✅ Per-card overrides still function correctly
+- ✅ Proper cascading from global to per-card settings
+- ✅ Real-time preview updates
+
+**Code Locations:**
+- `lib/email-templates.ts:465-498` - getCardStyle() with global defaults
+- `components/editor/SettingsEditor.tsx:226-305` - Card styling controls with toggle
+
+**Result:** Card spacing and border radius global settings now work as expected. Users can set defaults globally and override per-card when needed.
+
+---
 
 ### Accent Bar & Shadow Controls Restoration (December 6, 2025)
 

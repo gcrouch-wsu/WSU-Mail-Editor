@@ -464,10 +464,17 @@ function renderCardLinks(card: Card): string {
  */
 function getCardStyle(card: Card, settings: Settings | null = null): string {
   const bgColor = card.background_color || '#f9f9f9'
-  const spacingBottom = card.spacing_bottom || 20
+
+  // Use global card_spacing as default, allow per-card override
+  const globalSpacing = settings?.card_spacing !== undefined ? settings.card_spacing : 20
+  const spacingBottom = card.spacing_bottom !== undefined ? card.spacing_bottom : globalSpacing
+
   const borderWidth = card.border_width || 0
   const borderColor = card.border_color || '#e0e0e0'
-  const borderRadius = card.border_radius || 0
+
+  // Use global card_border_radius as default, allow per-card override
+  const globalRadius = settings?.card_border_radius || 0
+  const borderRadius = card.border_radius !== undefined ? card.border_radius : globalRadius
 
   let style = `${STYLE_TABLE} background-color:${bgColor}; margin-bottom:${spacingBottom}px;`
 
@@ -791,7 +798,7 @@ function renderLetterCard(
   const signatureImageAlt = (card.signature_image_alt || 'Signature').trim()
   const signatureImageWidth = card.signature_image_width || 220
 
-  const cardStyle = getCardStyle(card)
+  const cardStyle = getCardStyle(card, settings)
   const padding = getCardPadding(card, section, settings)
   const paddingStyle = `padding:${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px;`
 

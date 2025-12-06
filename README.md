@@ -23,7 +23,7 @@ Create email-safe HTML newsletters for WSU Graduate School communications:
 - **Rich Content Editing:**
   - Sections and cards with rich text, events, resources, and CTA cards
   - List controls (line height, item spacing, indent/outdent)
-  - Customizable card spacing, border radius, and accent bar
+  - Customizable card spacing, border radius, accent bar, and shadows
 - **Live Preview** with real-time updates
 - **Export/Import:**
   - Export HTML with embedded Base64 newsletter data
@@ -35,6 +35,39 @@ Create email-safe HTML newsletters for WSU Graduate School communications:
 - **Generic submit section** key `submit_request` (blank title) for all templates
   - FF CTA links to https://gradschool.wsu.edu/request-for-ff-promotion/
   - Briefing CTA links to https://gradschool.wsu.edu/listserv/ and includes a link to current/archived updates
+
+#### ADA Compliance
+
+The HTML Newsletter Editor generates **fully ADA-compliant** email HTML that meets:
+
+- ✅ **WCAG 2.1 Level AA** standards
+- ✅ **Section 508** requirements
+- ✅ **ADA Title III** compliance
+
+**Accessibility Features:**
+- **Semantic HTML**: Proper heading hierarchy (H2 for sections, H3 for cards), language attributes, and valid structure
+- **Image Alt Text**: All images require descriptive alt text (validated and enforced)
+- **Table Accessibility**: Layout tables marked with `role="presentation"` to prevent screen reader confusion
+- **Link Accessibility**: All links require descriptive labels (validated and enforced)
+- **Color Contrast**: WSU brand colors meet WCAG AA contrast ratios
+- **Screen Reader Compatible**: Decorative elements (shadows, borders) are properly marked and do not interfere with screen readers
+- **Keyboard Navigation**: All interactive elements are keyboard accessible
+- **Built-in Validation**: Real-time accessibility checking with error reporting and fix suggestions
+
+The validation system (`/api/validate`) enforces accessibility requirements before export, ensuring compliance with federal and institutional accessibility standards.
+
+#### Using Exported HTML in Slate
+
+After exporting your newsletter HTML:
+
+1. **Export Newsletter**: Click "Export HTML" to download your newsletter file (e.g., `Friday_Focus_2025-12-06_14-30.html`)
+2. **Open Slate**: Navigate to your Slate message editor
+3. **Switch to Code View**: In Slate's message editor, click the "Source" or "Code" button to view HTML
+4. **Copy HTML**: Open the exported `.html` file in a text editor, select all content, and copy
+5. **Paste into Slate**: Paste the complete HTML into Slate's code editor
+6. **Save**: Save your Slate message - the newsletter will render correctly with all styling intact
+
+**Note**: The exported HTML includes inline styles and is optimized for email clients. All Slate variables (unsubscribe links, view in browser) are preserved in the output.
 
 ### Org Chart Editor (`/orgchart`)
 

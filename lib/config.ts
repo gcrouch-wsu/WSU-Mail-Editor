@@ -133,9 +133,9 @@ export const LAYOUT_DEFAULTS = {
   card_spacing: 20, // Space between cards (margin-bottom)
   // Global padding (applied to all content unless overridden)
   padding_text: { top: 20, right: 20, bottom: 20, left: 20 },
-  padding_image: { top: 20, right: 15, bottom: 20, left: 0 },
+  padding_image: { top: 20, right: 15, bottom: 20, left: 15 },
   card_border_radius: 0, // Default border radius for all cards (0 = sharp corners)
-  accent_bar_width: 4, // Width of the accent bar on standard and event cards
+  accent_bar_width: 3, // Width of the accent bar on standard and event cards
   divider_color: '#e0e0e0', // Default color for section divider lines
 } as const
 
@@ -155,12 +155,12 @@ export const SECTION_LAYOUT_DEFAULTS = {
 // Card-level defaults
 export const CARD_DEFAULTS = {
   background_color: '#f9f9f9',
-  spacing_bottom: 20, // Margin below card
+  // spacing_bottom removed - uses global card_spacing setting
   padding_top: 20,
   padding_right: 20,
   padding_bottom: 20,
   padding_left: 20,
-  border_radius: 0,
+  // border_radius removed - uses global card_border_radius setting
   border_width: 0,
   border_color: '#e0e0e0',
 } as const
