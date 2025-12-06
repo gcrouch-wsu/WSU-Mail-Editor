@@ -280,16 +280,16 @@ export default function EditorPage() {
               : templateType === 'briefing'
               ? 'Briefing_'
               : 'Slate_Campaign_'
-          // Use local time (not UTC) and format as HH-MM (hour and minute only)
+          // Use local time (Pacific Standard Time) and format as MM-DD-YYYY-HR:MIN (military time)
           const now = new Date()
-          const year = now.getFullYear()
           const month = String(now.getMonth() + 1).padStart(2, '0')
           const day = String(now.getDate()).padStart(2, '0')
-          const hours = String(now.getHours()).padStart(2, '0')
+          const year = now.getFullYear()
+          const hours = String(now.getHours()).padStart(2, '0') // Military time (24-hour format)
           const minutes = String(now.getMinutes()).padStart(2, '0')
-          const date = `${year}-${month}-${day}` // YYYY-MM-DD
-          const time = `${hours}-${minutes}` // HH-MM (local time, no seconds)
-          filename = `${prefix}${date}_${time}.html`
+          const date = `${month}-${day}-${year}` // MM-DD-YYYY
+          const time = `${hours}:${minutes}` // HR:MIN (military time with colon)
+          filename = `${prefix}${date}-${time}.html`
         }
         
         a.download = filename

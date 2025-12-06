@@ -63,16 +63,16 @@ export async function POST(request: NextRequest) {
       EXPORT_DEFAULTS.filename_prefix[templateType] || 'Newsletter_'
     const suffix = stripJson ? '_PRODUCTION' : ''
     
-    // Use local time (not UTC) and format as HH-MM (hour and minute only)
+    // Use local time (Pacific Standard Time) and format as MM-DD-YYYY-HR:MIN (military time)
     const now = new Date()
-    const year = now.getFullYear()
     const month = String(now.getMonth() + 1).padStart(2, '0')
     const day = String(now.getDate()).padStart(2, '0')
-    const hours = String(now.getHours()).padStart(2, '0')
+    const year = now.getFullYear()
+    const hours = String(now.getHours()).padStart(2, '0') // Military time (24-hour format)
     const minutes = String(now.getMinutes()).padStart(2, '0')
-    const date = `${year}-${month}-${day}` // YYYY-MM-DD
-    const time = `${hours}-${minutes}` // HH-MM (local time, no seconds)
-    const filename = `${prefix}${date}_${time}${suffix}.html`
+    const date = `${month}-${day}-${year}` // MM-DD-YYYY
+    const time = `${hours}:${minutes}` // HR:MIN (military time with colon)
+    const filename = `${prefix}${date}-${time}${suffix}.html`
 
     // Create response with explicit encoding
     return new NextResponse(htmlOutput, {
