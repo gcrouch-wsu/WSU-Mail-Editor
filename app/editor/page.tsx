@@ -223,15 +223,34 @@ export default function EditorPage() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        const templateType = state.template || 'ff'
-        const prefix =
-          templateType === 'ff'
-            ? 'Friday_Focus_'
-            : templateType === 'briefing'
-            ? 'Briefing_'
-            : 'Slate_Campaign_'
-        const date = new Date().toISOString().slice(0, 10)
-        a.download = `${prefix}${date}.html`
+        
+        // Extract filename from Content-Disposition header (server generates it with template name)
+        // Format: attachment; filename="Friday_Focus_2025-12-05.html"
+        const contentDisposition = response.headers.get('Content-Disposition')
+        let filename = 'Newsletter.html' // Fallback filename
+        
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/i)
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1]
+          }
+        }
+        
+        // If header parsing fails, generate filename from template (fallback)
+        // Note: Server handles _PRODUCTION suffix based on export_options.strip_json
+        if (filename === 'Newsletter.html') {
+          const templateType = state.template || 'ff'
+          const prefix =
+            templateType === 'ff'
+              ? 'Friday_Focus_'
+              : templateType === 'briefing'
+              ? 'Briefing_'
+              : 'Slate_Campaign_'
+          const date = new Date().toISOString().slice(0, 10)
+          filename = `${prefix}${date}.html`
+        }
+        
+        a.download = filename
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
