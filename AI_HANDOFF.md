@@ -1,30 +1,363 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: List item gap control FIXED, Card spacing confirmed working)  
+**Last Updated:** December 2025  
 **Project Version:** 8.0 (Next.js/TypeScript)  
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
-## Project Overview
+---
 
-This is a Next.js 14 web application that provides tools for the WSU Graduate School, including:
+## Table of Contents
 
-1. **HTML Newsletter Editor** - Create and edit email-safe HTML newsletters (Friday Focus, Graduate School Briefing, and Graduate School Slate Campaign)
-2. **Org Chart Editor** - Create and edit organizational charts with multiple layout options (centered, vertical, horizontal)
+1. [Project Purpose & Intent](#project-purpose--intent)
+2. [Technical Architecture](#technical-architecture)
+3. [Development Workflow & Best Practices](#development-workflow--best-practices)
+4. [Current Feature Status](#current-feature-status)
+5. [Known Issues & Limitations](#known-issues--limitations)
+6. [Code Structure & Key Files](#code-structure--key-files)
+7. [Deployment](#deployment)
+8. [Troubleshooting](#troubleshooting)
 
-The application is built with TypeScript, React, Tailwind CSS, and uses Next.js App Router with API routes. Both tools are accessible from a unified homepage and share the same deployment infrastructure.
+---
 
-## Technology Stack
+## Project Purpose & Intent
+
+### What This Application Does
+
+This Next.js web application provides **two primary tools** for the WSU Graduate School:
+
+1. **HTML Newsletter Editor** (`/editor`)
+   - Creates email-safe HTML newsletters for WSU Graduate School communications
+   - Supports three templates: Friday Focus, Graduate School Briefing, and Graduate School Slate Campaign
+   - Generates HTML that works reliably across email clients (Gmail, Outlook, Apple Mail, etc.)
+   - Uses table-based layouts and inline styles for maximum email client compatibility
+
+2. **Org Chart Editor** (`/orgchart`)
+   - Creates organizational charts for WordPress integration
+   - Supports multiple layout types: centered, vertical, and horizontal
+   - Exports WordPress-compatible HTML with runtime JavaScript/CSS
+
+### Why This Exists
+
+- **Email Compatibility:** Email clients have inconsistent CSS support. This tool generates HTML that works across all major email clients.
+- **Ease of Use:** Non-technical staff can create professional newsletters without writing HTML.
+- **Consistency:** Ensures all newsletters follow WSU brand guidelines and formatting standards.
+- **Round-Trip Editing:** Exported HTML can be re-imported to continue editing (via embedded Base64 JSON).
+
+### Key Design Principles
+
+1. **Email-Safe HTML:** All HTML uses table-based layouts and inline styles (no external CSS in emails)
+2. **Accessibility:** Built-in validation for alt text, ARIA labels, and semantic HTML
+3. **State Persistence:** Auto-saves to localStorage and supports import/export for backup
+4. **User-Friendly:** Rich text editor with live preview, drag-and-drop sections, and intuitive controls
+
+---
+
+## Technical Architecture
+
+### Technology Stack
 
 - **Framework:** Next.js 14 (App Router)
-- **Language:** TypeScript
+- **Language:** TypeScript (strict mode)
 - **UI Library:** React 18
 - **Styling:** Tailwind CSS with WSU brand colors
-- **Icons:** Lucide React
-- **Rich Text Editor:** Tiptap (for newsletter editor)
-- **Drag & Drop:** @dnd-kit (for newsletter sections)
+- **Rich Text Editor:** Tiptap (ProseMirror-based)
+- **Drag & Drop:** @dnd-kit
 - **Deployment:** Vercel (serverless functions)
+- **Icons:** Lucide React
 
-## Project Structure
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Next.js App Router                    │
+├─────────────────────────────────────────────────────────┤
+│  Client Components (React)                               │
+│  ├── Editor UI (Tiptap, drag-drop, forms)               │
+│  └── Preview Panel (iframe with generated HTML)         │
+├─────────────────────────────────────────────────────────┤
+│  API Routes (Serverless Functions)                       │
+│  ├── /api/preview - Generate HTML preview               │
+│  ├── /api/export - Export HTML file                      │
+│  ├── /api/import - Import from HTML                      │
+│  └── /api/orgchart/* - Org chart operations             │
+├─────────────────────────────────────────────────────────┤
+│  Core Libraries                                          │
+│  ├── email-templates.ts - HTML generation               │
+│  ├── utils.ts - List processing, validation             │
+│  └── config.ts - Defaults and constants                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+1. **User edits content** → React state updates
+2. **State changes** → Debounced preview update
+3. **Preview request** → `/api/preview` route
+4. **Server generates HTML** → `renderFullEmail()` function
+5. **HTML returned** → Displayed in preview iframe
+6. **User exports** → `/api/export` generates downloadable HTML
+
+### Email HTML Generation Strategy
+
+**Critical:** Email clients strip out `<style>` tags and don't support modern CSS. Therefore:
+
+- ✅ **Use:** Table-based layouts (`<table>`, `<tr>`, `<td>`)
+- ✅ **Use:** Inline styles (`style="..."`)
+- ✅ **Use:** Email-safe CSS properties only
+- ❌ **Avoid:** Flexbox, Grid, external CSS, JavaScript
+- ❌ **Avoid:** Complex selectors or pseudo-elements
+
+**Example:**
+```html
+<!-- GOOD: Table-based card with inline styles -->
+<table cellpadding="0" cellspacing="0" style="width:100%;">
+  <tr>
+    <td style="padding:20px; background-color:#ffffff;">
+      Content here
+    </td>
+  </tr>
+</table>
+
+<!-- BAD: Modern CSS that won't work in email -->
+<div style="display:flex; gap:10px;">
+  Content here
+</div>
+```
+
+### Key Technical Decisions
+
+1. **Tiptap Editor:** Chosen for ProseMirror's robust content model and extensibility
+2. **Table-based HTML:** Required for email client compatibility (Gmail, Outlook, etc.)
+3. **Base64 JSON in HTML:** Allows round-trip editing without separate database
+4. **Serverless Functions:** Vercel automatically scales API routes
+5. **Iframe Preview:** Isolates preview HTML from editor CSS, showing true email rendering
+
+---
+
+## Development Workflow & Best Practices
+
+### ⚠️ CRITICAL: Testing Before Commits
+
+**ALWAYS test locally before committing code changes.**
+
+1. **Start dev server:**
+   ```bash
+   npm run dev
+   ```
+   - Server starts on http://localhost:3000
+   - Browser opens automatically
+
+2. **Test your changes:**
+   - Test the specific feature you modified
+   - Test related features that might be affected
+   - Test both Newsletter Editor and Org Chart Editor if applicable
+   - Check browser console for errors
+   - Verify preview renders correctly
+
+3. **Build test:**
+   ```bash
+   npm run build
+   ```
+   - Ensures TypeScript compiles without errors
+   - Catches build-time issues before deployment
+
+4. **Lint and format:**
+   ```bash
+   npm run lint
+   npm run format
+   ```
+
+5. **Only then commit:**
+   ```bash
+   git add .
+   git commit -m "Clear description of changes"
+   git push
+   ```
+
+### ⚠️ CRITICAL: Port Management
+
+**ALWAYS kill dev server processes after testing to free up ports.**
+
+**Problem:** If ports aren't released, Next.js tries the next port (3001, 3002, etc.), creating multiple instances and confusion.
+
+**Solution:**
+
+1. **Check which ports are in use:**
+   ```bash
+   netstat -ano | findstr ":300"
+   ```
+
+2. **Kill specific process:**
+   ```bash
+   taskkill /F /PID [PID_NUMBER]
+   ```
+
+3. **Kill all Node processes (use with caution):**
+   ```bash
+   taskkill /F /IM node.exe
+   ```
+
+4. **Verify ports are free before starting:**
+   ```bash
+   netstat -ano | findstr ":300"
+   ```
+   Should return nothing if all ports are free.
+
+**Best Practice:** Always kill dev servers before ending a coding session.
+
+### Standard Development Commands
+
+```bash
+# Development
+npm run dev              # Start dev server (opens browser automatically)
+npm run dev:no-open     # Start dev server without opening browser
+
+# Testing & Quality
+npm run build           # Build for production (test before commit!)
+npm run lint            # Run ESLint
+npm run format          # Format code with Prettier
+npm run checkfmt        # Check code formatting
+
+# Production
+npm run start           # Start production server (local testing)
+```
+
+### Git Workflow
+
+1. **Before starting work:**
+   ```bash
+   git pull origin main
+   ```
+
+2. **Create feature branch (optional):**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+3. **Make changes and test locally**
+
+4. **Commit with clear messages:**
+   ```bash
+   git add .
+   git commit -m "Brief description of what changed and why"
+   ```
+
+5. **Push to GitHub:**
+   ```bash
+   git push origin main  # or your branch name
+   ```
+
+6. **Vercel auto-deploys** from `main` branch
+
+### Code Style Guidelines
+
+- **TypeScript:** Strict mode enabled - fix all type errors
+- **Formatting:** Prettier (run `npm run format` before commit)
+- **Linting:** ESLint with Next.js config (fix all warnings)
+- **Naming:**
+  - Components: PascalCase (`EditorPanel.tsx`)
+  - Files: kebab-case for routes, camelCase for utilities
+  - Functions: camelCase
+  - Constants: UPPER_SNAKE_CASE
+- **Comments:** Write clear, concise comments explaining **why**, not **what**
+- **Imports:** Organize imports (external → internal → types)
+
+### AI Assistant Guidelines
+
+When making changes as an AI assistant:
+
+1. ✅ **Test locally first** - Never commit without testing
+2. ✅ **Run build** - Ensure TypeScript compiles
+3. ✅ **Update handoff doc** - Document architectural changes
+4. ✅ **Write clear commits** - Describe what and why
+5. ✅ **Check both editors** - Newsletter and Org Chart
+6. ✅ **Kill ports** - Clean up dev servers after testing
+7. ❌ **Don't skip testing** - Even for "small" changes
+8. ❌ **Don't commit broken code** - Fix errors first
+9. ❌ **Don't ignore TypeScript errors** - Fix type issues
+
+---
+
+## Current Feature Status
+
+### ✅ Fully Working Features
+
+- **Newsletter Editor:**
+  - ✅ Rich text editing (bold, italic, headings, lists, links, tables)
+  - ✅ List controls (line height, item gap, indent/outdent)
+  - ✅ Live preview with real-time updates
+  - ✅ Export/Import HTML with round-trip editing
+  - ✅ Auto-save to localStorage
+  - ✅ Undo/redo functionality
+  - ✅ Template switching (Friday Focus, Briefing, Slate Campaign)
+  - ✅ Card spacing control
+  - ✅ Divider line controls (color, spacing)
+  - ✅ Section drag-and-drop reordering
+  - ✅ Accessibility validation
+  - ✅ Content statistics
+
+- **Org Chart Editor:**
+  - ✅ Visual node editing
+  - ✅ Multiple layout types (centered, vertical, horizontal)
+  - ✅ Import from HTML
+  - ✅ Export WordPress-compatible HTML
+  - ✅ Download runtime files
+  - ✅ Live preview
+
+### ❌ Not Implemented / Known Limitations
+
+- **Accent Bar Wrap:** Vertical accent bar cannot extend horizontally along top edge
+  - Status: Feature attempted but reverted due to email HTML limitations
+  - See "Known Issues" section for details
+
+---
+
+## Known Issues & Limitations
+
+### Accent Bar Wrap Control (NOT IMPLEMENTED)
+
+**Intended Feature:** Allow crimson accent bar to extend horizontally along top edge of cards.
+
+**Why Not Implemented:**
+- Email HTML limitations make corner wrapping difficult with table-based layouts
+- Multiple implementation attempts failed due to alignment and continuity issues
+- Feature abandoned in favor of customizable shadow controls
+
+**Current Behavior:** Accent bar is vertical only (left edge, 4px wide by default).
+
+**Code Location:**
+- `lib/email-templates.ts:507-510` (`getAccentBarStyle()`)
+- Used in `renderStandardCard()` and `renderEventCard()`
+
+**Future Implementation:** Would require significant HTML structure changes and may not work reliably in all email clients.
+
+### List Item Gap Control - FIXED (December 2025)
+
+**Issue:** Item Gap values below 16px were ignored.
+
+**Root Cause:** TipTap wraps list item content in `<p>` tags with `margin: 1em 0` (~16px). CSS margin collapse between `<li>` and `<p>` margins caused the larger value to win.
+
+**Solution Applied:**
+1. Removed paragraph margins inside list items (editor + preview CSS)
+2. Removed `!important` from CSS reset to allow inline style override
+3. Always apply styles (not just when different) to handle timing issues
+4. Enhanced ListItem extension to preserve styles through operations
+
+**Status:** ✅ FIXED - Works for all values 0-50px
+
+**Code Locations:**
+- `components/editor/TiptapEditor.tsx:70-94` (ListItem extension)
+- `components/editor/TiptapEditor.tsx:214-261` (updateListItemStyles)
+- `app/globals.css:111-113` (paragraph margin fix)
+- `lib/styles.ts:89-92` (preview paragraph margin fix)
+
+**Lesson Learned:** Always check for margin collapse when dealing with nested block elements.
+
+---
+
+## Code Structure & Key Files
+
+### Project Structure
 
 ```
 wsu-mail-editor/
@@ -37,599 +370,188 @@ wsu-mail-editor/
 │   │       └── usePreview.ts          # Preview generation hook
 │   ├── orgchart/
 │   │   └── page.tsx                # Org chart editor page
-│   ├── api/
+│   ├── api/                        # Next.js API routes (serverless functions)
 │   │   ├── preview/route.ts        # Generate HTML preview
 │   │   ├── export/route.ts         # Export HTML file
 │   │   ├── import/route.ts         # Import from HTML
-│   │   ├── generate-plaintext/route.ts
-│   │   ├── defaults/[type]/route.ts
-│   │   ├── validate/route.ts
-│   │   ├── stats/route.ts
 │   │   └── orgchart/               # Org chart API routes
-│   │       ├── import/route.ts     # Import org chart from HTML
-│   │       ├── sample/route.ts     # Get sample HTML templates
-│   │       ├── runtime.js/route.ts # Serve Wordpress.js
-│   │       ├── runtime.css/route.ts # Serve Wordpress.css
-│   │       └── download/
-│   │           ├── js/route.ts     # Download Wordpress.js
-│   │           └── css/route.ts    # Download Wordpress.css
 │   ├── layout.tsx                  # Root layout
-│   └── globals.css                 # Tailwind CSS directives
+│   └── globals.css                 # Global styles + Tiptap editor styles
 ├── components/
 │   ├── editor/                     # Newsletter editor components
-│   │   ├── EditorPanel.tsx
-│   │   ├── PreviewPanel.tsx
-│   │   ├── MastheadEditor.tsx
-│   │   ├── SectionsEditor.tsx
-│   │   ├── CardEditor.tsx
-│   │   ├── FooterEditor.tsx
-│   │   ├── SettingsEditor.tsx
-│   │   ├── TiptapEditor.tsx
+│   │   ├── TiptapEditor.tsx        # Rich text editor (Tiptap)
+│   │   ├── EditorPanel.tsx         # Main editor panel
+│   │   ├── PreviewPanel.tsx        # Live preview panel
+│   │   ├── SettingsEditor.tsx       # Global settings editor
 │   │   └── ...
-│   ├── homepage/
-│   │   └── ToolTile.tsx            # Homepage tool tile component
 │   └── orgchart/
 │       └── OrgChartEditor.tsx      # Org chart editor wrapper (iframe)
 ├── lib/
+│   ├── email-templates.ts          # HTML generation for newsletters
+│   ├── utils.ts                    # Utility functions (list processing, etc.)
 │   ├── config.ts                   # Configuration and defaults
 │   ├── defaults.ts                 # Default newsletter data models
-│   ├── email-templates.ts          # HTML generation functions
 │   ├── styles.ts                   # Email-safe inline styles
-│   ├── utils.ts                    # Utility functions
 │   └── orgchart-utils.ts           # Org chart validation utilities
 ├── types/
 │   └── newsletter.ts               # TypeScript type definitions
-├── public/
-│   ├── admin.js                    # Org chart admin JavaScript
-│   ├── orgchart-admin.html         # Org chart admin interface
-│   ├── orgchart-center.html        # Sample centered layout
-│   ├── orgchart-vertical.html      # Sample vertical layout
-│   ├── orgchart-horizontal.html    # Sample horizontal layout
-│   ├── Wordpress.js                # Org chart runtime JavaScript
-│   └── Wordpress.css               # Org chart runtime CSS
-└── Org Chart 6/                    # Original source files (reference)
+└── public/
+    ├── orgchart-admin.html         # Org chart admin interface
+    └── Wordpress.js/css            # Org chart runtime files
 ```
 
-## Recent Changes (December 2025)
+### Critical Files for Understanding
 
-### Org Chart Integration
-- **Added:** Complete org chart editor integration into the Next.js app
-- **Location:** `/orgchart` route
-- **Implementation:**
-  - Embedded `orgchart-admin.html` in an iframe via `OrgChartEditor.tsx`
-  - Created Next.js API routes to replace Flask backend:
-    - `/api/orgchart/import` - Import org chart data from HTML
-    - `/api/orgchart/sample` - Get sample HTML templates
-    - `/api/orgchart/runtime.js` - Serve Wordpress.js
-    - `/api/orgchart/runtime.css` - Serve Wordpress.css
-    - `/api/orgchart/download/js` - Download Wordpress.js
-    - `/api/orgchart/download/css` - Download Wordpress.css
-  - Fixed JavaScript errors:
-    - Wrapped variable declarations in existence checks to prevent redeclaration errors
-    - Fixed `$`, `log`, `toast`, `uid`, `NODES`, `SELECTED_ID`, etc.
-  - **Layout Fix:** Converted from CSS Grid to Flexbox for proper card stacking
-    - Cards now stack naturally without extra whitespace
-    - Import & People and Styling align at the top
-    - Inspector stacks below Import & People
-    - Layout stacks below Styling
-    - Preview remains in right column with sticky positioning
+#### `lib/email-templates.ts`
+**Purpose:** Generates email-safe HTML from newsletter data.
 
-### Layout Architecture
-- **Main Layout:** Flexbox with 3 columns
-  - Column 1 (380px): Import & People, Inspector (stacked)
-  - Column 2 (420px): Styling, Layout (stacked)
-  - Column 3 (flex:1): Live Preview (sticky, scrollable)
-- **Key Files:**
-  - `public/orgchart-admin.html` - Main admin interface (Flexbox layout)
-  - `components/orgchart/OrgChartEditor.tsx` - React wrapper component
+**Key Functions:**
+- `renderFullEmail()` - Main entry point, generates complete email HTML
+- `renderMasthead()` - Newsletter header with logo/title
+- `renderSection()` - Section wrapper with cards
+- `renderStandardCard()` / `renderEventCard()` / etc. - Individual card types
+- `processBodyHtmlForEmail()` - Processes rich text HTML for email compatibility
 
-## Key Features
+**Important:** All HTML uses table-based layouts and inline styles for email compatibility.
 
-### Newsletter Editor (`/editor`)
-- **Purpose:** Create and edit email-safe HTML newsletters for WSU Graduate School communications
-- **Templates:** 
-  - **Friday Focus (FF):** Weekly newsletter template with updates, fiscal information, closures, resources, and submit request section
-  - **Graduate School Briefing:** Briefing template with similar structure but different default content and CTA URLs
-  - **Graduate School Slate Campaign:** Letter-style template with greeting, body, closing, and signature image support
-- **Sections:** 
-  - Configurable sections with titles and layout settings
-  - Each section can contain multiple cards or closures (for closures section)
-  - Section layout includes: padding (top/bottom), background color, border radius, divider settings (enabled, thickness, color, spacing, margins)
-  - Sections can be reordered via drag-and-drop
-- **Card Types:** 
-  - **Standard:** Text content with title and body (rich text). Features crimson accent bar on left edge (4px wide by default)
-  - **Event:** Date/time/location metadata with location label. Same accent bar as standard cards
-  - **Resource:** Links and resource information with icon support
-  - **CTA (Call-to-Action):** Customizable button with title, body text, button styling (colors, padding, border, radius, alignment, full-width option)
-  - **Letter:** For letter template with greeting, body, closing, signature name, signature lines (multi-line), and signature image (with alt text and width control)
-- **Global Settings:**
-  - **Layout:**
-    - Container width (560-700px, default 640px)
-    - Section spacing (distance from divider to title, default 24px)
-    - Show/hide section borders (divider lines)
-    - Divider line color (with WSU color palette support)
-    - Divider vertical spacing (above/below divider, default 0px)
-    - Card spacing (default 20px)
-    - Card border radius (global, can be overridden per card, default 0px)
-    - Accent bar width (for standard/event cards, default 4px, vertical only - wrap feature NOT IMPLEMENTED)
-  - **Padding:**
-    - Text padding (top, right, bottom, left, default 20px)
-    - Image padding (top, right, bottom, left, default varies)
-  - **Typography:**
-    - Font family, sizes, colors
-    - Heading styles
-- **Content Editing:**
-  - **Rich Text Editor (Tiptap):**
-    - Bold, italic, underline
-    - Headings (H1-H6)
-    - Lists (bulleted, numbered) with custom spacing control
-    - Links
-    - Tables (insert, edit, format cells, multi-cell selection)
-    - Code view toggle (direct HTML editing)
-    - Undo/redo
-  - **Table Editor:**
-    - Modal for table creation/editing
-    - Inline toolbar for quick edits (add/delete rows/columns)
-    - Cell formatting (colors, fonts, alignment, scope)
-    - Column width control
-    - Border styling (style, color, thickness)
-    - Header styling (background, underline)
-    - Font family selection
-    - Multi-cell selection for batch formatting
-- **Features:**
-  - Live preview with real-time updates (iframe-based)
-  - Export HTML with embedded Base64 JSON data for round-trip editing
-  - Import from exported HTML (restores full editor state)
-  - Auto-save to localStorage (30-second intervals)
-  - Undo/redo functionality (history stack)
-  - Accessibility validation (alt text, aria-labels, scope attributes, meta descriptions)
-  - Content statistics (word count, character count, etc.)
-  - Template switching with confirmation dialog
-  - File upload/download
-  - Validation warnings and errors
+#### `components/editor/TiptapEditor.tsx`
+**Purpose:** Rich text editor component using Tiptap/ProseMirror.
 
-### Org Chart Editor (`/orgchart`)
-- **Purpose:** Create and edit organizational charts for WordPress integration
-- **Layouts:** 
-  - **Centered:** Hierarchical tree with root at center
-  - **Vertical:** Top-down organizational structure
-  - **Horizontal:** Left-to-right organizational structure
-- **Data Management:**
-  - Import from HTML (parses existing org chart structure)
-  - Import from Excel (planned/partial support)
-  - Visual node editing with drag-and-drop
-  - Node inspector for editing individual node properties
-- **Styling Controls:**
-  - Node colors (background, text, border)
-  - Font family and size
-  - Spacing and padding
-  - Border styles
-- **Layout Configuration:**
-  - Orientation settings
-  - Spacing between nodes
-  - Connection line styles
-- **Features:**
-  - Live preview with real-time updates
-  - Export WordPress-compatible HTML
-  - Download runtime files (Wordpress.js, Wordpress.css) for WordPress integration
-  - Sample templates for each layout type
-  - Self-contained export option
-- **Technical Implementation:**
-  - Embedded in iframe (`orgchart-admin.html`)
-  - Uses existing JavaScript library (`Wordpress.js`)
-  - API routes handle data import/export and file serving
-  - Flexbox layout for responsive admin interface
+**Key Features:**
+- Custom ListItem extension with inline style support
+- List controls (line height, item gap, indent/outdent)
+- Table editing with modal
+- Code view toggle for direct HTML editing
 
-## API Routes
+**Critical Implementation:**
+- ListItem extension preserves `style` attribute through all operations
+- `updateListItemStyles()` applies inline styles with `!important` to override CSS
 
-### Newsletter API Routes
+#### `app/editor/hooks/useNewsletterState.ts`
+**Purpose:** State management with undo/redo and auto-save.
+
+**Features:**
+- History stack for undo/redo
+- Auto-save to localStorage (30-second intervals)
+- State persistence across page reloads
+
+#### `app/api/preview/route.ts`
+**Purpose:** Serverless function that generates HTML preview.
+
+**Flow:**
+1. Receives newsletter data (JSON)
+2. Calls `renderFullEmail()` from `email-templates.ts`
+3. Returns HTML string
+4. Client displays in preview iframe
+
+### API Routes
+
+**Newsletter Routes:**
 - `POST /api/preview` - Generate HTML preview
-- `POST /api/export` - Export HTML file
-- `POST /api/import` - Import from HTML
-- `POST /api/generate-plaintext` - Generate plain text version
-- `GET /api/defaults/[type]` - Get default template (ff/briefing)
+- `POST /api/export` - Export HTML file (download)
+- `POST /api/import` - Import from HTML (restores editor state)
 - `POST /api/validate` - Validate for accessibility
 - `POST /api/stats` - Get content statistics
+- `GET /api/defaults/[type]` - Get default template data
 
-### Org Chart API Routes
-- `POST /api/orgchart/import` - Import org chart data from HTML
-  - Validates node structure
-  - Extracts layout attributes
-  - Returns `{ ok: boolean, nodes: Node[], layout: LayoutConfig }`
-- `GET /api/orgchart/sample?type=centered|vertical|vertical_horizontal` - Get sample HTML
-- `GET /api/orgchart/runtime.js` - Serve Wordpress.js (no-cache headers)
-- `GET /api/orgchart/runtime.css` - Serve Wordpress.css (no-cache headers)
-- `GET /api/orgchart/download/js` - Download Wordpress.js (attachment)
-- `GET /api/orgchart/download/css` - Download Wordpress.css (attachment)
+**Org Chart Routes:**
+- `POST /api/orgchart/import` - Import org chart from HTML
+- `GET /api/orgchart/sample` - Get sample HTML templates
+- `GET /api/orgchart/runtime.js` - Serve Wordpress.js
+- `GET /api/orgchart/runtime.css` - Serve Wordpress.css
+- `GET /api/orgchart/download/js` - Download Wordpress.js
+- `GET /api/orgchart/download/css` - Download Wordpress.css
 
-## Configuration
-
-### WSU Brand Colors
-Defined in `tailwind.config.ts`:
-- Primary Crimson: `#A60F2D`
-- Dark Crimson: `#8c0d25`
-- Gray: `#4D4D4D`
-- Text colors: Dark, Body, Muted
-- Backgrounds: Light, Card, White
-- Borders: Light, Medium
-
-### Default URLs
-Defined in `lib/config.ts`:
-- FF Submit Form: `https://gradschool.wsu.edu/request-for-ff-promotion/`
-- Briefing Submit Form: `https://gradschool.wsu.edu/listserv/`
-- Current/Archived Updates: `https://gradschool.wsu.edu/faculty-and-staff-updates/`
-
-## Development Setup
-
-1. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-2. **Run development server:**
-   ```bash
-   npm run dev
-   ```
-   The server will start on http://localhost:3000 and automatically open in your default browser.
-
-3. **Access the application:**
-   - Homepage: http://localhost:3000
-   - Newsletter Editor: http://localhost:3000/editor
-   - Org Chart Editor: http://localhost:3000/orgchart
-
-4. **IMPORTANT - Port Cleanup After Testing:**
-   - **ALWAYS kill all dev server processes after testing to free up ports**
-   - If ports aren't released, Next.js will try the next port (3001, 3002, etc.), creating multiple instances
-   - To check which ports are in use: `netstat -ano | findstr ":300"`
-   - To kill a specific process: `taskkill /F /PID [PID_NUMBER]`
-   - To kill all node processes (use with caution): `taskkill /F /IM node.exe`
-   - **Always verify ports are free before starting a new dev server**
-
-5. **Available scripts:**
-   - `npm run dev` - Start development server (opens browser automatically)
-   - `npm run dev:no-open` - Start dev server without opening browser
-   - `npm run build` - Build for production
-   - `npm run start` - Start production server
-   - `npm run lint` - Run ESLint
-   - `npm run format` - Format code with Prettier
-   - `npm run checkfmt` - Check code formatting
-
-## Important Implementation Details
-
-### Org Chart Admin JavaScript
-- **File:** `public/admin.js`
-- **Key Fixes:**
-  - All global variables wrapped in existence checks: `if (typeof VAR === 'undefined') { var VAR = ... }`
-  - Event listeners wrapped in `wireControls()` function with DOM ready checks
-  - API endpoints updated to use Next.js routes (e.g., `/api/orgchart/import`)
-
-### Org Chart Admin HTML
-- **File:** `public/orgchart-admin.html`
-- **Layout:** Flexbox with 3 columns
-- **Structure:**
-  ```html
-  <main> <!-- display: flex -->
-    <div class="col-1"> <!-- width: 380px, flex-direction: column -->
-      <section id="import-card">...</section>
-      <section id="inspector-card">...</section>
-    </div>
-    <div class="col-2"> <!-- width: 420px, flex-direction: column -->
-      <section id="styling-card">...</section>
-      <section id="layout-card">...</section>
-    </div>
-    <div class="col-3"> <!-- flex: 1 -->
-      <section id="preview-card">...</section> <!-- sticky, scrollable -->
-    </div>
-  </main>
-  ```
-
-### Newsletter Editor State Management
-- **Hook:** `app/editor/hooks/useNewsletterState.ts`
-- **Features:**
-  - Undo/redo with history stack
-  - Auto-save to localStorage
-  - State persistence across page reloads
-
-### Email Template Generation
-- **File:** `lib/email-templates.ts`
-- **Key Functions:**
-  - `renderFullEmail()` - Main function that generates complete email HTML
-  - `renderMasthead()` - Generate masthead HTML with logo and title
-  - `renderSectionStart()` - Generate section wrapper with title and divider
-  - `renderSection()` - Generate complete section with all cards
-  - `renderSectionEnd()` - Close section wrapper
-  - `renderStandardCard()` - Generate standard card HTML
-  - `renderEventCard()` - Generate event card HTML
-  - `renderResourceCard()` - Generate resource card HTML
-  - `renderCTABox()` - Generate CTA card HTML
-  - `renderLetterCard()` - Generate letter card HTML
-  - `renderFooter()` - Generate footer HTML
-  - `getCardStyle()` - Build card style with border radius, spacing, etc.
-  - `getCardPadding()` - Calculate card padding from global/section/card settings
-  - All functions use email-safe inline styles
-  - Padding applied to `<td>` elements, not `<table>` elements (for email compatibility)
-
-## Recent Editor Features (December 2025)
-
-### List Controls (Ordered and Bullet Lists) - ✅ WORKING
-- **Added:** Dynamic controls for list formatting that appear when cursor is in a list
-- **Location:** TiptapEditor toolbar (appears after list buttons when cursor is in a list)
-- **Controls:**
-  - **Line Height:** Controls spacing within list items when text wraps (1.0-3.0, default: 1.5)
-    - Prevents wrapped lines from colliding with each other
-    - Applied as `line-height` CSS property on `<li>` elements
-  - **Item Gap:** Controls vertical spacing between list items (0-50px, default: 8px)
-    - Applied as `margin-bottom` CSS property on `<li>` elements
-  - **Indent/Outdent:** Tab/Shift+Tab or toolbar buttons to create nested lists
-- **Implementation:**
-  - Custom ListItem extension with style attribute support (TiptapEditor.tsx:68-94)
-  - Uses `onSelectionUpdate` callback to detect cursor position in lists
-  - State variable `isInList` tracks whether cursor is in bullet or ordered list
-  - Styles applied inline via custom extension's `style` attribute with `!important`
-  - Tab/Shift+Tab keyboard shortcuts for indent/outdent (TiptapEditor.tsx:113-133)
-- **CSS Changes:**
-  - **CRITICAL FIX for Item Gap below 16px:**
-    - **Root Cause:** TipTap wraps list item content in `<p>` tags which had `margin: 1em 0` (~16px)
-    - CSS margin collapse between `<li>` and `<p>` margins caused the larger value to win
-    - This prevented Item Gap values below 16px from working
-    - **Solution:** Remove paragraph margins inside list items:
-      - Editor CSS (globals.css:111-114): `.ProseMirror li p { margin-top: 0; margin-bottom: 0; }`
-      - Preview CSS (styles.ts:89-92): `li p { margin-top: 0 !important; margin-bottom: 0 !important; }`
-  - Set explicit margins on `<li>` elements: `margin-top: 0; margin-left: 0; margin-right: 0; margin-bottom: 0;`
-  - Inline styles use `!important` to override browser defaults
-- ✅ **Status:** FULLY WORKING - All controls functional, Item Gap works for all values 0-50px, nested lists indent properly
-
-### Divider Line Controls
-- **Added:** Global controls for section divider lines (horizontal lines between sections)
-- **Location:** Settings panel → "Show section borders" section
-- **Controls:**
-  - **Divider Line Color:** Color picker with WSU palette support
-  - **Divider Vertical Spacing:**
-    - **Space Above:** Adds padding-bottom to section (pushes divider down)
-    - **Space Below:** Adds padding-top to next section (creates space after divider)
-- **Implementation:**
-  - Settings: `divider_color`, `divider_margin_top`, `divider_margin_bottom`
-  - Applied in `renderSectionStart()` function
-  - Padding moved from `<table>` to `<td>` for email client compatibility
-  - ✅ **Status:** Working correctly
-
-### Card Spacing Control - ✅ WORKING
-- **Added:** Global control for spacing between cards
-- **Location:** Settings panel → "Card Spacing (px)" input
-- **Function:** Controls vertical spacing between cards using spacer table elements
-- **Implementation:**
-  - Settings: `card_spacing` (default: 20px)
-  - Logic in `renderSection()` function (lines 1256-1309)
-  - Uses spacer table elements between cards instead of margin-bottom
-  - Spacer HTML: `<table><tr><td style="height:${spacingBottom}px;">&nbsp;</td></tr></table>`
-  - Spacer is added if `!isLastCard && spacingBottom > 0`
-- **Code Location:**
-  - Settings UI: `components/editor/SettingsEditor.tsx:268-287`
-  - Spacing logic: `lib/email-templates.ts:1256-1309`
-  - Default value: `lib/config.ts:133` (20px)
-  - Type definition: `types/newsletter.ts:46` (`card_spacing?: number`)
-- ✅ **Status:** Working correctly - Card spacing control functions as expected
-
-### Section Spacing
-- **Control:** "Section Spacing (px)" in Settings panel
-- **Function:** Controls distance between horizontal divider line and section title (H2)
-- **Implementation:** Sets `margin-top` on section title
-- **Default:** 24px
-- ✅ **Status:** Working correctly
-
-### Accent Bar Wrap Control (NOT IMPLEMENTED)
-- **Intended Feature:** Allow the crimson accent bar on standard and event cards to extend horizontally along the top edge
-- **Current Behavior:** Accent bar is a vertical bar on the left side of cards (4px wide by default)
-- **Desired Behavior:** 
-  - Accent bar starts as a vertical bar on the left edge (as it currently does)
-  - User can control how far the accent bar extends horizontally along the top edge
-  - Visual: The red accent bar would wrap around the top-left corner and continue horizontally
-  - Control would specify the horizontal extension distance (in pixels)
-- **Visual Description:**
-  - **Default (current):** Red vertical bar on left edge only
-  - **With wrap:** Red vertical bar on left edge + red horizontal bar extending from top-left corner along the top edge
-  - The horizontal extension would be controlled by a "wrap" or "extension" value
-- **Implementation Attempt:**
-  - Attempted to add `accent_bar_wrap` property to card types and settings
-  - Attempted to modify `getAccentBarHtml()` function to support horizontal extension
-  - Changes were reverted due to errors
-- **Current Status:** ❌ **NOT IMPLEMENTED**
-  - Only vertical accent bar exists (left edge)
-  - No horizontal extension capability
-  - `accent_bar_width` control exists but only affects vertical bar width
-- **Code Location:**
-  - Accent bar rendering: `lib/email-templates.ts:507-510` (`getAccentBarStyle()`)
-  - Used in: `renderStandardCard()` and `renderEventCard()`
-  - Settings: `lib/config.ts:138` (`accent_bar_width: 4`)
-- **Future Implementation Notes:**
-  - Would need to modify card HTML structure to include a top horizontal bar
-  - Would need to handle corner radius if card has rounded corners
-  - Would need UI control in Settings or Card Editor for wrap distance
-  - Would need to ensure email client compatibility (tables, inline styles)
-
-## Known Issues & TODOs
-
-### Current State
-- ✅ Org chart integration complete
-- ✅ Layout fixed with Flexbox
-- ✅ JavaScript errors resolved
-- ✅ Download functionality working
-- ✅ Divider line controls working (color, spacing)
-- ✅ List controls fully working (line height, item gap, and indentation all functional)
-- ✅ Card spacing control working
-- ❌ Accent bar wrap control NOT implemented (see Critical Issues)
-
-### Critical Issues
-- **List Controls Issues - ✅ FIXED (December 2025):**
-  - **Item Gap below 16px was ignored - NOW FIXED:**
-    - **Root Cause Identified:**
-      - TipTap wraps list item content in `<p>` tags: `<li><p>content</p></li>`
-      - The `<p>` tags had `margin: 1em 0` (approximately 16px) from global CSS
-      - **CSS margin collapse** between `<li>` margin-bottom and `<p>` margin-bottom caused the larger value to win
-      - When setting Item Gap to 5px: `max(5px from li, 16px from p) = 16px` due to margin collapse
-      - This is why values below 16px appeared to have no effect
-    - **Failed Attempts (for future reference - don't repeat these):**
-      1. ❌ Setting inline styles on `<li>` without addressing `<p>` margins
-      2. ❌ Using `!important` on CSS reset (prevents inline styles from overriding)
-      3. ❌ Only updating styles when they appear different (timing issues)
-      4. ❌ Removing margins from `ul/ol` containers (didn't address the paragraph issue)
-      5. ❌ Setting explicit margins on `<li>` without removing paragraph margins (still overridden by margin collapse)
-    - **Successful Fix (December 2025):**
-      - **Step 1:** Remove paragraph margins inside list items in BOTH editor and preview CSS:
-        - **Editor CSS** (globals.css:111-113): `.ProseMirror li p { margin-top: 0; margin-bottom: 0; }`
-        - **Preview CSS** (styles.ts:89-92): `li p { margin-top: 0 !important; margin-bottom: 0 !important; }`
-        - This prevents margin collapse and allows the `<li>` inline styles to fully control spacing
-      - **Step 2:** Remove `!important` from CSS reset (globals.css:94-106):
-        - Changed `.ProseMirror li { margin-bottom: 0 !important; }` to `margin-bottom: 0;`
-        - This allows inline styles with `!important` to properly override the reset
-      - **Step 3:** Always apply styles (TiptapEditor.tsx:248-253):
-        - Changed condition from `if (newStyle !== (attrs.style || '').trim())` to always update
-        - Ensures styles are applied even if they appear the same (handles timing issues)
-      - **Step 4:** Enhanced ListItem extension (TiptapEditor.tsx:70-94):
-        - Added `keepOnSplit: true` to preserve styles through operations
-        - Improved `parseHTML` to always preserve style attribute exactly as it is
-    - **Code Locations:**
-      - TiptapEditor.tsx:68-94 (custom ListItem extension with style attribute support)
-      - TiptapEditor.tsx:222-240 (updateListItemStyles function that applies inline styles)
-      - globals.css:111-114 (paragraph margin fix for editor)
-      - styles.ts:89-92 (paragraph margin fix for preview/email)
-    - **Lesson Learned:** Always check for margin collapse when dealing with nested block elements
-    - ✅ **Status:** FIXED - Item Gap now works for all values 0-50px in both editor and preview
-
-  - **Nested list indentation - ✅ WORKING:**
-    - Tab/Shift+Tab keyboard shortcuts work (TiptapEditor.tsx:113-133)
-    - Indent/Outdent toolbar buttons work when cursor is in a list
-    - TipTap's built-in `sinkListItem` and `liftListItem` commands handle nesting
-    - CSS provides proper indentation via `padding-left: 1.5em` on ul/ol (globals.css:53-66)
-    - ✅ **Status:** WORKING - Nested lists indent correctly
-
-
-- **Accent Bar Wrap Control Not Implemented:**
-  - Feature was attempted but reverted due to errors
-  - Current implementation only supports vertical accent bar (left edge)
-  - Desired: Accent bar should be able to extend horizontally along top edge
-  - **Implementation Requirements:**
-    1. Modify card HTML structure to support horizontal bar element
-    2. Add `accent_bar_wrap` or `accent_bar_extension` property to settings/cards
-    3. Update `getAccentBarStyle()` or create new function for horizontal bar
-    4. Handle corner radius when bar wraps around corner
-    5. Add UI control for wrap distance
-    6. Ensure email client compatibility
-
-### Potential Improvements
-- [ ] Add error boundaries for better error handling
-- [ ] Add loading states for API calls
-- [ ] Improve mobile responsiveness for org chart editor
-- [ ] Add unit tests for API routes
-- [ ] Add E2E tests for critical workflows
-- [ ] Consider adding authentication/authorization
-- [ ] Add analytics tracking
+---
 
 ## Deployment
 
-### Vercel Deployment via GitHub
+### Vercel Deployment (Automatic)
 
 **Setup:**
-- Vercel is connected to the GitHub repository: `https://github.com/gcrouch-wsu/WSU-Mail-Editor.git`
-- Automatic deployments are enabled for the `main` branch
-- Each push to `main` triggers a new deployment automatically
+- Vercel connected to GitHub: `https://github.com/gcrouch-wsu/WSU-Mail-Editor.git`
+- Automatic deployments enabled for `main` branch
+- Each push to `main` triggers new deployment
 
 **Deployment Process:**
-1. **Push to GitHub:** `git push origin main`
-2. **Vercel Auto-Detection:** Vercel automatically detects the push via GitHub webhook
-3. **Build Process:**
-   - Vercel clones the repository
-   - Runs `npm install` to install dependencies
-   - Runs `npm run build` to build the Next.js application
-   - Deploys the built application
-4. **API Routes:** All API routes in `app/api/` are automatically deployed as serverless functions
+1. Push to GitHub: `git push origin main`
+2. Vercel detects push via GitHub webhook
+3. Builds application: `npm install` → `npm run build`
+4. Deploys to production
+5. API routes become serverless functions automatically
 
 **Verifying Deployments:**
-1. **Check Latest Commit:** 
-   - In Vercel dashboard, go to "Deployments" tab
-   - Verify the commit hash matches the latest commit on GitHub
-   - Use `git log --oneline -1` to see the latest local commit
-   - Use `git log --oneline origin/main -1` to see the latest remote commit
+- Check Vercel dashboard → Deployments tab
+- Verify commit hash matches GitHub
+- Green checkmark = successful, Red X = failed
 
-2. **If Deployment Uses Old Commit:**
-   - Vercel may be building from a cached commit
-   - Create an empty commit to force a new deployment:
-     ```bash
-     git commit --allow-empty -m "Trigger Vercel rebuild"
-     git push origin main
-     ```
-   - Or manually trigger a deployment in Vercel dashboard
+**Common Issues:**
+- **Build fails:** Always test locally with `npm run build` first
+- **Old commit deployed:** Create empty commit to trigger rebuild
+- **TypeScript errors:** Fix all type errors before pushing
 
-3. **Check Build Status:**
-   - Green checkmark = successful deployment
-   - Red X = build failed (check build logs)
-   - Yellow circle = building in progress
+**Configuration:**
+- Framework: Next.js (auto-detected)
+- Build Command: `npm run build`
+- Output Directory: `.next`
+- Node.js Version: 18.x
 
-**Common Deployment Issues:**
-
-1. **"A more recent Production Deployment has been created"**
-   - This means Vercel already detected a newer commit and is building it
-   - Check the "Deployments" tab for the latest deployment
-   - Don't try to redeploy old deployments
-
-2. **Build Failing with TypeScript Errors:**
-   - Always test locally first: `npm run build`
-   - Check that all fixes are committed and pushed
-   - Verify the deployment is using the latest commit (not an old one)
-   - Check build logs in Vercel dashboard for specific errors
-
-3. **Build Using Old Commit:**
-   - Verify latest commit is pushed: `git log origin/main -1`
-   - Check Vercel deployment commit hash matches GitHub
-   - Create empty commit to trigger new build if needed
-
-4. **File System Access in Serverless Functions:**
-   - Files in `public/` are served statically
-   - API routes can read from `public/` using `process.cwd()`
-   - Ensure files are committed to git (not in `.gitignore`)
-
-**Deployment Configuration:**
-- **Framework Preset:** Next.js (auto-detected)
-- **Root Directory:** `.` (root)
-- **Build Command:** `npm run build` (default)
-- **Output Directory:** `.next` (default)
-- **Install Command:** `npm install` (default)
-- **Node.js Version:** 18.x (Vercel default)
-
-**Manual Deployment:**
-- Go to Vercel dashboard → Project → Deployments
-- Click "Deploy" button
-- Select branch and commit to deploy
-- Or use Vercel CLI: `vercel --prod`
-
-### Environment Variables
-Currently none required. All configuration is in `lib/config.ts`.
+---
 
 ## Troubleshooting
 
-### Org Chart Editor Issues
-- **Iframe not loading:** Check that `public/orgchart-admin.html` exists
-- **API errors:** Check browser console and network tab
-- **Layout issues:** Verify Flexbox CSS in `orgchart-admin.html`
-- **JavaScript errors:** Check that all variables are properly wrapped in existence checks
+### Development Issues
 
-### Newsletter Editor Issues
-- **Preview not updating:** Check browser console, verify `/api/preview` route
-- **Import/Export issues:** Check Base64 encoding/decoding
-- **State not persisting:** Check localStorage in browser DevTools
+**Port already in use:**
+- Kill existing Node processes: `taskkill /F /IM node.exe`
+- Check ports: `netstat -ano | findstr ":300"`
+- Kill specific PID: `taskkill /F /PID [PID_NUMBER]`
 
-## Code Style & Conventions
+**Preview not updating:**
+- Check browser console for errors
+- Verify `/api/preview` route is responding
+- Check network tab for failed requests
 
-- **TypeScript:** Strict mode enabled
-- **Formatting:** Prettier (run `npm run format`)
-- **Linting:** ESLint with Next.js config
-- **Naming:**
-  - Components: PascalCase (e.g., `EditorPanel.tsx`)
-  - Files: kebab-case for routes, camelCase for utilities
-  - Functions: camelCase
-  - Constants: UPPER_SNAKE_CASE
+**TypeScript errors:**
+- Run `npm run build` to see all errors
+- Fix type issues before committing
+- Check `tsconfig.json` for strict mode settings
 
-## Key Dependencies
+### Editor Issues
+
+**List controls not working:**
+- Check browser console for errors
+- Verify ListItem extension is loaded
+- Check if inline styles are being applied (inspect `<li>` elements)
+
+**Import/Export not working:**
+- Check Base64 encoding/decoding
+- Verify HTML structure matches expected format
+- Check browser console for parsing errors
+
+**State not persisting:**
+- Check localStorage in browser DevTools
+- Verify auto-save is enabled
+- Check for localStorage quota exceeded errors
+
+### Deployment Issues
+
+**Build failing on Vercel:**
+- Test locally: `npm run build`
+- Check build logs in Vercel dashboard
+- Ensure all dependencies are in `package.json`
+- Verify TypeScript compiles without errors
+
+**API routes not working:**
+- Check Vercel function logs
+- Verify route files are in `app/api/` directory
+- Check for runtime errors in function logs
+
+---
+
+## Additional Resources
+
+### Key Dependencies
 
 ```json
 {
@@ -643,26 +565,34 @@ Currently none required. All configuration is in `lib/config.ts`.
 }
 ```
 
-## Contact & Support
+### WSU Brand Colors
 
-- **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
-- **Issues:** Use GitHub Issues for bug reports and feature requests
+Defined in `tailwind.config.ts`:
+- Primary Crimson: `#A60F2D`
+- Dark Crimson: `#8c0d25`
+- Gray: `#4D4D4D`
+- Text colors: Dark, Body, Muted
+- Backgrounds: Light, Card, White
+- Borders: Light, Medium
 
-## Next Steps for Development
+### Default URLs
 
-1. **Review current state:** Check recent commits and current branch
-2. **Understand the architecture:** Read this document and key files
-3. **Test locally:** Run `npm run dev` and test both editors
-4. **Check for TODOs:** Search codebase for TODO comments
-5. **Review open issues:** Check GitHub Issues for known problems
-6. **Follow code style:** Use Prettier and ESLint before committing
+Defined in `lib/config.ts`:
+- FF Submit Form: `https://gradschool.wsu.edu/request-for-ff-promotion/`
+- Briefing Submit Form: `https://gradschool.wsu.edu/listserv/`
+- Updates Archive: `https://gradschool.wsu.edu/faculty-and-staff-updates/`
 
 ---
 
-**Note for AI Assistants:** When making changes, always:
-1. Test locally before committing
-2. Run `npm run format` and `npm run lint`
-3. Update this document if architecture changes
-4. Write clear commit messages
-5. Verify both editors still work after changes
+## Next Steps for New Developers
 
+1. **Read this document** - Understand project purpose and architecture
+2. **Set up development environment** - `npm install` → `npm run dev`
+3. **Explore the codebase** - Start with `lib/email-templates.ts` and `components/editor/TiptapEditor.tsx`
+4. **Test both editors** - Newsletter Editor and Org Chart Editor
+5. **Check GitHub Issues** - Review known problems and feature requests
+6. **Follow development practices** - Test before commit, kill ports after testing
+
+---
+
+**Remember:** This application generates HTML for email clients, which have limited CSS support. Always prioritize email compatibility over modern web features.

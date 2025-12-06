@@ -43,7 +43,13 @@ import type {
 } from '@/types/newsletter'
 
 /**
- * Safe HTML escaping
+ * Escapes HTML special characters to prevent XSS attacks and ensure valid HTML.
+ * 
+ * Converts: & < > " ' to their HTML entity equivalents.
+ * This is critical for user-generated content that will be rendered in emails.
+ * 
+ * @param text - Text to escape (can be null or undefined)
+ * @returns Escaped HTML string (empty string if input is null/undefined)
  */
 function esc(text: string | null | undefined): string {
   if (text == null) return ''
@@ -58,8 +64,18 @@ function esc(text: string | null | undefined): string {
 }
 
 /**
- * Process body HTML to add email-compatible table styles
- * Email clients require inline styles on table elements
+ * Processes rich text HTML to add email-compatible table styles.
+ * 
+ * Email clients have limited CSS support and strip out <style> tags, so all styles
+ * must be inline. This function wraps table content in email-safe table structures
+ * and applies inline styles for borders, fonts, and formatting.
+ * 
+ * Also processes list styles via processListStyles() to preserve editor-applied
+ * line-height and margin-bottom values.
+ * 
+ * @param html - Rich text HTML from Tiptap editor
+ * @param tableOptions - Optional styling options for tables
+ * @returns HTML string with email-safe inline styles
  */
 function processBodyHtmlForEmail(
   html: string,

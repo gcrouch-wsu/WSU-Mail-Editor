@@ -41,10 +41,26 @@ export function escapeHtml(text: string | null | undefined): string {
  * Process HTML to add email-safe inline styles to lists
  * This ensures proper line spacing in email clients
  */
+/**
+ * Processes list HTML to add email-safe inline styles while preserving editor-applied styles.
+ * 
+ * This function:
+ * 1. Adds default email-safe styles to <ul> and <ol> elements (margins, padding)
+ * 2. Preserves inline styles from the editor (line-height, margin-bottom) on <li> elements
+ * 3. Ensures margin-bottom uses !important to override any CSS defaults
+ * 
+ * Why this is needed:
+ * - Email clients require inline styles (no external CSS)
+ * - Editor applies line-height and margin-bottom via inline styles
+ * - We need to preserve these while adding email-safe defaults
+ * 
+ * @param html - HTML string containing list elements
+ * @returns HTML string with email-safe styles applied
+ */
 export function processListStyles(html: string): string {
   if (!html || typeof html !== 'string') return html
 
-  // Process <ul> and <ol> elements
+  // Process <ul> and <ol> elements - add email-safe default styles
   let processed = html.replace(
     /<ul([^>]*)>/gi,
     (match, attrs) => {
@@ -83,6 +99,7 @@ export function processListStyles(html: string): string {
   )
 
   // Process <li> elements - preserve margin-bottom and line-height from editor
+  // The editor applies these via inline styles, and we must preserve them for email output
   processed = processed.replace(
     /<li([^>]*)>/gi,
     (match, attrs) => {
@@ -90,7 +107,8 @@ export function processListStyles(html: string): string {
         return match.replace(
           /style="([^"]*)"/i,
           (styleMatch, existingStyles) => {
-            // Extract existing margin-bottom and line-height if they exist (from editor controls)
+            // Extract margin-bottom and line-height from editor-applied inline styles
+            // These come from the TiptapEditor list controls (Item Gap and Line Height)
             let preservedMarginBottom = ''
             let preservedLineHeight = ''
             

@@ -224,7 +224,19 @@ export default function TiptapEditor({
     onChange(newCode)
   }
 
-  // Helper function to update style attribute
+  /**
+   * Updates inline styles on all list items in the editor.
+   * 
+   * This function applies line-height and margin-bottom styles directly to <li> elements
+   * using inline styles with !important to override any CSS rules. This is necessary
+   * because TipTap wraps list item content in <p> tags, and we need to prevent margin
+   * collapse between the <li> and <p> margins.
+   * 
+   * @param lineHeight - Optional line-height value (e.g., "1.5"). Uses state if not provided.
+   * @param itemSpacing - Optional margin-bottom value in pixels (e.g., "8"). Uses state if not provided.
+   * 
+   * @see AI_HANDOFF.md "List Item Gap Control - FIXED" section for detailed explanation
+   */
   const updateListItemStyles = useCallback((lineHeight?: string, itemSpacing?: string) => {
     if (!editor) return
 
@@ -234,33 +246,35 @@ export default function TiptapEditor({
     editor.chain().command(({ tr, state }) => {
       let modified = false
 
+      // Iterate through all nodes in the document
       state.doc.descendants((node, pos) => {
         if (node.type.name === 'listItem') {
           const attrs = node.attrs
           let currentStyle = attrs.style || ''
 
-          // Remove ALL existing line-height and margin-bottom (including with !important)
-          // Use a more comprehensive regex that handles all variations
+          // Remove existing line-height and margin-bottom styles before adding new ones
+          // This regex handles styles with or without !important flag
           currentStyle = currentStyle
             .replace(/line-height\s*:\s*[^;]+(!important\s*)?;?\s*/gi, '')
             .replace(/margin-bottom\s*:\s*[^;]+(!important\s*)?;?\s*/gi, '')
             .trim()
 
-          // Build new style string - always set margin-bottom first with !important
+          // Build new style string - margin-bottom must come first with !important
+          // This ensures it overrides any CSS rules, including browser defaults
           const styles: string[] = []
-          // CRITICAL: Set margin-bottom FIRST with !important to ensure it overrides everything
           styles.push(`margin-bottom: ${itemSpacingValue}px !important`)
           if (lineHeightValue) styles.push(`line-height: ${lineHeightValue} !important`)
-          // Add any other existing styles after
+          
+          // Preserve any other existing styles (don't remove user-added styles)
           if (currentStyle) {
-            // Remove any trailing semicolons and add remaining styles
             const cleaned = currentStyle.replace(/;\s*$/, '').trim()
             if (cleaned) styles.push(cleaned)
           }
 
           const newStyle = styles.filter(s => s).join('; ')
 
-          // Always update to ensure styles are applied (even if they appear the same)
+          // Always update the node markup, even if style appears unchanged
+          // This ensures styles are applied after editor operations that might reset them
           tr.setNodeMarkup(pos, undefined, { ...attrs, style: newStyle || null })
           modified = true
         }
