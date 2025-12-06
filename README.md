@@ -174,20 +174,6 @@ wsu-mail-editor/
 
 ## Key Concepts
 
-### Newsletter Templates
-
-- **Friday Focus (FF)**: Student newsletter template
-  - Sections: Deadlines, Events, Resources, Submit Request
-  - Submit URL: https://gradschool.wsu.edu/request-for-ff-promotion/
-
-- **Graduate School Briefing**: Faculty/Staff newsletter template
-  - Sections: Updates, Fiscal, Closures, Submit Request, Assistance
-  - Submit URL: https://gradschool.wsu.edu/listserv/
-  - Includes Jira and Knowledge Base links
-
-- **Graduate School Slate Campaign**: Campaign template
-  - Customizable sections and cards for marketing campaigns
-
 ### Sections
 
 - `deadlines` - Deadlines and Important Information (FF only)
@@ -291,14 +277,6 @@ Edit `lib/config.ts` to change defaults:
 - Social media links
 - Organization information
 
-### Important URLs
-
-- FF Submit Form: https://gradschool.wsu.edu/request-for-ff-promotion/
-- Briefing Submit Form: https://gradschool.wsu.edu/listserv/
-- Current/Archived Updates: https://gradschool.wsu.edu/faculty-and-staff-updates/
-- Jira Service Desk: https://jira.esg.wsu.edu/servicedesk/customer/portal/121/group/323
-- Knowledge Base: https://confluence.esg.wsu.edu/display/GRADSCHOOL
-
 ## Import/Export
 
 ### Export
@@ -348,46 +326,6 @@ This Next.js app is ready for deployment on Vercel:
 
 No environment variables are required for basic functionality. All configuration is in `lib/config.ts`.
 
-## Troubleshooting
-
-### Preview Not Updating
-
-- Check the browser console for errors
-- Ensure the development server is running
-- Try refreshing the preview manually
-- Check network requests to `/api/preview`
-
-### Template Switch Not Working
-
-- Check browser console for state updates
-- Verify the API route `/api/defaults/[type]` is working
-- Check that the state is updating correctly
-
-### Build Errors
-
-- Run `npm run lint` to check for linting errors
-- Run `npm run build` to see build errors
-- Check TypeScript errors in your IDE
-- Ensure all dependencies are installed: `npm install`
-
-### Port Already in Use
-
-- Next.js will automatically suggest another port
-- Or specify a port: `PORT=3001 npm run dev`
-
-## Migration from Flask
-
-This project was migrated from Flask to Next.js. Key changes:
-
-- **Backend**: Flask routes → Next.js API routes
-- **Frontend**: Jinja2 templates → React components
-- **Styling**: Custom CSS → Tailwind CSS
-- **Icons**: Emojis → Lucide React
-- **Language**: Python → TypeScript
-- **State Management**: Vanilla JS → React hooks
-
-All functionality has been preserved and improved with better type safety and modern React patterns.
-
 ## License
 
 Internal/WSU use. All rights reserved.
@@ -395,7 +333,3 @@ Internal/WSU use. All rights reserved.
 ## Version
 
 Current version: **8.0** (Next.js/TypeScript)
-
-## AI Handoff
-
-For detailed information about the project architecture, recent changes, and development guidelines, see **[AI_HANDOFF.md](./AI_HANDOFF.md)**. This document is designed to help AI assistants and new developers quickly understand the codebase and continue development.
