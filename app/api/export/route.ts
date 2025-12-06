@@ -49,18 +49,30 @@ export async function POST(request: NextRequest) {
       htmlOutput = htmlOutput.replace('</body>', embeddedComment + '</body>')
     }
 
-    // Generate filename
+    // Generate filename with template name, date, and timestamp
+    // Read template from newsletterData - this should match the template selected in the editor
+    // The client ensures templateType is sent as the template property
+    const dataTemplate = newsletterData.template
     const templateType: TemplateType =
-      newsletterData.template === 'briefing'
+      dataTemplate === 'briefing'
         ? 'briefing'
-        : newsletterData.template === 'letter'
+        : dataTemplate === 'letter'
         ? 'letter'
-        : 'ff'
+        : 'ff' // Default to 'ff' if template is missing or invalid
     const prefix =
       EXPORT_DEFAULTS.filename_prefix[templateType] || 'Newsletter_'
     const suffix = stripJson ? '_PRODUCTION' : ''
-    const date = new Date().toISOString().slice(0, 10)
-    const filename = `${prefix}${date}${suffix}.html`
+    
+    // Use local time (not UTC) and format as HH-MM (hour and minute only)
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const hours = String(now.getHours()).padStart(2, '0')
+    const minutes = String(now.getMinutes()).padStart(2, '0')
+    const date = `${year}-${month}-${day}` // YYYY-MM-DD
+    const time = `${hours}-${minutes}` // HH-MM (local time, no seconds)
+    const filename = `${prefix}${date}_${time}${suffix}.html`
 
     // Create response with explicit encoding
     return new NextResponse(htmlOutput, {

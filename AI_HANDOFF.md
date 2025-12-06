@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025  
+**Last Updated:** December 2025 (Latest: Template restore logic fix, export filename with template name and timestamp)  
 **Project Version:** 8.0 (Next.js/TypeScript)  
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
@@ -309,6 +309,57 @@ When making changes as an AI assistant:
 - **Accent Bar Wrap:** Vertical accent bar cannot extend horizontally along top edge
   - Status: Feature attempted but reverted due to email HTML limitations
   - See "Known Issues" section for details
+
+---
+
+## Recent Fixes (December 2025)
+
+### Template Restore Logic Fix
+
+**Issue:** When restoring from backup, the editor always defaulted to Friday Focus template, even if the backup was for Briefing or Slate Campaign.
+
+**Root Cause:** 
+- Editor always initialized with `templateType = 'ff'` regardless of backup content
+- Backup restore didn't sync `templateType` state with backup's template property
+- If user declined restore, defaults were loaded for FF instead of the backup's template
+
+**Solution Implemented:**
+1. **Check backup template first** (before setting defaults)
+2. **Set `templateType` to match backup template** before showing restore modal
+3. **Show correct template name in restore message** (e.g., "Found an auto-saved Briefing draft...")
+4. **If user declines restore:** Load defaults for the backup's template (not always FF)
+5. **Priority order:** URL param (`?type=briefing`) > Backup template > Default FF
+
+**Code Locations:**
+- `app/editor/page.tsx:76-173` - Initial data loading with backup check
+- `app/editor/page.tsx:610-633` - Backup restore confirm modal handlers
+
+**Result:** Editor now automatically opens with the correct template based on what you were working on.
+
+### Export Filename Fix
+
+**Issue:** Export filenames always showed "Friday_Focus" regardless of selected template, and timestamp was in UTC with seconds.
+
+**Root Cause:**
+- Export used `state.template` which could be stale or incorrect
+- Timestamp used UTC (`toISOString()`) instead of local time
+- Timestamp included seconds (HH-MM-SS) instead of just hour and minute
+
+**Solution Implemented:**
+1. **Use `templateType` as source of truth** - Always use the template currently selected in the editor UI
+2. **Local time timestamp** - Use `getHours()` and `getMinutes()` instead of UTC
+3. **HH-MM format only** - Removed seconds from timestamp
+
+**Export Filename Format:**
+- `Friday_Focus_YYYY-MM-DD_HH-MM.html` (e.g., `Friday_Focus_2025-12-05_14-30.html`)
+- `Briefing_YYYY-MM-DD_HH-MM.html` (e.g., `Briefing_2025-12-05_14-30.html`)
+- `Slate_Campaign_YYYY-MM-DD_HH-MM.html` (e.g., `Slate_Campaign_2025-12-05_14-30.html`)
+
+**Code Locations:**
+- `app/editor/page.tsx:238-303` - Export handler (uses `templateType`)
+- `app/api/export/route.ts:52-65` - Filename generation (reads template from data, formats timestamp)
+
+**Result:** Export filenames now correctly reflect the selected template and use local time with hour and minute only.
 
 ---
 

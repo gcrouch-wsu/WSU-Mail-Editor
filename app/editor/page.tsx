@@ -76,11 +76,18 @@ export default function EditorPage() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const restoredFromBackup = false
+        // Step 1: Check URL params for template type (e.g., ?type=briefing)
+        const urlParams = new URLSearchParams(window.location.search)
+        const urlTemplate = urlParams.get('type')
+        const urlTemplateType = (urlTemplate === 'briefing' || urlTemplate === 'letter') 
+          ? urlTemplate 
+          : 'ff'
         
-        // Check for auto-save backup only once per session
+        // Step 2: Check for auto-save backup to determine template
         const backupCheckedKey = 'wsu_newsletter_backup_checked'
         const hasCheckedBackup = sessionStorage.getItem(backupCheckedKey)
+        let backupTemplate: 'ff' | 'briefing' | 'letter' | null = null
+        let backupAgeMinutes = 0
         
         if (!hasCheckedBackup) {
           // Mark as checked to prevent repeated prompts in this session
@@ -90,28 +97,39 @@ export default function EditorPage() {
           if (backupStr) {
             try {
               const backup = JSON.parse(backupStr)
+              backupTemplate = (backup.state?.template === 'briefing' || backup.state?.template === 'letter')
+                ? backup.state.template
+                : 'ff'
+              
               const backupTime = new Date(backup.timestamp)
               const now = new Date()
-              const ageMinutes = Math.floor(
+              backupAgeMinutes = Math.floor(
                 (now.getTime() - backupTime.getTime()) / 60000
               )
 
               // Only show prompt if backup is at least 1 minute old (prevents "0 minutes ago")
-              if (ageMinutes >= 1 && ageMinutes < 1440) {
+              if (backupAgeMinutes >= 1 && backupAgeMinutes < 1440 && backupTemplate) {
                 // Less than 24 hours old and at least 1 minute old
-                const message = `Found an auto-saved draft from ${ageMinutes} minutes ago. Restore it?`
+                const templateName = backupTemplate === 'briefing' 
+                  ? 'Briefing' 
+                  : backupTemplate === 'letter'
+                  ? 'Slate Campaign'
+                  : 'Friday Focus'
+                const message = `Found an auto-saved ${templateName} draft from ${backupAgeMinutes} minutes ago. Restore it?`
                 setBackupConfirmModal({
                   isOpen: true,
                   message,
                   backupData: backup.state,
                 })
+                // Set template type to match backup BEFORE showing modal
+                setTemplateType(backupTemplate)
                 // Don't continue loading - wait for user response
                 // Loading will be set to false in modal callbacks
                 return
-              } else if (ageMinutes >= 1440) {
+              } else if (backupAgeMinutes >= 1440) {
                 // Backup is too old, clear it
                 localStorage.removeItem('wsu_newsletter_backup')
-              } else if (ageMinutes < 1) {
+              } else if (backupAgeMinutes < 1) {
                 // Backup is too recent (less than 1 minute), likely just created
                 // Clear it to prevent "0 minutes ago" prompt
                 localStorage.removeItem('wsu_newsletter_backup')
@@ -123,17 +141,24 @@ export default function EditorPage() {
           }
         }
 
-        // Only load defaults if we didn't restore from backup
-        if (!restoredFromBackup) {
-          // Load defaults for template type
-          const response = await fetch(`/api/defaults/${templateType}`)
-          if (response.ok) {
-            const data = await response.json()
-            setInitialData(data)
-          } else {
-            // Fallback to default FF model
-            setInitialData(defaultFFModel())
-          }
+        // Step 3: Determine which template to use (priority: URL param > backup > default FF)
+        const finalTemplateType = urlTemplateType !== 'ff' 
+          ? urlTemplateType 
+          : backupTemplate || 'ff'
+        
+        // Set template type if it differs from current state
+        if (finalTemplateType !== templateType) {
+          setTemplateType(finalTemplateType)
+        }
+
+        // Step 4: Load defaults for the determined template type
+        const response = await fetch(`/api/defaults/${finalTemplateType}`)
+        if (response.ok) {
+          const data = await response.json()
+          setInitialData(data)
+        } else {
+          // Fallback to default FF model
+          setInitialData(defaultFFModel())
         }
       } catch (error) {
         // Fallback to default FF model
@@ -144,7 +169,8 @@ export default function EditorPage() {
     }
 
     loadInitialData()
-  }, [templateType])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty dependency array - only run once on mount (templateType is set inside)
 
   // Track template changes to force immediate preview updates
   useEffect(() => {
@@ -212,10 +238,18 @@ export default function EditorPage() {
   const handleExport = useCallback(async () => {
     if (!state) return
     try {
+      // Ensure template property is set correctly from templateType state
+      // templateType is the source of truth for what template is selected in the UI
+      // Always use templateType to ensure export filename matches the selected template
+      const exportData = {
+        ...state,
+        template: templateType, // Always use templateType - it's the current selection in the editor
+      }
+      
       const response = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state),
+        body: JSON.stringify(exportData),
       })
 
       if (response.ok) {
@@ -246,8 +280,16 @@ export default function EditorPage() {
               : templateType === 'briefing'
               ? 'Briefing_'
               : 'Slate_Campaign_'
-          const date = new Date().toISOString().slice(0, 10)
-          filename = `${prefix}${date}.html`
+          // Use local time (not UTC) and format as HH-MM (hour and minute only)
+          const now = new Date()
+          const year = now.getFullYear()
+          const month = String(now.getMonth() + 1).padStart(2, '0')
+          const day = String(now.getDate()).padStart(2, '0')
+          const hours = String(now.getHours()).padStart(2, '0')
+          const minutes = String(now.getMinutes()).padStart(2, '0')
+          const date = `${year}-${month}-${day}` // YYYY-MM-DD
+          const time = `${hours}-${minutes}` // HH-MM (local time, no seconds)
+          filename = `${prefix}${date}_${time}.html`
         }
         
         a.download = filename
@@ -259,7 +301,7 @@ export default function EditorPage() {
     } catch (error) {
       alert('Export failed. Please try again.')
     }
-  }, [state])
+  }, [state, templateType])
 
   const handleImport = async (file: File) => {
     try {
@@ -585,16 +627,23 @@ export default function EditorPage() {
         variant="info"
         onConfirm={async () => {
           if (backupConfirmModal.backupData) {
+            // Restore backup data and sync template type
+            const backupTemplate = (backupConfirmModal.backupData.template === 'briefing' || 
+                                   backupConfirmModal.backupData.template === 'letter')
+              ? backupConfirmModal.backupData.template
+              : 'ff'
+            setTemplateType(backupTemplate)
             setInitialData(backupConfirmModal.backupData)
             setLoading(false)
           }
           setBackupConfirmModal({ isOpen: false, message: '', backupData: null })
         }}
         onCancel={async () => {
-          // User declined - clear the backup to prevent re-prompting
+          // User declined restore - load defaults for the template that was in backup
+          // (templateType was already set to match backup in loadInitialData)
           localStorage.removeItem('wsu_newsletter_backup')
           setBackupConfirmModal({ isOpen: false, message: '', backupData: null })
-          // Continue with normal loading
+          // Load defaults for the template type (which matches the backup template)
           try {
             const response = await fetch(`/api/defaults/${templateType}`)
             if (response.ok) {
