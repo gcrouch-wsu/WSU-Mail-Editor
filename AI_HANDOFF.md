@@ -1,7 +1,7 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 2025 (Latest: Template restore logic fix, export filename with template name and timestamp)  
-**Project Version:** 8.0 (Next.js/TypeScript)  
+**Last Updated:** December 6, 2025 (Latest: Restored accent bar and shadow controls with full customization)
+**Project Version:** 8.0 (Next.js/TypeScript)
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
 ---
@@ -295,6 +295,10 @@ When making changes as an AI assistant:
     - Template selection persists and is used for export filenames
   - ✅ Card spacing control
   - ✅ Divider line controls (color, spacing)
+  - ✅ **Accent bar controls** (Standard & Event cards)
+    - Enable/disable, width, color, shadow (blur, spread, offset, opacity)
+  - ✅ **Card shadow controls** (All card types)
+    - Global shadow with full customization (color, blur, spread, offset, opacity)
   - ✅ Section drag-and-drop reordering
   - ✅ Accessibility validation
   - ✅ Content statistics
@@ -309,13 +313,60 @@ When making changes as an AI assistant:
 
 ### ❌ Not Implemented / Known Limitations
 
-- **Accent Bar Wrap:** Vertical accent bar cannot extend horizontally along top edge
-  - Status: Feature attempted but reverted due to email HTML limitations
-  - See "Known Issues" section for details
+- **Accent Bar Horizontal Wrap:** Accent bar cannot extend horizontally along top edge of cards
+  - Status: Feature attempted but abandoned due to email HTML limitations
+  - Vertical accent bar with full customization (width, color, shadow) is implemented
+  - See "Known Issues" section for technical details on why horizontal wrap is not feasible
 
 ---
 
 ## Recent Fixes (December 2025)
+
+### Accent Bar & Shadow Controls Restoration (December 6, 2025)
+
+**Issue:** Accent bar color picker, accent bar shadow controls, and card shadow controls were missing from the Global Settings panel.
+
+**Root Cause:**
+- Controls were removed in commit 236fb98 ("Fix list item gap control for values below 16px and improve port cleanup")
+- Commit removed 381 lines of shadow/accent control UI code
+- Removed Shadow interface from types
+- Removed all shadow-related settings properties
+- Removal was unintentional collateral damage during a cleanup
+
+**Solution Implemented:**
+1. **Restored Shadow interface** (`types/newsletter.ts`)
+   - Added full Shadow type with enabled, color, blur, spread, offset_x, offset_y, opacity
+2. **Updated Settings interface** to include:
+   - `accent_bar_enabled` - Show/hide toggle
+   - `accent_bar_color` - Color picker for accent bar
+   - `accent_bar_shadow` - Shadow configuration for accent bar
+   - `card_shadow` - Global shadow for all cards
+3. **Restored UI controls** in SettingsEditor with proper grouping:
+   - Accent Bar section with enable, width, color, and shadow controls
+   - Card Shadow section with full customization sliders
+4. **Implemented dynamic rendering**:
+   - Created `getAccentBarStyle()` function to apply settings dynamically
+   - Updated `getCardStyle()` to apply card shadows
+   - Modified `renderStandardCard()` and `renderEventCard()` to use dynamic accent bar
+5. **Added defaults** for all templates (shadows disabled by default)
+
+**Features Restored:**
+- ✅ Accent bar enable/disable toggle
+- ✅ Accent bar width control (0-50px)
+- ✅ Accent bar color picker (any color)
+- ✅ Accent bar shadow (color, blur, spread, offset X/Y, opacity)
+- ✅ Card shadow (color, blur, spread, offset X/Y, opacity)
+- ✅ All controls work across all three templates
+- ✅ Real-time preview updates
+- ✅ Email-safe CSS using inline `box-shadow` styles
+
+**Code Locations:**
+- `types/newsletter.ts:14-22, 52-56` - Type definitions
+- `components/editor/SettingsEditor.tsx:20-66, 368-642` - UI controls
+- `lib/email-templates.ts:66-112, 465-491, 560-691` - Rendering logic
+- `lib/defaults.ts:244-263` - Default values
+
+**Result:** All accent bar and shadow controls fully restored and working.
 
 ### Template Restore Logic Fix
 
@@ -368,22 +419,49 @@ When making changes as an AI assistant:
 
 ## Known Issues & Limitations
 
-### Accent Bar Wrap Control (NOT IMPLEMENTED)
+### Accent Bar & Shadow Controls - RESTORED (December 6, 2025)
 
-**Intended Feature:** Allow crimson accent bar to extend horizontally along top edge of cards.
+**Status:** ✅ FULLY IMPLEMENTED - All controls working across all templates
 
-**Why Not Implemented:**
+**Features Restored:**
+
+1. **Accent Bar Controls** (Standard & Event Cards):
+   - Enable/disable toggle - Show or hide accent bar
+   - Width control (0-50px) - Adjustable width, default 4px
+   - Color picker - Any color, defaults to WSU Crimson (#A60F2D)
+   - Shadow controls - Full customization with color, blur, spread, offset, and opacity
+
+2. **Card Shadow Controls** (All Card Types):
+   - Enable/disable toggle - Apply shadow to all cards
+   - Color picker - Shadow color selection
+   - Blur, spread, offset X/Y, and opacity sliders
+   - Email-safe implementation using inline `box-shadow` CSS
+
+**Code Locations:**
+- `types/newsletter.ts:14-22` - Shadow interface definition
+- `types/newsletter.ts:52-56` - Settings interface with shadow properties
+- `components/editor/SettingsEditor.tsx:20-66` - Shadow helper functions
+- `components/editor/SettingsEditor.tsx:368-642` - UI controls for accent bar and shadows
+- `lib/email-templates.ts:66-112` - Shadow CSS generation and accent bar styling
+- `lib/email-templates.ts:465-491` - Card shadow application in getCardStyle()
+- `lib/email-templates.ts:560-619` - renderStandardCard() with dynamic accent bar
+- `lib/email-templates.ts:624-691` - renderEventCard() with dynamic accent bar
+- `lib/defaults.ts:244-263` - Default shadow settings (disabled by default)
+
+**Why Previously Removed:** Controls were removed in commit 236fb98 during a "cleanup" that removed 381 lines of shadow/accent controls. This was a mistake as the features were functional and useful.
+
+**Restoration Details:**
+- Restored Shadow interface with full properties (enabled, color, blur, spread, offset_x, offset_y, opacity)
+- Added accent_bar_enabled, accent_bar_color, accent_bar_shadow, and card_shadow to Settings
+- All controls work across all three templates (Friday Focus, Briefing, Slate Campaign)
+- Real-time preview updates
+- Email-safe CSS using inline styles
+
+**Accent Bar Wrap (Horizontal Extension):** NOT IMPLEMENTED
+- Would require extending accent bar horizontally along top edge of cards
 - Email HTML limitations make corner wrapping difficult with table-based layouts
-- Multiple implementation attempts failed due to alignment and continuity issues
-- Feature abandoned in favor of customizable shadow controls
-
-**Current Behavior:** Accent bar is vertical only (left edge, 4px wide by default).
-
-**Code Location:**
-- `lib/email-templates.ts:507-510` (`getAccentBarStyle()`)
-- Used in `renderStandardCard()` and `renderEventCard()`
-
-**Future Implementation:** Would require significant HTML structure changes and may not work reliably in all email clients.
+- Multiple implementation attempts failed due to alignment issues
+- Feature remains unimplemented - vertical-only accent bar is current behavior
 
 ### List Item Gap Control - FIXED (December 2025)
 

@@ -9,7 +9,6 @@ import {
   STYLE_BODY_TEXT,
   STYLE_META,
   STYLE_LOCATION_LABEL,
-  STYLE_CARD_ACCENT,
   STYLE_CARD_BODY,
   STYLE_RESET,
   STYLE_SOCIAL_ICON_CELL,
@@ -34,6 +33,7 @@ import type {
   Footer,
   Settings,
   Padding,
+  Shadow,
   StandardCard,
   EventCard,
   ResourceCard,
@@ -61,6 +61,54 @@ function esc(text: string | null | undefined): string {
     "'": '&#039;',
   }
   return String(text).replace(/[&<>"']/g, (m) => map[m])
+}
+
+/**
+ * Generates box-shadow CSS from Shadow object
+ */
+function generateShadowCSS(shadow: Shadow | undefined): string {
+  if (!shadow || !shadow.enabled) {
+    return ''
+  }
+
+  const { color, blur, spread, offset_x, offset_y, opacity } = shadow
+  const rgba = hexToRGBA(color, opacity)
+  return `box-shadow: ${offset_x}px ${offset_y}px ${blur}px ${spread}px ${rgba};`
+}
+
+/**
+ * Converts hex color to RGBA with opacity
+ */
+function hexToRGBA(hex: string, opacity: number): string {
+  // Remove # if present
+  hex = hex.replace('#', '')
+
+  // Parse hex values
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`
+}
+
+/**
+ * Gets accent bar style from settings
+ */
+function getAccentBarStyle(settings: Settings | null): string {
+  if (!settings) {
+    return `width:4px; background-color:${CRIMSON};`
+  }
+
+  const enabled = settings.accent_bar_enabled !== false
+  if (!enabled) {
+    return 'width:0; display:none;'
+  }
+
+  const width = settings.accent_bar_width || 4
+  const color = settings.accent_bar_color || CRIMSON
+  const shadowCSS = generateShadowCSS(settings.accent_bar_shadow)
+
+  return `width:${width}px; background-color:${color}; ${shadowCSS}`
 }
 
 /**
@@ -412,9 +460,9 @@ function renderCardLinks(card: Card): string {
 }
 
 /**
- * Build card style with per-card customization
+ * Build card style with per-card customization and global shadow support
  */
-function getCardStyle(card: Card): string {
+function getCardStyle(card: Card, settings: Settings | null = null): string {
   const bgColor = card.background_color || '#f9f9f9'
   const spacingBottom = card.spacing_bottom || 20
   const borderWidth = card.border_width || 0
@@ -429,6 +477,14 @@ function getCardStyle(card: Card): string {
 
   if (borderRadius > 0) {
     style += ` border-radius:${borderRadius}px;`
+  }
+
+  // Apply global card shadow if enabled
+  if (settings?.card_shadow) {
+    const shadowCSS = generateShadowCSS(settings.card_shadow)
+    if (shadowCSS) {
+      style += ` ${shadowCSS}`
+    }
   }
 
   return style
@@ -510,9 +566,12 @@ function renderStandardCard(
   const bodyHtml = card.body_html || ''
 
   // Get card style and padding
-  const cardStyle = getCardStyle(card)
+  const cardStyle = getCardStyle(card, settings)
   const padding = getCardPadding(card, section, settings)
   const paddingStyle = `padding:${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px;`
+
+  // Get dynamic accent bar style
+  const accentBarStyle = getAccentBarStyle(settings)
 
   // Build card content
   const contentParts: string[] = []
@@ -551,7 +610,7 @@ function renderStandardCard(
 
   return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
-    <td style="${STYLE_CARD_ACCENT}"></td>
+    <td style="${accentBarStyle}"></td>
     <td style="${paddingStyle}">
       ${content}
     </td>
@@ -572,9 +631,12 @@ function renderEventCard(
   const location = card.location || ''
 
   // Get card style and padding
-  const cardStyle = getCardStyle(card)
+  const cardStyle = getCardStyle(card, settings)
   const padding = getCardPadding(card, section, settings)
   const paddingStyle = `padding:${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px;`
+
+  // Get dynamic accent bar style
+  const accentBarStyle = getAccentBarStyle(settings)
 
   const contentParts: string[] = []
 
@@ -620,7 +682,7 @@ function renderEventCard(
 
   return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
-    <td style="${STYLE_CARD_ACCENT}"></td>
+    <td style="${accentBarStyle}"></td>
     <td style="${paddingStyle}">
       ${content}
     </td>
@@ -644,7 +706,7 @@ function renderResourceCard(
   const iconSize = card.icon_size || 80
 
   // Get card style and padding
-  const cardStyle = getCardStyle(card)
+  const cardStyle = getCardStyle(card, settings)
   const padding = getCardPadding(card, section, settings)
 
   // Build text content
@@ -861,7 +923,7 @@ function renderCTABox(
   let cardStyle: string
   let padding: Padding
   if (card) {
-    cardStyle = getCardStyle(card)
+    cardStyle = getCardStyle(card, settings)
     padding = getCardPadding(card, section, settings)
   } else {
     // Fallback for direct calls without card object

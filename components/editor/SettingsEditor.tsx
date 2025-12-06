@@ -1,6 +1,6 @@
 // components/editor/SettingsEditor.tsx - Settings editor component
 
-import type { NewsletterData } from '@/types/newsletter'
+import type { NewsletterData, Shadow } from '@/types/newsletter'
 import ColorPicker from './ColorPicker'
 
 interface SettingsEditorProps {
@@ -16,6 +16,54 @@ export default function SettingsEditor({
   updateState,
 }: SettingsEditorProps) {
   const settings = state.settings || {}
+
+  // Helper to get shadow object with defaults
+  const getShadow = (shadow: Shadow | boolean | undefined, defaultShadow: Shadow): Shadow => {
+    if (typeof shadow === 'boolean') {
+      return { ...defaultShadow, enabled: shadow }
+    }
+    return shadow || defaultShadow
+  }
+
+  const accentBarShadow = getShadow(settings.accent_bar_shadow, {
+    enabled: false,
+    color: '#A60F2D',
+    blur: 8,
+    spread: 0,
+    offset_x: 0,
+    offset_y: 2,
+    opacity: 0.3,
+  })
+
+  const cardShadow = getShadow(settings.card_shadow, {
+    enabled: false,
+    color: '#000000',
+    blur: 8,
+    spread: 0,
+    offset_x: 0,
+    offset_y: 2,
+    opacity: 0.1,
+  })
+
+  const updateAccentBarShadow = (updates: Partial<Shadow>) => {
+    updateState((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        accent_bar_shadow: { ...accentBarShadow, ...updates },
+      },
+    }))
+  }
+
+  const updateCardShadow = (updates: Partial<Shadow>) => {
+    updateState((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        card_shadow: { ...cardShadow, ...updates },
+      },
+    }))
+  }
 
   return (
     <div className="space-y-4">
@@ -317,30 +365,280 @@ export default function SettingsEditor({
         </p>
       </div>
 
-      <div>
-        <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
-          Accent Bar Width (px)
-        </label>
-        <input
-          type="number"
-          min="0"
-          max="50"
-          value={settings.accent_bar_width || 4}
-          onChange={(e) =>
-            updateState((prev) => ({
-              ...prev,
-              settings: {
-                ...prev.settings,
-                accent_bar_width: parseInt(e.target.value) || 4,
-              },
-            }))
-          }
-          className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
-          placeholder="4"
-        />
-        <p className="mt-1 text-xs text-wsu-text-muted">
-          Width of the crimson accent bar on standard and event cards. Default is 4px. Increase to extend horizontally into the card.
-        </p>
+      {/* Accent Bar Section */}
+      <div className="border-t border-wsu-border-light pt-4 space-y-4">
+        <h4 className="text-sm font-semibold text-wsu-text-dark">Accent Bar (Standard & Event Cards)</h4>
+
+        <div>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={settings.accent_bar_enabled !== false}
+              onChange={(e) =>
+                updateState((prev) => ({
+                  ...prev,
+                  settings: {
+                    ...prev.settings,
+                    accent_bar_enabled: e.target.checked,
+                  },
+                }))
+              }
+              className="rounded border-wsu-border-light text-wsu-crimson focus:ring-wsu-crimson"
+            />
+            <span className="text-sm font-medium text-wsu-text-dark">
+              Show accent bar on standard/event cards
+            </span>
+          </label>
+          <p className="mt-1 text-xs text-wsu-text-muted">
+            Vertical bar on the left edge of cards
+          </p>
+        </div>
+
+        {settings.accent_bar_enabled !== false && (
+          <div className="space-y-4 pl-4 border-l-2 border-wsu-crimson/20">
+            <div>
+              <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                Width (px)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="50"
+                value={settings.accent_bar_width || 4}
+                onChange={(e) =>
+                  updateState((prev) => ({
+                    ...prev,
+                    settings: {
+                      ...prev.settings,
+                      accent_bar_width: parseInt(e.target.value) || 4,
+                    },
+                  }))
+                }
+                className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                placeholder="4"
+              />
+              <p className="mt-1 text-xs text-wsu-text-muted">
+                Width of the accent bar. Default is 4px.
+              </p>
+            </div>
+
+            <div>
+              <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                Color
+              </label>
+              <ColorPicker
+                label=""
+                value={settings.accent_bar_color || '#A60F2D'}
+                onChange={(color) =>
+                  updateState((prev) => ({
+                    ...prev,
+                    settings: {
+                      ...prev.settings,
+                      accent_bar_color: color,
+                    },
+                  }))
+                }
+              />
+              <p className="mt-1 text-xs text-wsu-text-muted">
+                Color of the accent bar. Default is WSU Crimson (#A60F2D).
+              </p>
+            </div>
+
+            {/* Accent Bar Shadow */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-wsu-text-dark">Shadow</label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={accentBarShadow.enabled}
+                    onChange={(e) => updateAccentBarShadow({ enabled: e.target.checked })}
+                    className="rounded border-wsu-border-light text-wsu-crimson focus:ring-wsu-crimson"
+                  />
+                  <span className="text-xs text-wsu-text-dark">Enabled</span>
+                </label>
+              </div>
+
+              {accentBarShadow.enabled && (
+                <div className="space-y-3 pl-4 border-l-2 border-wsu-border-light">
+                  <ColorPicker
+                    label="Shadow Color"
+                    value={accentBarShadow.color}
+                    onChange={(color) => updateAccentBarShadow({ color })}
+                  />
+
+                  <div>
+                    <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                      Blur: {accentBarShadow.blur}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="20"
+                      value={accentBarShadow.blur}
+                      onChange={(e) => updateAccentBarShadow({ blur: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                      Spread: {accentBarShadow.spread}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="20"
+                      value={accentBarShadow.spread}
+                      onChange={(e) => updateAccentBarShadow({ spread: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                        Offset X: {accentBarShadow.offset_x}px
+                      </label>
+                      <input
+                        type="range"
+                        min="-10"
+                        max="10"
+                        value={accentBarShadow.offset_x}
+                        onChange={(e) => updateAccentBarShadow({ offset_x: parseInt(e.target.value) })}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                        Offset Y: {accentBarShadow.offset_y}px
+                      </label>
+                      <input
+                        type="range"
+                        min="-10"
+                        max="10"
+                        value={accentBarShadow.offset_y}
+                        onChange={(e) => updateAccentBarShadow({ offset_y: parseInt(e.target.value) })}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                      Opacity: {(accentBarShadow.opacity * 100).toFixed(0)}%
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={accentBarShadow.opacity * 100}
+                      onChange={(e) => updateAccentBarShadow({ opacity: parseInt(e.target.value) / 100 })}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Card Shadow Section */}
+      <div className="border-t border-wsu-border-light pt-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-wsu-text-dark">Card Shadow (All Cards)</h4>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={cardShadow.enabled}
+              onChange={(e) => updateCardShadow({ enabled: e.target.checked })}
+              className="rounded border-wsu-border-light text-wsu-crimson focus:ring-wsu-crimson"
+            />
+            <span className="text-sm text-wsu-text-dark">Enabled</span>
+          </label>
+        </div>
+
+        {cardShadow.enabled && (
+          <div className="space-y-3 pl-4 border-l-2 border-wsu-crimson/20">
+            <ColorPicker
+              label="Shadow Color"
+              value={cardShadow.color}
+              onChange={(color) => updateCardShadow({ color })}
+            />
+
+            <div>
+              <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                Blur: {cardShadow.blur}px
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={cardShadow.blur}
+                onChange={(e) => updateCardShadow({ blur: parseInt(e.target.value) })}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                Spread: {cardShadow.spread}px
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={cardShadow.spread}
+                onChange={(e) => updateCardShadow({ spread: parseInt(e.target.value) })}
+                className="w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                  Offset X: {cardShadow.offset_x}px
+                </label>
+                <input
+                  type="range"
+                  min="-10"
+                  max="10"
+                  value={cardShadow.offset_x}
+                  onChange={(e) => updateCardShadow({ offset_x: parseInt(e.target.value) })}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                  Offset Y: {cardShadow.offset_y}px
+                </label>
+                <input
+                  type="range"
+                  min="-10"
+                  max="10"
+                  value={cardShadow.offset_y}
+                  onChange={(e) => updateCardShadow({ offset_y: parseInt(e.target.value) })}
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                Opacity: {(cardShadow.opacity * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={cardShadow.opacity * 100}
+                onChange={(e) => updateCardShadow({ opacity: parseInt(e.target.value) / 100 })}
+                className="w-full"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div>
