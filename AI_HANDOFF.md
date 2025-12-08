@@ -1,6 +1,6 @@
 # AI Handoff Document - WSU Graduate School Tools
 
-**Last Updated:** December 6, 2025 (Latest: Fixed card spacing and border radius global settings)
+**Last Updated:** December 7, 2025 (Latest: Fixed card editor sticky header z-index issue)
 **Project Version:** 8.0 (Next.js/TypeScript)
 **Repository:** https://github.com/gcrouch-wsu/WSU-Mail-Editor.git
 
@@ -372,6 +372,49 @@ const borderRadius = card.border_radius !== undefined ? card.border_radius : glo
 - `components/editor/SettingsEditor.tsx:226-305` - Card styling controls with toggle
 
 **Result:** Card spacing and border radius global settings now work as expected. Users can set defaults globally and override per-card when needed.
+
+---
+
+### Card Editor Sticky Header Z-Index Fix (December 7, 2025)
+
+**Issue:** When editing cards with long content, users had to scroll back to the top to access the Save/Cancel/Delete buttons. Text artifacts appeared during scrolling, and the sticky header behavior was inconsistent.
+
+**Root Cause:**
+- The sticky header in CardEditor and ClosureEditor lacked explicit z-index layering
+- Without z-index, the browser's compositor sometimes rendered scrolling content (especially TiptapEditor) on top of or behind the sticky header
+- This caused visual issues:
+  - Save button appearing "hidden" (painted behind content)
+  - Text artifacts during scrolling (layer compositing errors)
+  - Inconsistent behavior based on content complexity
+
+**Solution Implemented:**
+1. **Added z-index to sticky header** (`components/editor/CardEditor.tsx:107`)
+   - Added `z-10` class to ensure header stays above all scrolling content
+   - Added `shadow-sm` class for subtle visual separation when scrolling
+
+2. **Applied same fix to ClosureEditor** (`components/editor/ClosureEditor.tsx:31`)
+   - Ensures consistency across all modal editors
+
+**Code Changes:**
+```tsx
+// Before
+<div className="sticky top-0 bg-white border-b border-wsu-border-light p-4 flex items-center justify-between">
+
+// After
+<div className="sticky top-0 z-10 bg-white border-b border-wsu-border-light p-4 flex items-center justify-between shadow-sm">
+```
+
+**Features Now Working:**
+- ✅ Save/Cancel/Delete buttons always visible at top when scrolling
+- ✅ No more text artifacts during scroll
+- ✅ Consistent behavior regardless of content length or card type
+- ✅ Better visual feedback with subtle shadow indicating persistent header
+
+**Code Locations:**
+- `components/editor/CardEditor.tsx:107` - Card editor sticky header
+- `components/editor/ClosureEditor.tsx:31` - Closure editor sticky header
+
+**Result:** The sticky header now maintains proper layering above all scrolling content, eliminating the need to scroll back to the top to save changes.
 
 ---
 
@@ -768,6 +811,176 @@ Defined in `lib/config.ts`:
 - FF Submit Form: `https://gradschool.wsu.edu/request-for-ff-promotion/`
 - Briefing Submit Form: `https://gradschool.wsu.edu/listserv/`
 - Updates Archive: `https://gradschool.wsu.edu/faculty-and-staff-updates/`
+
+---
+
+## Future Enhancement Opportunities
+
+This section outlines editor enhancements that could improve the creation of professional and accessible HTML emails. The focus is on look, feel, and content creation capabilities. Analytics, tracking, and CRM features are handled by Slate and are not included here.
+
+### Visual Design & Styling
+
+**Color Management**
+- Color palette library with WSU brand colors
+- Recent colors picker
+- Custom color swatches
+- Color harmony suggestions for accessibility
+
+**Typography Controls**
+- Font pairing suggestions (email-safe fonts only)
+- Line height and letter spacing presets
+- Text shadow options (with email client compatibility warnings)
+- Drop cap and pull quote styles
+
+**Layout Options**
+- Multi-column card layouts (2-column, 3-column)
+- Sidebar layouts with main content area
+- Image positioning options (left/right wrap, full-width, gallery)
+- Spacing presets (compact, comfortable, spacious)
+
+**Background & Border Enhancements**
+- Gradient backgrounds (with fallback solid colors for unsupported clients)
+- Border style library (dashed, dotted, double)
+- Corner radius presets (subtle, moderate, pill)
+- Background image support with overlay options
+
+### Content Management & Productivity
+
+**Image Management System**
+- Upload images directly to the editor (currently requires external hosting)
+- Image library with search and organization
+- Automatic image optimization and resizing for email
+- Alt text suggestions for accessibility
+- Image cropping and basic editing tools
+
+**Reusable Content Blocks**
+- Save commonly used sections as templates (e.g., signature blocks, headers, footers)
+- Content snippet library for frequently used text
+- Shared snippets across newsletters
+- Quick insert from library
+
+**Advanced Templates**
+- Pre-built layout templates beyond the three current templates
+- Seasonal/event-specific templates (graduation, holidays, conferences)
+- Template versioning and management
+- Clone/duplicate newsletters from previous editions
+
+**Content Components**
+- Button builder with style presets
+- Divider line styles library (solid, dashed, decorative)
+- Spacer component for precise vertical spacing
+- Icon library (email-safe icon fonts or inline SVG)
+
+### Collaboration & Workflow
+
+**Version History**
+- Track all changes with timestamps and user info
+- Compare versions side-by-side
+- Restore previous versions
+- Annotate changes with notes
+
+**Collaborative Editing**
+- Multiple users editing simultaneously
+- Role-based permissions (editor, reviewer, publisher)
+- Comments and suggestions on specific sections
+- Approval workflow before export
+
+**Content Review Tools**
+- Spell check and grammar checking
+- Readability score (Flesch-Kincaid, etc.)
+- Broken link detection
+- Duplicate content warnings
+
+### Testing & Quality Assurance
+
+**Email Client Preview**
+- Preview across multiple email clients (Gmail, Outlook, Apple Mail, Yahoo, etc.)
+- Device preview (desktop, mobile, tablet)
+- Dark mode rendering preview
+- Email client compatibility warnings for specific CSS features
+
+**Test Email Functionality**
+- Send test emails to specific addresses
+- Preview with sample data
+- Test links before distribution
+- Verify rendering before export
+
+### Accessibility & Compliance
+
+**Enhanced Accessibility Tools**
+- Automated accessibility audit (WCAG 2.1 AA/AAA)
+- Color contrast checker with real-time feedback
+- Screen reader preview mode
+- Alternative text validator with AI suggestions
+- Heading hierarchy checker
+- Focus order visualization
+
+**Compliance Features**
+- CAN-SPAM compliance checker
+- Required footer elements checker
+- Language attribute validator
+- Semantic HTML structure checker
+
+### Editor Experience Enhancements
+
+**Rich Text Editor Improvements**
+- Emoji picker integrated into editor
+- Special character library
+- Find and replace functionality
+- Character count and word count
+- Formatting painter (copy/paste styles)
+
+**Smart Editing Features**
+- Auto-save with cloud sync (currently localStorage only)
+- Undo/redo with branching history
+- Keyboard shortcuts customization
+- Drag-and-drop image insertion
+- Paste from Word with formatting cleanup
+
+**Visual Feedback**
+- Real-time email client compatibility warnings
+- Accessibility score indicator
+- File size indicator
+- Image size warnings (too large for email)
+
+### Import/Export Enhancements
+
+**Import Capabilities**
+- Import from Word/Google Docs with formatting preservation
+- Import HTML from other email editors
+- Bulk import of content from CSV/spreadsheet for event listings
+- Import images with automatic optimization
+
+**Export Options**
+- Export to PDF for archival
+- Export plain text version for accessibility
+- Export with embedded images (Base64) option
+- Export template as reusable starting point
+
+### Mobile & Responsive Design
+
+**Mobile Optimization**
+- Mobile preview during editing
+- Touch-optimized editor interface
+- Responsive breakpoint testing
+- Mobile-specific font size recommendations
+- Stack/unstack columns preview for mobile
+
+**Progressive Web App (PWA)**
+- Offline editing capability
+- Install as desktop/mobile app
+- Background sync when connection restored
+
+### Implementation Considerations
+
+When considering these enhancements, prioritize based on:
+1. **Email compatibility** - Ensure features work across email clients (many advanced features don't)
+2. **User need** - Survey Graduate School staff for most-requested features
+3. **Accessibility impact** - Prioritize features that improve WCAG compliance
+4. **Development effort** - Balance value vs. implementation complexity
+5. **Maintenance burden** - Consider ongoing support and updates
+
+**Critical Constraint:** This editor is for creating professional, accessible HTML emails only. Email clients have severe limitations compared to modern web browsers. Always prioritize email compatibility over visual sophistication. Features like animations, complex JavaScript, modern CSS Grid/Flexbox, and external stylesheets will not work in most email clients.
 
 ---
 

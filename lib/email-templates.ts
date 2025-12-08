@@ -942,12 +942,27 @@ function renderCTABox(
 
   // Build dynamic button style
   const paddingBtn = `${buttonPaddingVertical}px ${buttonPaddingHorizontal}px`
+
+  // Get button style type
+  const buttonStyleType = card?.button_style || 'button'
+
+  // Get button style properties from card or use defaults
+  const borderStyle = card?.button_border_style || 'solid'
   const border =
     buttonBorderWidth > 0
-      ? `${buttonBorderWidth}px solid ${buttonBorderColor}`
+      ? `${buttonBorderWidth}px ${borderStyle} ${buttonBorderColor}`
       : 'none'
   const width = buttonFullWidth ? '100%' : 'auto'
   const display = buttonFullWidth ? 'block' : 'inline-block'
+
+  // Typography properties
+  const fontWeight = card?.button_font_weight || 'bold'
+  const textTransform = card?.button_text_transform || 'none'
+  const letterSpacing = card?.button_letter_spacing !== undefined ? card.button_letter_spacing : 0
+  const fontSize = card?.button_font_size || 16
+
+  // Button shadow
+  const buttonShadow = card?.button_shadow ? generateShadowCSS(card.button_shadow) : ''
 
   // Text alignment (separate from button alignment)
   let textAlignment: 'left' | 'center' | 'right' = 'left'
@@ -968,7 +983,40 @@ function renderCTABox(
     buttonWrapperStyle = 'text-align: center;'
   }
 
-  const buttonStyle = `background-color:${buttonBgColor} !important; border-radius:${buttonBorderRadius}px; border:${border}; color:${buttonTextColor} !important; display:${display}; font-weight:bold; font-size:16px; line-height:20px; text-align:center; text-decoration:none; padding:${paddingBtn}; margin-top:24px; margin-bottom:8px; width:${width};`
+  // Generate style based on button_style type
+  let buttonStyle = ''
+  let buttonContent = buttonLabel
+
+  switch (buttonStyleType) {
+    case 'pill':
+      // Pill style: highly rounded button
+      buttonStyle = `background-color:${buttonBgColor} !important; border-radius:9999px; border:${border}; color:${buttonTextColor} !important; display:${display}; font-weight:${fontWeight}; font-size:${fontSize}px; line-height:20px; text-align:center; text-decoration:none; text-transform:${textTransform}; letter-spacing:${letterSpacing}px; padding:${paddingBtn}; margin-top:24px; margin-bottom:8px; width:${width}; ${buttonShadow}`
+      break
+    case 'outlined':
+      // Outlined: border only, transparent background
+      buttonStyle = `background-color:transparent !important; border-radius:${buttonBorderRadius}px; border:2px solid ${buttonBgColor}; color:${buttonBgColor} !important; display:${display}; font-weight:${fontWeight}; font-size:${fontSize}px; line-height:20px; text-align:center; text-decoration:none; text-transform:${textTransform}; letter-spacing:${letterSpacing}px; padding:${paddingBtn}; margin-top:24px; margin-bottom:8px; width:${width};`
+      break
+    case 'ghost':
+      // Ghost: subtle border, transparent background
+      buttonStyle = `background-color:transparent !important; border-radius:${buttonBorderRadius}px; border:1px solid ${buttonTextColor}40; color:${buttonBgColor} !important; display:${display}; font-weight:${fontWeight}; font-size:${fontSize}px; line-height:20px; text-align:center; text-decoration:none; text-transform:${textTransform}; letter-spacing:${letterSpacing}px; padding:${paddingBtn}; margin-top:24px; margin-bottom:8px; width:${width};`
+      break
+    case 'arrow':
+      // Arrow: text with right arrow
+      buttonContent = `${buttonLabel} →`
+      buttonStyle = `background-color:transparent !important; border:none; color:${buttonBgColor} !important; display:${display}; font-weight:${fontWeight}; font-size:${fontSize}px; line-height:20px; text-align:center; text-decoration:none; text-transform:${textTransform}; letter-spacing:${letterSpacing}px; padding:8px 0; margin-top:24px; margin-bottom:8px; width:${width};`
+      break
+    case 'underlined':
+      // Underlined: simple underlined link
+      buttonStyle = `background-color:transparent !important; border:none; border-bottom:2px solid ${buttonBgColor}; color:${buttonBgColor} !important; display:${display}; font-weight:${fontWeight}; font-size:${fontSize}px; line-height:20px; text-align:center; text-decoration:none; text-transform:${textTransform}; letter-spacing:${letterSpacing}px; padding:4px 0; margin-top:24px; margin-bottom:8px; width:${width};`
+      break
+    case 'text-only':
+      // Text only: plain text link, no decoration
+      buttonStyle = `background-color:transparent !important; border:none; color:${buttonBgColor} !important; display:${display}; font-weight:${fontWeight}; font-size:${fontSize}px; line-height:20px; text-align:center; text-decoration:none; text-transform:${textTransform}; letter-spacing:${letterSpacing}px; padding:8px 0; margin-top:24px; margin-bottom:8px; width:${width};`
+      break
+    default:
+      // Button (default): solid background button
+      buttonStyle = `background-color:${buttonBgColor} !important; border-radius:${buttonBorderRadius}px; border:${border}; color:${buttonTextColor} !important; display:${display}; font-weight:${fontWeight}; font-size:${fontSize}px; line-height:20px; text-align:center; text-decoration:none; text-transform:${textTransform}; letter-spacing:${letterSpacing}px; padding:${paddingBtn}; margin-top:24px; margin-bottom:8px; width:${width}; ${buttonShadow}`
+  }
 
   const processedBody = processBodyHtmlForEmail(bodyHtml, card
     ? {
@@ -980,13 +1028,15 @@ function renderCTABox(
         headerUnderlineColor: card.table_header_underline_color,
       }
     : undefined)
+
+  // Standard button/link structure
   return `<table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="${cardStyle}">
   <tr>
     <td style="${paddingStyle}">
       <h2 style="${STYLE_H2} margin:0 0 16px 0; text-align:${textAlignment};">${esc(title)}</h2>
       <div style="${STYLE_BODY_TEXT} margin:0 0 8px 0; text-align:${textAlignment};">${processedBody}</div>
       <div style="${buttonWrapperStyle}">
-        <a href="${esc(buttonUrl)}" data-role="cta" style="${buttonStyle}">${esc(buttonLabel)}</a>
+        <a href="${esc(buttonUrl)}" data-role="cta" style="${buttonStyle}">${esc(buttonContent)}</a>
       </div>
     </td>
   </tr>

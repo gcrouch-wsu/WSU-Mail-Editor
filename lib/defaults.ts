@@ -193,15 +193,21 @@ export function defaultFFModel(): NewsletterData {
             body_html:
               '<p>Submit your events, announcements, and opportunities for the next newsletter.</p>',
             text_alignment: 'center',
+            button_style: CTA_BUTTON_DEFAULTS.style,
             button_bg_color: CTA_BUTTON_DEFAULTS.bg_color,
             button_text_color: CTA_BUTTON_DEFAULTS.text_color,
             button_padding_vertical: CTA_BUTTON_DEFAULTS.padding_vertical,
             button_padding_horizontal: CTA_BUTTON_DEFAULTS.padding_horizontal,
             button_border_width: CTA_BUTTON_DEFAULTS.border_width,
             button_border_color: CTA_BUTTON_DEFAULTS.border_color,
+            button_border_style: CTA_BUTTON_DEFAULTS.border_style,
             button_border_radius: CTA_BUTTON_DEFAULTS.border_radius,
             button_alignment: CTA_BUTTON_DEFAULTS.alignment,
             button_full_width: CTA_BUTTON_DEFAULTS.full_width,
+            button_font_weight: CTA_BUTTON_DEFAULTS.font_weight,
+            button_text_transform: CTA_BUTTON_DEFAULTS.text_transform,
+            button_letter_spacing: CTA_BUTTON_DEFAULTS.letter_spacing,
+            button_font_size: CTA_BUTTON_DEFAULTS.font_size,
             links: [
               {
                 label: 'Please use this form',

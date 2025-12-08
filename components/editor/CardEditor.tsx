@@ -3,7 +3,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Card, Link } from '@/types/newsletter'
+import type { Card, Link, Shadow } from '@/types/newsletter'
 import { Plus, Trash2 } from 'lucide-react'
 import { CTA_BUTTON_DEFAULTS } from '@/lib/config'
 import dynamic from 'next/dynamic'
@@ -73,6 +73,30 @@ export default function CardEditor({
     updateCard({ links: newLinks })
   }
 
+  // Helper to get button shadow (for CTA cards)
+  const getButtonShadow = (): Shadow => {
+    if (editedCard.type === 'cta' && editedCard.button_shadow) {
+      return editedCard.button_shadow
+    }
+    return {
+      enabled: false,
+      color: '#000000',
+      blur: 8,
+      spread: 0,
+      offset_x: 0,
+      offset_y: 2,
+      opacity: 0.3,
+    }
+  }
+
+  // Helper to update button shadow
+  const updateButtonShadow = (updates: Partial<Shadow>) => {
+    if (editedCard.type === 'cta') {
+      const currentShadow = getButtonShadow()
+      updateCard({ button_shadow: { ...currentShadow, ...updates } } as Partial<Card>)
+    }
+  }
+
   const handleSave = () => {
     onSave(editedCard)
   }
@@ -80,7 +104,7 @@ export default function CardEditor({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-wsu-border-light p-4 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-white border-b border-wsu-border-light p-4 flex items-center justify-between shadow-sm">
           <h2 className="text-xl font-semibold text-wsu-text-dark">
             Edit Card ({editedCard.type})
           </h2>
@@ -385,6 +409,33 @@ export default function CardEditor({
           {/* CTA Card Specific Fields */}
           {editedCard.type === 'cta' && (
             <div className="border-t border-wsu-border-light pt-4 space-y-4">
+              {/* Button Style Selector */}
+              <div>
+                <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                  CTA Style
+                </label>
+                <select
+                  value={editedCard.button_style || CTA_BUTTON_DEFAULTS.style}
+                  onChange={(e) =>
+                    updateCard({
+                      button_style: e.target.value as 'button' | 'pill' | 'outlined' | 'ghost' | 'arrow' | 'underlined' | 'text-only',
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                >
+                  <option value="button">Button (Solid Background)</option>
+                  <option value="pill">Pill (Fully Rounded Button)</option>
+                  <option value="outlined">Outlined (Border Only)</option>
+                  <option value="ghost">Ghost (Subtle Border)</option>
+                  <option value="arrow">Arrow Link (Text + →)</option>
+                  <option value="underlined">Underlined Link</option>
+                  <option value="text-only">Text Only (Plain Link)</option>
+                </select>
+                <p className="mt-1 text-xs text-wsu-text-muted">
+                  Choose the visual style for your call-to-action element
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
@@ -475,6 +526,200 @@ export default function CardEditor({
                 >
                   Button Full Width
                 </label>
+              </div>
+
+              {/* Button Typography */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                    Font Size (px)
+                  </label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="32"
+                    value={editedCard.button_font_size || CTA_BUTTON_DEFAULTS.font_size}
+                    onChange={(e) =>
+                      updateCard({ button_font_size: parseInt(e.target.value) || 16 })
+                    }
+                    className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                    Font Weight
+                  </label>
+                  <select
+                    value={editedCard.button_font_weight || CTA_BUTTON_DEFAULTS.font_weight}
+                    onChange={(e) =>
+                      updateCard({
+                        button_font_weight: e.target.value as 'normal' | 'bold' | '600' | '700',
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="600">Semi-Bold (600)</option>
+                    <option value="bold">Bold</option>
+                    <option value="700">Extra Bold (700)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                    Text Transform
+                  </label>
+                  <select
+                    value={editedCard.button_text_transform || CTA_BUTTON_DEFAULTS.text_transform}
+                    onChange={(e) =>
+                      updateCard({
+                        button_text_transform: e.target.value as 'none' | 'uppercase' | 'lowercase' | 'capitalize',
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                  >
+                    <option value="none">None</option>
+                    <option value="uppercase">UPPERCASE</option>
+                    <option value="lowercase">lowercase</option>
+                    <option value="capitalize">Capitalize</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                    Letter Spacing (px)
+                  </label>
+                  <input
+                    type="number"
+                    min="-2"
+                    max="10"
+                    step="0.5"
+                    value={editedCard.button_letter_spacing !== undefined ? editedCard.button_letter_spacing : CTA_BUTTON_DEFAULTS.letter_spacing}
+                    onChange={(e) =>
+                      updateCard({ button_letter_spacing: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                  />
+                </div>
+              </div>
+
+              {/* Button Border Style */}
+              <div>
+                <label className="block mb-1 text-sm font-medium text-wsu-text-dark">
+                  Border Style
+                </label>
+                <select
+                  value={editedCard.button_border_style || CTA_BUTTON_DEFAULTS.border_style}
+                  onChange={(e) =>
+                    updateCard({
+                      button_border_style: e.target.value as 'solid' | 'dashed' | 'dotted' | 'double',
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-wsu-border-light rounded-md focus:outline-none focus:ring-2 focus:ring-wsu-crimson"
+                >
+                  <option value="solid">Solid</option>
+                  <option value="dashed">Dashed</option>
+                  <option value="dotted">Dotted</option>
+                  <option value="double">Double</option>
+                </select>
+              </div>
+
+              {/* Button Shadow */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-wsu-text-dark">Button Shadow</h4>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={getButtonShadow().enabled}
+                      onChange={(e) => updateButtonShadow({ enabled: e.target.checked })}
+                      className="rounded border-wsu-border-light text-wsu-crimson focus:ring-wsu-crimson"
+                    />
+                    <span className="text-sm text-wsu-text-dark">Enabled</span>
+                  </label>
+                </div>
+
+                {getButtonShadow().enabled && (
+                  <div className="space-y-3 pl-4 border-l-2 border-wsu-crimson/20">
+                    <ColorPicker
+                      label="Shadow Color"
+                      value={getButtonShadow().color}
+                      onChange={(color) => updateButtonShadow({ color })}
+                    />
+
+                    <div>
+                      <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                        Blur: {getButtonShadow().blur}px
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="20"
+                        value={getButtonShadow().blur}
+                        onChange={(e) => updateButtonShadow({ blur: parseInt(e.target.value) })}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                        Spread: {getButtonShadow().spread}px
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="20"
+                        value={getButtonShadow().spread}
+                        onChange={(e) => updateButtonShadow({ spread: parseInt(e.target.value) })}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                          Offset X: {getButtonShadow().offset_x}px
+                        </label>
+                        <input
+                          type="range"
+                          min="-10"
+                          max="10"
+                          value={getButtonShadow().offset_x}
+                          onChange={(e) => updateButtonShadow({ offset_x: parseInt(e.target.value) })}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                          Offset Y: {getButtonShadow().offset_y}px
+                        </label>
+                        <input
+                          type="range"
+                          min="-10"
+                          max="10"
+                          value={getButtonShadow().offset_y}
+                          onChange={(e) => updateButtonShadow({ offset_y: parseInt(e.target.value) })}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block mb-1 text-xs font-medium text-wsu-text-dark">
+                        Opacity: {(getButtonShadow().opacity * 100).toFixed(0)}%
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={getButtonShadow().opacity * 100}
+                        onChange={(e) => updateButtonShadow({ opacity: parseInt(e.target.value) / 100 })}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

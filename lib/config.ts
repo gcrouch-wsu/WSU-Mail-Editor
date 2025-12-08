@@ -171,13 +171,19 @@ export const CARD_DEFAULTS = {
 
 // CTA Button defaults
 export const CTA_BUTTON_DEFAULTS = {
+  style: 'button',
   bg_color: '#A60F2D',
   text_color: '#ffffff',
   padding_vertical: 12,
   padding_horizontal: 32,
   border_width: 0,
   border_color: '#8c0d25',
+  border_style: 'solid',
   border_radius: 10,
+  font_weight: 'bold',
+  text_transform: 'none',
+  letter_spacing: 0,
+  font_size: 16,
   alignment: 'center',
   full_width: false,
 } as const

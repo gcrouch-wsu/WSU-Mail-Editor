@@ -178,15 +178,22 @@ export interface CTACard {
   title: string
   body_html: string
   links: Link[]
+  button_style?: 'button' | 'pill' | 'outlined' | 'ghost' | 'arrow' | 'underlined' | 'text-only'
   button_bg_color?: string
   button_text_color?: string
   button_padding_vertical?: number
   button_padding_horizontal?: number
   button_border_width?: number
   button_border_color?: string
+  button_border_style?: 'solid' | 'dashed' | 'dotted' | 'double'
   button_border_radius?: number
   button_alignment?: TitleAlign
   button_full_width?: boolean
+  button_shadow?: Shadow
+  button_font_weight?: 'normal' | 'bold' | '600' | '700'
+  button_text_transform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
+  button_letter_spacing?: number
+  button_font_size?: number
   text_alignment?: TitleAlign
   spacing_bottom?: number
   background_color?: string
