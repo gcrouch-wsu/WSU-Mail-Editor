@@ -15,7 +15,7 @@ export const VERSION = '7.0'
 
 // Default banner image (masthead)
 export const DEFAULT_BANNER_URL =
-  'https://futurecoug.wsu.edu/www/images/FF_header.png'
+  'https://futurecoug.wsu.edu/www/images/FF_Header_Transparent.png'
 export const DEFAULT_BANNER_ALT = 'WSU Graduate School'
 
 // Default resource icons (used in Friday Focus Resources section)
