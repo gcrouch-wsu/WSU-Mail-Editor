@@ -8,13 +8,18 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev:no-open --workspace=apps/wsu-tools",
-    "dev:no-open": "npm run dev:no-open --workspace=apps/wsu-tools",
-    "build": "npm run build --workspace=apps/wsu-tools",
-    "start": "npm run start --workspace=apps/wsu-tools",
-    "lint": "npm run lint --workspace=apps/wsu-tools",
-    "format": "npm run format --workspace=apps/wsu-tools",
-    "checkfmt": "npm run checkfmt --workspace=apps/wsu-tools"
+    "dev": "npm run dev --workspace=apps/platform",
+    "dev:platform": "npm run dev --workspace=apps/platform",
+    "dev:newsletter": "npm run dev --workspace=apps/newsletter-editor",
+    "dev:orgchart": "npm run dev --workspace=apps/org-chart-editor",
+    "build": "npm run build --workspaces",
+    "build:platform": "npm run build --workspace=apps/platform",
+    "build:newsletter": "npm run build --workspace=apps/newsletter-editor",
+    "build:orgchart": "npm run build --workspace=apps/org-chart-editor",
+    "start": "npm run start --workspace=apps/platform",
+    "lint": "npm run lint --workspaces",
+    "format": "npm run format --workspaces",
+    "checkfmt": "npm run checkfmt --workspaces"
   },
   "repository": {
     "type": "git",

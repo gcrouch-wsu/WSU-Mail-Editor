@@ -101,87 +101,79 @@ Create organizational charts for WordPress integration:
    npm install
    ```
 
-3. **Run the development server:**
+3. **Run the development servers:**
    ```bash
-   # From root directory (recommended)
+   # From root directory - runs platform (homepage) on port 3000
    npm run dev
    
-   # Or from the app directory
-   cd apps/wsu-tools
+   # Or run individual apps:
+   npm run dev:platform      # Homepage (port 3000)
+   npm run dev:newsletter    # Newsletter Editor (port 3001)
+   npm run dev:orgchart      # Org Chart Editor (port 3002)
+   
+   # Or from individual app directories:
+   cd apps/platform
    npm run dev
    ```
 
 4. **Open your browser:**
-   - Homepage: http://localhost:3000
-   - **HTML Newsletter Editor:**
-     - Friday Focus: http://localhost:3000/editor
-     - Graduate School Briefing: http://localhost:3000/editor?type=briefing
-     - Slate Campaign: http://localhost:3000/editor?type=slate
-   - **Org Chart Editor:** http://localhost:3000/orgchart
+   - **Homepage:** http://localhost:3000 (links to both tools)
+   - **Newsletter Editor:** http://localhost:3001
+     - Friday Focus: http://localhost:3001
+     - Graduate School Briefing: http://localhost:3001?type=briefing
+     - Slate Campaign: http://localhost:3001?type=slate
+   - **Org Chart Editor:** http://localhost:3002
 
 ## Project Structure
 
-This is a monorepo structure for WSU Graduate School Tools:
+This is a monorepo structure with separate apps for each tool:
 
 ```
 wsu-gradschool-tools/
 ├── apps/
-│   └── wsu-tools/                  # Main Next.js application
+│   ├── platform/                   # Homepage/landing page (port 3000)
+│   │   ├── app/
+│   │   │   ├── page.tsx            # Homepage with tool tiles
+│   │   │   ├── layout.tsx          # Root layout
+│   │   │   └── globals.css         # Tailwind CSS directives
+│   │   └── components/
+│   │       └── ToolTile.tsx        # Tool tile component
+│   │
+│   ├── newsletter-editor/          # Newsletter Editor app (port 3001)
+│   │   ├── app/
+│   │   │   ├── page.tsx            # Newsletter editor page
+│   │   │   ├── hooks/              # React hooks
+│   │   │   │   ├── useNewsletterState.ts  # State management
+│   │   │   │   └── usePreview.ts          # Preview generation
+│   │   │   └── api/                # API routes
+│   │   │       ├── preview/route.ts
+│   │   │       ├── export/route.ts
+│   │   │       ├── import/route.ts
+│   │   │       ├── generate-plaintext/route.ts
+│   │   │       ├── defaults/[type]/route.ts
+│   │   │       ├── validate/route.ts
+│   │   │       └── stats/route.ts
+│   │   ├── components/             # Newsletter editor components
+│   │   ├── lib/                    # Newsletter-specific utilities
+│   │   └── types/                  # Newsletter type definitions
+│   │
+│   └── org-chart-editor/           # Org Chart Editor app (port 3002)
 │       ├── app/
-│       │   ├── page.tsx            # Homepage: "WSU Graduate School Tools"
-│       │   ├── editor/
-│       │   │   ├── page.tsx        # HTML Newsletter Editor page
-│       │   │   └── hooks/          # React hooks for editor logic
-│       │   │       ├── useNewsletterState.ts  # State management with undo/redo
-│       │   │       └── usePreview.ts          # Preview generation hook
-│       │   ├── orgchart/
-│       │   │   └── page.tsx        # Org Chart Editor page
-│       │   ├── api/                # Next.js API routes
-│       │   │   ├── preview/route.ts        # Generate HTML preview (newsletter)
-│       │   │   ├── export/route.ts         # Export HTML file (newsletter)
-│       │   │   ├── import/route.ts         # Import from HTML (newsletter)
-│       │   │   ├── generate-plaintext/route.ts  # Generate plain text version (newsletter)
-│       │   │   ├── defaults/[type]/route.ts     # Get default template data (newsletter)
-│       │   │   ├── validate/route.ts       # Validate newsletter for accessibility
-│       │   │   ├── stats/route.ts          # Get content statistics (newsletter)
-│       │   │   └── orgchart/               # Org Chart API routes
-│       │   │       ├── import/route.ts     # Import org chart from HTML
-│       │   │       ├── sample/route.ts     # Get sample HTML templates
-│       │   │       ├── runtime.js/route.ts # Serve Wordpress.js
-│       │   │       ├── runtime.css/route.ts # Serve Wordpress.css
-│       │   │       └── download/           # Download runtime files
-│       │   │           ├── js/route.ts     # Download Wordpress.js
-│       │   │           └── css/route.ts    # Download Wordpress.css
-│       │   ├── layout.tsx          # Root layout
-│       │   └── globals.css         # Tailwind CSS directives
-│       ├── components/
-│       │   ├── editor/             # Newsletter Editor components
-│       │   │   ├── EditorPanel.tsx         # Main editor panel
-│       │   │   ├── PreviewPanel.tsx        # Live preview panel
-│       │   │   ├── MastheadEditor.tsx      # Masthead editor
-│       │   │   ├── SectionsEditor.tsx      # Sections editor
-│       │   │   ├── FooterEditor.tsx        # Footer editor
-│       │   │   ├── SettingsEditor.tsx      # Global settings editor
-│       │   │   └── TiptapEditor.tsx        # Rich text editor component
-│       │   ├── orgchart/           # Org Chart Editor components
-│       │   │   └── OrgChartEditor.tsx      # Main org chart editor component
-│       │   └── homepage/
-│       │       └── ToolTile.tsx    # Homepage tool tile component
-│       ├── lib/
-│       │   ├── config.ts           # Configuration and defaults
-│       │   ├── defaults.ts         # Default newsletter data models
-│       │   ├── email-templates.ts  # HTML generation (masthead, sections, cards, footer)
-│       │   ├── styles.ts           # Email-safe inline styles
-│       │   └── utils.ts            # Utility functions (escapeHtml, cleanHtml, debounce, clone)
-│       ├── types/
-│       │   └── newsletter.ts       # TypeScript type definitions
-│       ├── public/                 # Static assets
-│       │   └── orgchart-admin.html # Org chart admin interface
-│       ├── tailwind.config.ts      # Tailwind CSS configuration
-│       ├── next.config.js          # Next.js configuration
-│       ├── tsconfig.json           # TypeScript configuration
-│       └── package.json            # Dependencies and scripts
+│       │   ├── page.tsx            # Org chart editor page
+│       │   └── api/                # API routes
+│       │       └── orgchart/
+│       │           ├── import/route.ts
+│       │           ├── sample/route.ts
+│       │           ├── runtime.js/route.ts
+│       │           ├── runtime.css/route.ts
+│       │           └── download/
+│       │               ├── js/route.ts
+│       │               └── css/route.ts
+│       ├── components/             # Org chart components
+│       └── public/                 # Static assets
+│
 ├── packages/                       # Shared packages (for future use)
+│   └── shared/                     # Shared utilities/components
 ├── package.json                    # Root workspace configuration
 ├── vercel.json                     # Vercel deployment configuration
 └── README.md                       # This file
@@ -193,14 +185,25 @@ wsu-gradschool-tools/
 
 Run from the root directory:
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
+**Development:**
+- `npm run dev` - Start platform (homepage) on port 3000
+- `npm run dev:platform` - Start platform app
+- `npm run dev:newsletter` - Start newsletter editor (port 3001)
+- `npm run dev:orgchart` - Start org chart editor (port 3002)
+
+**Build:**
+- `npm run build` - Build all apps
+- `npm run build:platform` - Build platform app
+- `npm run build:newsletter` - Build newsletter editor
+- `npm run build:orgchart` - Build org chart editor
+
+**Other:**
+- `npm run start` - Start production server (platform)
+- `npm run lint` - Run ESLint on all apps
 - `npm run format` - Format code with Prettier
 - `npm run checkfmt` - Check code formatting
 
-Or run directly from `apps/wsu-tools/` directory with the same commands.
+Or run commands directly from individual app directories.
 
 ### Development Workflow
 
@@ -362,17 +365,19 @@ This Next.js app is ready for deployment on Vercel:
    git push origin main
    ```
 
-2. **Import project in Vercel:**
+2. **Import projects in Vercel:**
    - Connect your GitHub repository
+   - **For each app, create a separate Vercel project:**
+     - **Platform:** Set Root Directory to `apps/platform`
+     - **Newsletter Editor:** Set Root Directory to `apps/newsletter-editor`
+     - **Org Chart Editor:** Set Root Directory to `apps/org-chart-editor`
    - Vercel will detect Next.js automatically
-   - **Important:** Set **Root Directory** to `apps/wsu-tools` in Project Settings
-   - Or use the included `vercel.json` configuration file
    - Configure environment variables if needed
 
 3. **Deploy:**
-   - Vercel will build and deploy automatically
+   - Each app can be deployed independently
    - API routes work as serverless functions
-   - The `vercel.json` file configures the monorepo structure
+   - Update homepage links to point to deployed URLs
 
 ### Environment Variables
 

@@ -1,4 +1,4 @@
-import OrgChartEditor from '@/components/orgchart/OrgChartEditor'
+import OrgChartEditor from '@/components/OrgChartEditor'
 
 export default function OrgChartPage() {
   return <OrgChartEditor />

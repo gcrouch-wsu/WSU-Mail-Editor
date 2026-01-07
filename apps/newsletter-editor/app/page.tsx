@@ -5,9 +5,9 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useNewsletterState } from './hooks/useNewsletterState'
 import { usePreview } from './hooks/usePreview'
-import PreviewPanel from '@/components/editor/PreviewPanel'
-import EditorPanel from '@/components/editor/EditorPanel'
-import ConfirmModal from '@/components/editor/ConfirmModal'
+import PreviewPanel from '@/components/PreviewPanel'
+import EditorPanel from '@/components/EditorPanel'
+import ConfirmModal from '@/components/ConfirmModal'
 import type { NewsletterData, ValidationResult, ValidationIssue } from '@/types/newsletter'
 import { defaultFFModel } from '@/lib/defaults'
 import {
