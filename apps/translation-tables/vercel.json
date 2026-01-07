@@ -1,7 +1,7 @@
 {
-  "buildCommand": "cd ../.. && npm install && npm run build --workspace=apps/translation-tables",
+  "installCommand": "cd ../.. && npm install",
+  "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "framework": "nextjs",
-  "installCommand": "cd ../.. && npm install"
+  "framework": "nextjs"
 }
 
