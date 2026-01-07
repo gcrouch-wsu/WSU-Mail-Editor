@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd apps/newsletter-editor && npm run build",
-  "outputDirectory": "apps/newsletter-editor/.next",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
   "framework": "nextjs"
 }
 
