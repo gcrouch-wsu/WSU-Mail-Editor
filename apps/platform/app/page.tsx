@@ -1,7 +1,7 @@
 // app/page.tsx - Homepage: WSU Graduate School Tools
 
 import ToolTile from '@/components/ToolTile'
-import { FileText, Network } from 'lucide-react'
+import { FileText, Network, Table2 } from 'lucide-react'
 
 export default function HomePage() {
   return (
@@ -32,6 +32,12 @@ export default function HomePage() {
             description="Create and edit organizational charts with multiple layout options"
             href="https://wsu-mail-editor-org-chart-editor.vercel.app/"
             icon={Network}
+          />
+          <ToolTile
+            title="Translation Tables"
+            description="Export and process Outcomes Translation Table data to Excel or text format"
+            href="https://outcomes-translation-tables.vercel.app/"
+            icon={Table2}
           />
           {/* Add more tool tiles here as needed */}
         </div>
