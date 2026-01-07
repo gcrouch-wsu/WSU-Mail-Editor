@@ -24,13 +24,13 @@ export default function HomePage() {
           <ToolTile
             title="HTML Editor"
             description="Create and edit email newsletters for Friday Focus and Graduate School Briefing"
-            href="http://localhost:3001"
+            href="https://wsu-mail-editor-newsletter-editor.vercel.app/"
             icon={FileText}
           />
           <ToolTile
             title="Org Chart Editor"
             description="Create and edit organizational charts with multiple layout options"
-            href="http://localhost:3002"
+            href="https://wsu-mail-editor-org-chart-editor.vercel.app/"
             icon={Network}
           />
           {/* Add more tool tiles here as needed */}
