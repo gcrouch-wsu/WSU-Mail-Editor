@@ -51,3 +51,16 @@ AI_HANDOFF.md
 VERCEL_DEPLOYMENT_TROUBLESHOOTING.md
 arrow.png
 scripts/dev-with-browser.js
+MIGRATION_*.md
+ROLLBACK_*.md
+SPLIT_*.md
+STRUCTURE_*.md
+FOLDER_*.md
+*_PLAN.md
+*_COMPLETE.md
+*_EXPLANATION.md
+*_INSTRUCTIONS.md
+
+# Old/unused folders
+apps/wsu-tools/
+Org Chart 6/
