@@ -12,7 +12,7 @@
     "dev:platform": "npm run dev --workspace=apps/platform",
     "dev:newsletter": "npm run dev --workspace=apps/newsletter-editor",
     "dev:orgchart": "npm run dev --workspace=apps/org-chart-editor",
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspace=apps/platform --workspace=apps/newsletter-editor --workspace=apps/org-chart-editor",
     "build:platform": "npm run build --workspace=apps/platform",
     "build:newsletter": "npm run build --workspace=apps/newsletter-editor",
     "build:orgchart": "npm run build --workspace=apps/org-chart-editor",
