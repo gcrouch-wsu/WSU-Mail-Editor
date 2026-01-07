@@ -1,4 +1,6 @@
 {
+  "buildCommand": "cd apps/org-chart-editor && npm run build",
+  "outputDirectory": "apps/org-chart-editor/.next",
   "framework": "nextjs"
 }
 
