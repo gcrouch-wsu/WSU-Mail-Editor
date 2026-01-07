@@ -61,6 +61,9 @@ FOLDER_*.md
 *_EXPLANATION.md
 *_INSTRUCTIONS.md
 
+# Local-only notes (never commit)
+LOCAL_*.md
+
 # Old/unused folders
 apps/wsu-tools/
 Org Chart 6/
