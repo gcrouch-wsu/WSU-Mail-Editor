@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     const session = getSession(sessionId)!
     const entryMap = new Map(
-      session.entries.map((e: any) => [e.id, e])
+      session.entries.map((e) => [e.id, e])
     )
 
     if (!entryId || !entryMap.has(entryId)) {

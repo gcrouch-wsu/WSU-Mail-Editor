@@ -5,11 +5,12 @@ import {
   inferProgramNameFromShortname,
 } from './rules'
 
-const NAMESPACE = {
-  content: 'http://purl.org/rss/1.0/modules/content/',
-  wp: 'http://wordpress.org/export/1.2/',
-  dc: 'http://purl.org/dc/elements/1.1/',
-}
+// XML namespaces for WordPress WXR format
+// const NAMESPACE = {
+//   content: 'http://purl.org/rss/1.0/modules/content/',
+//   wp: 'http://wordpress.org/export/1.2/',
+//   dc: 'http://purl.org/dc/elements/1.1/',
+// }
 
 export async function parseWxr(
   xmlBytes: Buffer,
@@ -49,15 +50,12 @@ export async function parseWxr(
             if (!item) continue
 
             // Handle namespaced elements - xml2js uses $ for attributes and _ for text
-            const wpNamespace = 'http://wordpress.org/export/1.2/'
-            const postType = item[`${wpNamespace}post_type`] || 
-                           (item.$ && item.$['xmlns:wp'] && item['wp:post_type']) ||
-                           (typeof item === 'object' && 'post_type' in item ? (item as any).post_type : null)
-            
             // Try multiple ways to access post_type
             let actualPostType = ''
             if (typeof item === 'object' && item !== null) {
-              const itemObj = item as any
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const itemObj = item as any
               actualPostType = itemObj['wp:post_type'] || 
                              itemObj.post_type || 
                              (itemObj.$ && itemObj.$['xmlns:wp'] ? itemObj['wp:post_type'] : '') ||
@@ -68,6 +66,7 @@ export async function parseWxr(
               continue
             }
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const itemObj = item as any
             const postId = itemObj['wp:post_id'] || itemObj.post_id || ''
             const status = itemObj['wp:status'] || itemObj.status || ''

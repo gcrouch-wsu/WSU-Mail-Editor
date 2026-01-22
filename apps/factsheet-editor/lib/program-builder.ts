@@ -163,7 +163,7 @@ export function buildProgramsFromFactsheets(
 export function buildEffectiveFactsheets(
   factsheets: Factsheet[],
   overrides: Record<string, Override>,
-  rules: Rules
+  _rules: Rules
 ): Factsheet[] {
   const effective: Factsheet[] = []
 

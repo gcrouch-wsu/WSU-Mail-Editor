@@ -1,8 +1,8 @@
-import type { Factsheet, Override } from './types'
+import type { Factsheet, Override, RecommendationEntry } from './types'
 
 interface Session {
   factsheets: Factsheet[]
-  entries: any[]
+  entries: RecommendationEntry[]
   overrides: Record<string, Override>
   sourceName: string
   baseAdminUrl: string

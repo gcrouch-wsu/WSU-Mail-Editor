@@ -49,6 +49,7 @@ test-list.html
 # Development/Documentation files (keep local, don't push to repo)
 AI_HANDOFF.md
 VERCEL_DEPLOYMENT_TROUBLESHOOTING.md
+VERCEL_DEPLOYMENT_GUIDE.md
 arrow.png
 scripts/dev-with-browser.js
 MIGRATION_*.md

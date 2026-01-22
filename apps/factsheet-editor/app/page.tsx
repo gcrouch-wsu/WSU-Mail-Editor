@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, Download, FileText, Settings } from 'lucide-react'
+import { Download } from 'lucide-react'
 
 interface Entry {
   id: string
@@ -23,7 +23,7 @@ export default function FactsheetEditorPage() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])
   const [counts, setCounts] = useState({ total: 0, needs_edit: 0 })
-  const [sourceName, setSourceName] = useState('')
+  const [_sourceName, setSourceName] = useState('')
   const [baseAdminUrl, setBaseAdminUrl] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -84,9 +84,9 @@ export default function FactsheetEditorPage() {
       setTimeout(() => {
         refreshHtml(newSessionId)
       }, 100)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Upload error:', err)
-      setError(err.message || 'Upload failed. Please check the console for details.')
+      setError(err instanceof Error ? err.message : 'Upload failed. Please check the console for details.')
     } finally {
       setLoading(false)
     }
@@ -150,33 +150,34 @@ export default function FactsheetEditorPage() {
     window.open('/api/factsheet/download/js', '_blank')
   }
 
-  const handleUpdateEntry = async (
-    entryId: string,
-    field: string,
-    value: string | string[]
-  ) => {
-    if (!sessionId) return
-
-    const payload: any = {
-      sessionId,
-      id: entryId,
-    }
-    if (field === 'name') payload.name = value
-    if (field === 'shortname') payload.shortname = value
-    if (field === 'program_name') payload.program_name = value
-    if (field === 'degree_types') payload.degree_types = value
-
-    try {
-      await fetch('/api/factsheet/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      refreshHtml()
-    } catch (err) {
-      console.error('Update error:', err)
-    }
-  }
+  // handleUpdateEntry is reserved for future edit functionality
+  // const handleUpdateEntry = async (
+  //   entryId: string,
+  //   field: string,
+  //   value: string | string[]
+  // ) => {
+  //   if (!sessionId) return
+  //
+  //   const payload: Record<string, unknown> = {
+  //     sessionId,
+  //     id: entryId,
+  //   }
+  //   if (field === 'name') payload.name = value
+  //   if (field === 'shortname') payload.shortname = value
+  //   if (field === 'program_name') payload.program_name = value
+  //   if (field === 'degree_types') payload.degree_types = value
+  //
+  //   try {
+  //     await fetch('/api/factsheet/update', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify(payload),
+  //     })
+  //     refreshHtml()
+  //   } catch (err) {
+  //     console.error('Update error:', err)
+  //   }
+  // }
 
   return (
     <div className="min-h-screen bg-wsu-bg-light">
@@ -233,7 +234,7 @@ export default function FactsheetEditorPage() {
             <button
               type="submit"
               disabled={loading}
-              onClick={(e) => {
+              onClick={() => {
                 console.log('Load Export button clicked')
                 // Form submission will be handled by onSubmit
               }}
@@ -330,7 +331,7 @@ export default function FactsheetEditorPage() {
                   HTML Output
                 </h2>
                 <button
-                  onClick={refreshHtml}
+                  onClick={() => refreshHtml()}
                   className="bg-wsu-gray-light text-white px-4 py-2 rounded font-semibold hover:bg-wsu-gray transition-colors"
                 >
                   Refresh

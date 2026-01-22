@@ -1,4 +1,4 @@
-import type { Factsheet, RecommendationEntry, Rules, Override } from './types'
+import type { Factsheet, RecommendationEntry, Rules } from './types'
 import {
   normalizeProgramName,
   splitPrefix,

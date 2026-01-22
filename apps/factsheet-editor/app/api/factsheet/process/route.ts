@@ -46,9 +46,10 @@ export async function POST(request: NextRequest) {
     let overrides: Record<string, Override> = {}
     if (editsFile) {
       try {
-        const editsText = await editsFile.text()
-        const editsData = JSON.parse(editsText)
-        overrides = editsData.overrides || {}
+            const editsText = await editsFile.text()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const editsData = JSON.parse(editsText) as any
+            overrides = editsData.overrides || {}
       } catch (error) {
         console.error('Failed to parse edits JSON:', error)
       }
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
     entries: session.entries,
     counts: {
       total: session.entries.length,
-      needs_edit: session.entries.filter((e: any) => e.needs_edit).length,
+      needs_edit: session.entries.filter((e) => e.needs_edit).length,
     },
     source_name: session.sourceName,
     base_admin_url: session.baseAdminUrl,
