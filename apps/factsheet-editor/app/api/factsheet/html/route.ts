@@ -50,6 +50,16 @@ export async function GET(request: NextRequest) {
     )
 
     console.log('HTML route: Effective factsheets:', effective.length)
+    
+    if (effective.length === 0) {
+      console.error('HTML route: No effective factsheets after applying overrides')
+      return NextResponse.json(
+        {
+          error: 'No factsheets available after processing. Check that your export contains factsheets with status="publish" and include_in_programs="1".',
+        },
+        { status: 400 }
+      )
+    }
 
     const [programs, processedCount, skippedCount] =
       buildProgramsFromFactsheets(effective, rules)

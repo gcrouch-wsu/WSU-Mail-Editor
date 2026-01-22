@@ -25,6 +25,14 @@ export async function POST(request: NextRequest) {
     let factsheets: Factsheet[]
     try {
       factsheets = await parseWxr(xmlBytes, rules)
+      console.log('Process route: Parsed factsheets:', {
+        total: factsheets.length,
+        withStatus: factsheets.filter(f => f.status).length,
+        published: factsheets.filter(f => f.status === 'publish').length,
+        draft: factsheets.filter(f => f.status === 'draft').length,
+        included: factsheets.filter(f => f.include_in_programs === '1').length,
+        withDegreeTypes: factsheets.filter(f => f.degree_types.length > 0).length,
+      })
     } catch (error) {
       return NextResponse.json(
         {
@@ -62,6 +70,12 @@ export async function POST(request: NextRequest) {
       overrides,
       sourceName: wxrFile.name,
       baseAdminUrl,
+    })
+    
+    console.log('Process route: Session created:', {
+      sessionId,
+      factsheetsCount: factsheets.length,
+      entriesCount: entries.length,
     })
 
     return NextResponse.json({

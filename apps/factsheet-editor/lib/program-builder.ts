@@ -30,18 +30,26 @@ export function buildProgramsFromFactsheets(
 
   let processedCount = 0
   let skippedCount = 0
+  let skippedDraft = 0
+  let skippedNotIncluded = 0
+  let skippedNoDegreeTypes = 0
 
   for (const factsheet of factsheets) {
-    if (
-      factsheet.status === 'draft' ||
-      factsheet.include_in_programs !== '1'
-    ) {
+    if (factsheet.status === 'draft') {
+      skippedDraft++
+      skippedCount++
+      continue
+    }
+    
+    if (factsheet.include_in_programs !== '1') {
+      skippedNotIncluded++
       skippedCount++
       continue
     }
 
     const degreeTypes = factsheet.degree_types
     if (!degreeTypes.length && !includeMissingDegreeTypes) {
+      skippedNoDegreeTypes++
       skippedCount++
       continue
     }
@@ -76,7 +84,21 @@ export function buildProgramsFromFactsheets(
   }
 
   if (factsheetsByKey.size === 0) {
-    throw new Error('No factsheets were found in the export.')
+    const totalFactsheets = factsheets.length
+    const diagnosticInfo = {
+      totalFactsheets,
+      skippedDraft,
+      skippedNotIncluded,
+      skippedNoDegreeTypes,
+      totalSkipped: skippedCount,
+    }
+    console.error('No factsheets passed filters:', diagnosticInfo)
+    throw new Error(
+      `No factsheets were found in the export. ` +
+      `Total factsheets: ${totalFactsheets}, ` +
+      `Skipped (draft: ${skippedDraft}, not included: ${skippedNotIncluded}, no degree types: ${skippedNoDegreeTypes}). ` +
+      `Check that factsheets have status='publish', include_in_programs='1', and at least one degree type.`
+    )
   }
 
   const factsheetsByProgramAndShortname = new Map<
