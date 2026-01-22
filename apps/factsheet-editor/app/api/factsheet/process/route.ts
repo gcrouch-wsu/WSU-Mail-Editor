@@ -3,7 +3,7 @@ import { parseWxr } from '@/lib/xml-parser'
 import { generateRecommendations } from '@/lib/recommendations'
 import { getDefaultRules } from '@/lib/rules'
 import { setSession } from '@/lib/session-store'
-import type { Override } from '@/lib/types'
+import type { Factsheet, Override } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
   try {
