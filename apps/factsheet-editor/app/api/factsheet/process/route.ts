@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const sessionId = crypto.randomUUID()
-    sessions.set(sessionId, {
+    setSession(sessionId, {
       factsheets,
       entries,
       overrides,
