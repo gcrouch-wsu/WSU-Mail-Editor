@@ -37,22 +37,24 @@ export default function FactsheetEditorPage() {
 
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    console.log('handleUpload called')
     setError('')
     setLoading(true)
 
-    const formData = new FormData(e.currentTarget)
-    const wxrFile = formData.get('wxr_file') as File | null
-
-    if (!wxrFile) {
-      setError('Please choose a WXR export file.')
-      setLoading(false)
-      return
-    }
-
     try {
+      const formData = new FormData(e.currentTarget)
+      const wxrFile = formData.get('wxr_file') as File | null
+      const baseAdminUrlInput = formData.get('base_admin_url') as string || ''
+
+      if (!wxrFile) {
+        setError('Please choose a WXR export file.')
+        setLoading(false)
+        return
+      }
+
       const uploadFormData = new FormData()
       uploadFormData.append('wxr_file', wxrFile)
-      uploadFormData.append('base_admin_url', baseAdminUrl)
+      uploadFormData.append('base_admin_url', baseAdminUrlInput)
 
       const response = await fetch('/api/factsheet/process', {
         method: 'POST',
@@ -60,33 +62,70 @@ export default function FactsheetEditorPage() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Upload failed')
+        let errorMessage = 'Upload failed'
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.error || errorMessage
+        } catch {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`
+        }
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
-      setSessionId(data.sessionId)
+      const newSessionId = data.sessionId
+      setSessionId(newSessionId)
       setEntries(data.entries)
       setCounts(data.counts)
       setSourceName(data.source_name)
       setBaseAdminUrl(data.base_admin_url || '')
-      refreshHtml()
+      
+      // Refresh HTML after a short delay to ensure session is saved
+      setTimeout(() => {
+        refreshHtml(newSessionId)
+      }, 100)
     } catch (err: any) {
-      setError(err.message || 'Upload failed')
+      console.error('Upload error:', err)
+      setError(err.message || 'Upload failed. Please check the console for details.')
     } finally {
       setLoading(false)
     }
   }
 
-  const refreshHtml = async () => {
-    if (!sessionId) return
+  const refreshHtml = async (sessionIdToUse?: string) => {
+    const id = sessionIdToUse || sessionId
+    if (!id) {
+      console.warn('refreshHtml called without sessionId')
+      return
+    }
 
     try {
+      console.log('Refreshing HTML for session:', id)
       const response = await fetch(
-        `/api/factsheet/html?sessionId=${sessionId}`
+        `/api/factsheet/html?sessionId=${id}`
       )
-      if (!response.ok) throw new Error('Failed to generate HTML')
+      
+      if (!response.ok) {
+        let errorMessage = `Failed to generate HTML: ${response.status}`
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.error || errorMessage
+        } catch {
+          const errorText = await response.text()
+          errorMessage = `${errorMessage} - ${errorText}`
+        }
+        console.error('HTML refresh failed:', errorMessage)
+        throw new Error(errorMessage)
+      }
+      
       const data = await response.json()
+      console.log('HTML refresh successful:', {
+        groups: data.groups,
+        processed: data.processed,
+        skipped: data.skipped,
+        size: data.data_size,
+      })
+      
       setHtmlOutput(data.html)
       setHtmlMeta({
         groups: String(data.groups),
@@ -94,8 +133,11 @@ export default function FactsheetEditorPage() {
         skipped: String(data.skipped),
         size: data.data_size,
       })
+      setError('') // Clear any previous errors
     } catch (err) {
       console.error('HTML refresh error:', err)
+      const errorMsg = err instanceof Error ? err.message : 'Failed to generate HTML'
+      setError(errorMsg)
     }
   }
 
@@ -155,8 +197,12 @@ export default function FactsheetEditorPage() {
           <h2 className="text-2xl font-semibold text-wsu-crimson mb-4">
             Load Export
           </h2>
+          <p className="text-sm text-wsu-text-muted mb-4">
+            Upload a WordPress WXR export file (.xml) to process and generate HTML blocks.
+            The factsheet.js file will be available for download after processing.
+          </p>
 
-          <form onSubmit={handleUpload} className="space-y-4">
+          <form onSubmit={handleUpload} className="space-y-4" noValidate>
             <div>
               <label className="block text-sm font-medium text-wsu-text-dark mb-2">
                 Base Admin URL (optional)
@@ -187,7 +233,11 @@ export default function FactsheetEditorPage() {
             <button
               type="submit"
               disabled={loading}
-              className="bg-wsu-crimson text-white px-6 py-3 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors disabled:opacity-50"
+              onClick={(e) => {
+                console.log('Load Export button clicked')
+                // Form submission will be handled by onSubmit
+              }}
+              className="bg-wsu-crimson text-white px-6 py-3 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Processing...' : 'Load Export'}
             </button>
