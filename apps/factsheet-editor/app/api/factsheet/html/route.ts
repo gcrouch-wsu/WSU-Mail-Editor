@@ -3,9 +3,7 @@ import { buildEffectiveFactsheets } from '@/lib/program-builder'
 import { buildProgramsFromFactsheets } from '@/lib/program-builder'
 import { generateHtmlBlock } from '@/lib/html-generator'
 import { getDefaultRules } from '@/lib/rules'
-
-// In-memory session storage (same as process route)
-const sessions = new Map<string, any>()
+import { getSession, hasSession } from '@/lib/session-store'
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('sessionId')
