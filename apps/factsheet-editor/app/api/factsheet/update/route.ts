@@ -15,14 +15,14 @@ export async function POST(request: NextRequest) {
       (t) => typeof t === 'string' && t.trim()
     )
 
-    if (!sessionId || !sessions.has(sessionId)) {
+    if (!sessionId || !hasSession(sessionId)) {
       return NextResponse.json(
         { ok: false, error: 'Invalid session' },
         { status: 400 }
       )
     }
 
-    const session = sessions.get(sessionId)!
+    const session = getSession(sessionId)!
     const entryMap = new Map(
       session.entries.map((e: any) => [e.id, e])
     )
