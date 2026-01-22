@@ -1,7 +1,7 @@
 // app/page.tsx - Homepage: WSU Graduate School Tools
 
 import ToolTile from '@/components/ToolTile'
-import { FileText, Network, Table2 } from 'lucide-react'
+import { FileText, Network, Table2, FileCode } from 'lucide-react'
 
 export default function HomePage() {
   return (
@@ -38,6 +38,12 @@ export default function HomePage() {
             description="Export and process Outcomes Translation Table data to Excel or text format"
             href="https://outcomes-translation-tables.vercel.app/"
             icon={Table2}
+          />
+          <ToolTile
+            title="Factsheet Editor"
+            description="Process WordPress WXR exports and generate HTML blocks for graduate program listings"
+            href="http://localhost:3004"
+            icon={FileCode}
           />
           {/* Add more tool tiles here as needed */}
         </div>

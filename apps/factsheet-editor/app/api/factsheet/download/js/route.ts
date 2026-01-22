@@ -1,0 +1,24 @@
+import { NextResponse } from 'next/server'
+import { readFile } from 'fs/promises'
+import { join } from 'path'
+
+export async function GET() {
+  try {
+    const filePath = join(process.cwd(), 'public', 'factsheet.js')
+    const content = await readFile(filePath, 'utf-8')
+
+    return new NextResponse(content, {
+      headers: {
+        'Content-Type': 'application/javascript',
+        'Content-Disposition': 'attachment; filename="factsheet.js"',
+        'Cache-Control': 'public, max-age=3600',
+      },
+    })
+  } catch (error) {
+    console.error('Download JS error:', error)
+    return NextResponse.json(
+      { error: 'Failed to download factsheet.js' },
+      { status: 500 }
+    )
+  }
+}

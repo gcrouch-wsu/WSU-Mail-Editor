@@ -1,4 +1,4 @@
-﻿# WSU Graduate School Tools
+# WSU Graduate School Tools
 
 A Next.js-based monorepo for managing WSU Graduate School tools, including newsletter editing, organizational charts, and translation table processing.
 
@@ -33,18 +33,20 @@ A Next.js-based monorepo for managing WSU Graduate School tools, including newsl
    # From root directory - runs platform (homepage) on port 3000
    npm run dev
    
-   # Or run individual apps:
-   npm run dev:platform      # Homepage (port 3000)
-   npm run dev:newsletter    # Newsletter Editor (port 3001)
-   npm run dev:orgchart      # Org Chart Editor (port 3002)
-   npm run dev:translation   # Translation Tables (port 3003)
+  # Or run individual apps:
+  npm run dev:platform      # Homepage (port 3000)
+  npm run dev:newsletter    # Newsletter Editor (port 3001)
+  npm run dev:orgchart      # Org Chart Editor (port 3002)
+  npm run dev:translation   # Translation Tables (port 3003)
+  npm run dev:factsheet     # Factsheet Editor (port 3004)
    ```
 
 4. **Open your browser:**
-   - **Homepage:** http://localhost:3000
-   - **Newsletter Editor:** http://localhost:3001
-   - **Org Chart Editor:** http://localhost:3002
-   - **Translation Tables:** http://localhost:3003
+  - **Homepage:** http://localhost:3000
+  - **Newsletter Editor:** http://localhost:3001
+  - **Org Chart Editor:** http://localhost:3002
+  - **Translation Tables:** http://localhost:3003
+  - **Factsheet Editor:** http://localhost:3004
 
 ## Project Structure
 
@@ -77,11 +79,19 @@ wsu-gradschool-tools/
 │   │   ├── components/             # Org chart components
 │   │   └── public/                 # Static assets
 │   │
-│   └── translation-tables/         # Translation Tables app (port 3003)
+│   ├── translation-tables/         # Translation Tables app (port 3003)
+│   │   ├── app/
+│   │   │   ├── page.tsx            # Translation tables page
+│   │   │   └── api/                # API routes
+│   │   └── components/             # Translation table components
+│   │
+│   └── factsheet-editor/           # Factsheet Editor app (port 3004)
 │       ├── app/
-│       │   ├── page.tsx            # Translation tables page
+│       │   ├── page.tsx            # Factsheet editor page
 │       │   └── api/                # API routes
-│       └── components/             # Translation table components
+│       ├── lib/                    # Core processing logic
+│       ├── components/             # Factsheet editor components
+│       └── public/                 # Static assets (factsheet.js)
 │
 ├── packages/                       # Shared packages (for future use)
 │   └── shared/                     # Shared utilities/components
@@ -99,6 +109,7 @@ Run from the root directory:
 - `npm run dev:newsletter` - Start newsletter editor (port 3001)
 - `npm run dev:orgchart` - Start org chart editor (port 3002)
 - `npm run dev:translation` - Start translation tables (port 3003)
+- `npm run dev:factsheet` - Start factsheet editor (port 3004)
 
 **Build:**
 - `npm run build` - Build all apps
@@ -106,6 +117,7 @@ Run from the root directory:
 - `npm run build:newsletter` - Build newsletter editor
 - `npm run build:orgchart` - Build org chart editor
 - `npm run build:translation` - Build translation tables
+- `npm run build:factsheet` - Build factsheet editor
 
 **Other:**
 - `npm run start` - Start production server (platform)
@@ -129,6 +141,7 @@ This Next.js app is ready for deployment on Vercel:
      - **Newsletter Editor:** Set Root Directory to `apps/newsletter-editor`
      - **Org Chart Editor:** Set Root Directory to `apps/org-chart-editor`
      - **Translation Tables:** Set Root Directory to `apps/translation-tables`
+     - **Factsheet Editor:** Set Root Directory to `apps/factsheet-editor`
    - Vercel will detect Next.js automatically
    - Configure environment variables if needed
 
@@ -382,6 +395,57 @@ Access at: http://localhost:3003
 - **Root Directory:** `apps/translation-tables`
 - **Port:** 3003 (development)
 - **Deployed URL:** https://outcomes-translation-tables.vercel.app/
+
+</details>
+
+<details>
+<summary><h2>Factsheet Editor</h2></summary>
+
+Process WordPress WXR exports and generate HTML blocks for graduate program listings.
+
+### Features
+
+- **WXR XML parsing** - Upload WordPress export files and extract factsheet data
+- **Rules engine** - Configurable rules for program name normalization, degree type classifications, and UI customization
+- **Edit recommendations** - Automatic suggestions for improving factsheet metadata
+- **HTML generation** - Generate WordPress-ready HTML blocks with embedded data
+- **factsheet.js integration** - Download and serve the runtime JavaScript file
+- **Review interface** - View and edit factsheet entries before generating output
+
+### Workflow
+
+1. Upload a WordPress WXR export file (.xml)
+2. Review edit recommendations for factsheet entries
+3. Optionally edit entries to override suggestions
+4. Generate and download HTML block
+5. Download factsheet.js for WordPress integration
+6. Paste HTML into WordPress Custom HTML block
+7. Load factsheet.js via Code Snippets (footer)
+
+### API Routes
+
+- **POST `/api/factsheet/process`** - Upload and process WXR export file
+- **GET `/api/factsheet/html`** - Generate HTML block from current data
+- **GET `/api/factsheet/download/html`** - Download HTML file
+- **GET `/api/factsheet/download/js`** - Download factsheet.js
+- **GET `/api/factsheet/runtime.js`** - Serve factsheet.js
+- **POST `/api/factsheet/update`** - Update entry overrides
+
+### Local Development
+
+```bash
+npm run dev:factsheet
+# or
+cd apps/factsheet-editor
+npm run dev
+```
+
+Access at: http://localhost:3004
+
+### Deployment
+
+- **Root Directory:** `apps/factsheet-editor`
+- **Port:** 3004 (development)
 
 </details>
 

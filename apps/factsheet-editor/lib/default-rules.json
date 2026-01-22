@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "program_name_normalizations": {
+    "Applied Economics": "Economics"
+  },
+  "degree_type_classifications": {
+    "Doctorate": "doctorate",
+    "Doctor of Education": "doctorate",
+    "Master of Arts": "masters",
+    "Master of Education": "masters",
+    "Master of Science": "masters",
+    "Master's": "masters",
+    "Professional Master's Degree": "professional-masters",
+    "4+1 Master's Entry": "masters-4plus1",
+    "Graduate Certificate": "graduate-certificate",
+    "Global Campus": "global-campus",
+    "Administrator Credentials": "administrator-credentials"
+  },
+  "classification_order": [
+    "doctorate",
+    "masters",
+    "professional-masters",
+    "masters-4plus1",
+    "graduate-certificate",
+    "global-campus",
+    "administrator-credentials"
+  ],
+  "supported_degree_types": [
+    "Doctorate",
+    "Doctor of Education",
+    "Master of Arts",
+    "Master of Education",
+    "Master of Science",
+    "Master's",
+    "Professional Master's Degree",
+    "4+1 Master's Entry",
+    "Graduate Certificate",
+    "Global Campus",
+    "Administrator Credentials"
+  ],
+  "degree_keywords": [
+    "Master",
+    "Masters",
+    "Master's",
+    "Doctor",
+    "Doctorate",
+    "PhD",
+    "Ph.D",
+    "EdD",
+    "MFA",
+    "MA",
+    "MS",
+    "MBA",
+    "MPH",
+    "MEd",
+    "M.S.",
+    "M.A.",
+    "M.B.A.",
+    "Certificate",
+    "Credential",
+    "DNP",
+    "JD",
+    "DVM",
+    "DDS",
+    "DPT",
+    "MSW"
+  ],
+  "prefix_separators": [
+    " - ",
+    ": ",
+    ", "
+  ],
+  "program_name_fallbacks": [
+    {
+      "delimiter": " - ",
+      "position": "before"
+    },
+    {
+      "delimiter": ", Graduate Certificate",
+      "position": "before"
+    },
+    {
+      "delimiter": ", Graduate",
+      "position": "before"
+    }
+  ],
+  "shortname_rules": {
+    "only_when_grouping": true,
+    "graduate_certificate_label": "Graduate Certificate in {program_name}"
+  },
+  "title_rules": {
+    "replace_non_acronym_parentheses_with_dash": true,
+    "inject_acronym_from_shortname": true,
+    "verify_title_when_no_degree_keyword": true
+  },
+  "ui": {
+    "badge_map": {
+      "doctorate": {
+        "text": "D",
+        "class": "doctorate",
+        "label": "Doctorate"
+      },
+      "masters": {
+        "text": "M",
+        "class": "masters",
+        "label": "Masters"
+      },
+      "graduate-certificate": {
+        "text": "GC",
+        "class": "graduate-cert",
+        "label": "Graduate Certificate"
+      },
+      "administrator-credentials": {
+        "text": "C",
+        "class": "credential",
+        "label": "Administrator Credentials"
+      },
+      "professional-masters": {
+        "text": "PM",
+        "class": "professional-masters",
+        "label": "Professional Masters"
+      },
+      "masters-4plus1": {
+        "text": "4+1",
+        "class": "masters-entry",
+        "label": "4+1 Entry"
+      },
+      "global-campus": {
+        "text": "G",
+        "class": "global-campus",
+        "label": "Global Campus"
+      }
+    },
+    "badge_styles": {
+      "doctorate": "linear-gradient(135deg, #721c2f 0%, #5a1625 100%)",
+      "masters": "linear-gradient(135deg, #e87722 0%, #d46619 100%)",
+      "professional-masters": "linear-gradient(135deg, #7c3f8d 0%, #643274 100%)",
+      "graduate-cert": "linear-gradient(135deg, #008c95 0%, #00707a 100%)",
+      "credential": "linear-gradient(135deg, #0a5f8d 0%, #084c71 100%)",
+      "masters-entry": "linear-gradient(135deg, #2d8659 0%, #246b47 100%)",
+      "global-campus": "linear-gradient(135deg, #1f7a5c 0%, #155b44 100%)"
+    },
+    "filter_definitions": [
+      {
+        "type": "all",
+        "label": "All Programs"
+      },
+      {
+        "type": "doctorate",
+        "label": "Doctorate",
+        "badge": "D",
+        "badge_class": "doctorate"
+      },
+      {
+        "type": "masters",
+        "label": "Masters",
+        "badge": "M",
+        "badge_class": "masters"
+      },
+      {
+        "type": "professional-masters",
+        "label": "Professional Masters",
+        "badge": "PM",
+        "badge_class": "professional-masters"
+      },
+      {
+        "type": "graduate-certificate",
+        "label": "Graduate Certificate",
+        "badge": "GC",
+        "badge_class": "graduate-cert"
+      },
+      {
+        "type": "global-campus",
+        "label": "Global Campus",
+        "badge": "G",
+        "badge_class": "global-campus"
+      },
+      {
+        "type": "administrator-credentials",
+        "label": "Credentials",
+        "badge": "C",
+        "badge_class": "credential"
+      },
+      {
+        "type": "masters-4plus1",
+        "label": "4+1 Entry",
+        "badge": "4+1",
+        "badge_class": "masters-entry"
+      }
+    ]
+  }
+}
