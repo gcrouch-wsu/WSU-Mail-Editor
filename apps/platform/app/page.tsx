@@ -42,7 +42,7 @@ export default function HomePage() {
           <ToolTile
             title="Factsheet Editor"
             description="Process WordPress WXR exports and generate HTML blocks for graduate program listings"
-            href="http://localhost:3004"
+            href="https://wsu-mail-editor-factsheet-editor.vercel.app/"
             icon={FileCode}
           />
           {/* Add more tool tiles here as needed */}
