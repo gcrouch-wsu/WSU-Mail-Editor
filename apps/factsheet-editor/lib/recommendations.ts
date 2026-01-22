@@ -53,7 +53,7 @@ export function generateRecommendations(
 
     let programSuggest: string | null = null
     if (!programNameRaw) {
-      const [inferredProgram] = suggestProgramFromShortnameHelper(
+      const [inferredProgram] = suggestProgramFromShortname(
         shortnameRaw || f.shortname,
         rules
       )
