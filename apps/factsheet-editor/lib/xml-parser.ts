@@ -45,29 +45,56 @@ export async function parseWxr(
 
           const items = Array.isArray(channel.item) ? channel.item : channel.item ? [channel.item] : []
           const factsheets: Factsheet[] = []
+          
+          console.log('XML parser: Total items found:', items.length)
+          if (items.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const sampleItem = items[0] as any
+            console.log('XML parser: Sample item keys:', Object.keys(sampleItem || {}))
+            console.log('XML parser: Sample item wp:post_type:', sampleItem?.['wp:post_type'])
+            console.log('XML parser: Sample item post_type:', sampleItem?.post_type)
+          }
 
           for (const item of items) {
             if (!item) continue
 
-            // Handle namespaced elements - xml2js uses $ for attributes and _ for text
-            // Try multiple ways to access post_type
-            let actualPostType = ''
-            if (typeof item === 'object' && item !== null) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // Handle namespaced elements - xml2js with xmlns:true may use different structures
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const itemObj = item as any
-              actualPostType = itemObj['wp:post_type'] || 
-                             itemObj.post_type || 
-                             (itemObj.$ && itemObj.$['xmlns:wp'] ? itemObj['wp:post_type'] : '') ||
-                             ''
+            
+            // Try multiple ways to access post_type
+            // xml2js with xmlns:true might use: item['wp:post_type'], item['$']['wp:post_type'], or nested structure
+            let actualPostType = ''
+            
+            // Method 1: Direct access with namespace prefix
+            actualPostType = itemObj['wp:post_type'] || ''
+            
+            // Method 2: Without prefix (if namespace was stripped)
+            if (!actualPostType) {
+              actualPostType = itemObj.post_type || ''
+            }
+            
+            // Method 3: Check if it's nested in attributes or other structures
+            if (!actualPostType && itemObj.$) {
+              actualPostType = itemObj.$['wp:post_type'] || itemObj.$.post_type || ''
+            }
+            
+            // Method 4: Check if namespace is in a different format
+            if (!actualPostType && itemObj['http://wordpress.org/export/1.2/']) {
+              const wpNs = itemObj['http://wordpress.org/export/1.2/']
+              actualPostType = wpNs.post_type || (Array.isArray(wpNs.post_type) ? wpNs.post_type[0] : '') || ''
             }
 
             if (actualPostType !== 'gs-factsheet') {
+              if (items.length <= 5) {
+                // Log first few items for debugging
+                console.log('XML parser: Skipping item with post_type:', actualPostType || '(empty)')
+              }
               continue
             }
+            
+            console.log('XML parser: Found gs-factsheet item')
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const itemObj = item as any
             const postId = itemObj['wp:post_id'] || itemObj.post_id || ''
             const status = itemObj['wp:status'] || itemObj.status || ''
             const title = (typeof itemObj.title === 'string' ? itemObj.title : itemObj.title?._ || itemObj.title?.[0] || '') || ''
