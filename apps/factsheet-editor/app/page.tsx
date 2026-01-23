@@ -80,10 +80,22 @@ export default function FactsheetEditorPage() {
       setSourceName(data.source_name)
       setBaseAdminUrl(data.base_admin_url || '')
       
-      // Refresh HTML after a short delay to ensure session is saved
-      setTimeout(() => {
-        refreshHtml(newSessionId)
-      }, 100)
+      // Use HTML from response if available (generated in same request)
+      if (data.html) {
+        setHtmlOutput(data.html)
+        setHtmlMeta({
+          groups: String(data.html_meta?.groups || 0),
+          processed: String(data.html_meta?.processed || 0),
+          skipped: String(data.html_meta?.skipped || 0),
+          size: data.html_meta?.size || '0',
+        })
+        console.log('Using HTML from process response')
+      } else {
+        // Fallback: try to refresh HTML (may fail due to serverless session issues)
+        setTimeout(() => {
+          refreshHtml(newSessionId)
+        }, 100)
+      }
     } catch (err: unknown) {
       console.error('Upload error:', err)
       setError(err instanceof Error ? err.message : 'Upload failed. Please check the console for details.')

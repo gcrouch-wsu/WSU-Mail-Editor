@@ -3,6 +3,8 @@ import { parseWxr } from '@/lib/xml-parser'
 import { generateRecommendations } from '@/lib/recommendations'
 import { getDefaultRules } from '@/lib/rules'
 import { setSession, getSession } from '@/lib/session-store'
+import { buildEffectiveFactsheets, buildProgramsFromFactsheets } from '@/lib/program-builder'
+import { generateHtmlBlock } from '@/lib/html-generator'
 import type { Factsheet, Override } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -106,6 +108,36 @@ export async function POST(request: NextRequest) {
       verifiedFactsheetsCount: verifySession.factsheets.length,
     })
 
+    // Generate HTML immediately in the same request to avoid session persistence issues
+    let htmlBlock = ''
+    let htmlMeta = {
+      groups: 0,
+      processed: 0,
+      skipped: 0,
+      size: '0',
+    }
+
+    try {
+      const effective = buildEffectiveFactsheets(factsheets, overrides, rules)
+      if (effective.length > 0) {
+        const [programs, processedCount, skippedCount] = buildProgramsFromFactsheets(effective, rules)
+        const [html, dataSize] = generateHtmlBlock(programs, wxrFile.name, rules)
+        htmlBlock = html
+        htmlMeta = {
+          groups: programs.length,
+          processed: processedCount,
+          skipped: skippedCount,
+          size: dataSize.toLocaleString(),
+        }
+        console.log('Process route: HTML generated immediately', htmlMeta)
+      } else {
+        console.warn('Process route: No effective factsheets to generate HTML')
+      }
+    } catch (htmlError) {
+      console.error('Process route: Error generating HTML (non-fatal):', htmlError)
+      // Don't fail the request if HTML generation fails - user can still see entries
+    }
+
     return NextResponse.json({
       sessionId,
       entries,
@@ -115,6 +147,8 @@ export async function POST(request: NextRequest) {
       },
       source_name: wxrFile.name,
       base_admin_url: baseAdminUrl,
+      html: htmlBlock, // Include HTML in response
+      html_meta: htmlMeta, // Include HTML metadata
     })
   } catch (error) {
     console.error('Process error:', error)
