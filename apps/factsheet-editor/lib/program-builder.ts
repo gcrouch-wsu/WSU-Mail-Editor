@@ -187,9 +187,19 @@ export function buildEffectiveFactsheets(
   overrides: Record<string, Override>,
   _rules: Rules
 ): Factsheet[] {
+  if (!factsheets || factsheets.length === 0) {
+    console.warn('buildEffectiveFactsheets: No factsheets provided')
+    return []
+  }
+
   const effective: Factsheet[] = []
 
   for (const factsheet of factsheets) {
+    if (!factsheet) {
+      console.warn('buildEffectiveFactsheets: Skipping null/undefined factsheet')
+      continue
+    }
+
     const override = overrides[factsheet.id] || {}
     const effectiveFactsheet = { ...factsheet }
 
@@ -207,6 +217,13 @@ export function buildEffectiveFactsheets(
     }
 
     effective.push(effectiveFactsheet)
+  }
+
+  if (effective.length === 0 && factsheets.length > 0) {
+    console.error('buildEffectiveFactsheets: All factsheets were filtered out', {
+      inputCount: factsheets.length,
+      overridesCount: Object.keys(overrides).length,
+    })
   }
 
   return effective
