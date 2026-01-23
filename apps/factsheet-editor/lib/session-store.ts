@@ -11,11 +11,38 @@ interface Session {
 const sessions = new Map<string, Session>()
 
 export function getSession(sessionId: string): Session | undefined {
-  return sessions.get(sessionId)
+  const session = sessions.get(sessionId)
+  if (session) {
+    console.log('getSession: Found session', {
+      sessionId,
+      factsheetsCount: session.factsheets?.length || 0,
+      entriesCount: session.entries?.length || 0,
+      totalSessions: sessions.size,
+    })
+  } else {
+    console.warn('getSession: Session not found', {
+      sessionId,
+      totalSessions: sessions.size,
+      availableSessionIds: Array.from(sessions.keys()).slice(0, 5),
+    })
+  }
+  return session
 }
 
 export function setSession(sessionId: string, session: Session): void {
+  if (!session.factsheets || session.factsheets.length === 0) {
+    console.error('setSession: Attempting to save session with no factsheets', {
+      sessionId,
+      entriesCount: session.entries?.length || 0,
+    })
+  }
   sessions.set(sessionId, session)
+  console.log('setSession: Session saved', {
+    sessionId,
+    factsheetsCount: session.factsheets?.length || 0,
+    entriesCount: session.entries?.length || 0,
+    totalSessions: sessions.size,
+  })
 }
 
 export function deleteSession(sessionId: string): void {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseWxr } from '@/lib/xml-parser'
 import { generateRecommendations } from '@/lib/recommendations'
 import { getDefaultRules } from '@/lib/rules'
-import { setSession } from '@/lib/session-store'
+import { setSession, getSession } from '@/lib/session-store'
 import type { Factsheet, Override } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -63,19 +63,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (factsheets.length === 0) {
+      console.error('Process route: No factsheets parsed from XML')
+      return NextResponse.json(
+        {
+          error: 'No factsheets found in the export file. Make sure the file contains posts with post_type="gs-factsheet".',
+        },
+        { status: 400 }
+      )
+    }
+
     const sessionId = crypto.randomUUID()
-    setSession(sessionId, {
+    const sessionData = {
       factsheets,
       entries,
       overrides,
       sourceName: wxrFile.name,
       baseAdminUrl,
-    })
+    }
     
-    console.log('Process route: Session created:', {
+    setSession(sessionId, sessionData)
+    
+    // Verify session was saved
+    const verifySession = getSession(sessionId)
+    if (!verifySession || verifySession.factsheets.length === 0) {
+      console.error('Process route: Session verification failed', {
+        sessionExists: !!verifySession,
+        factsheetsInSession: verifySession?.factsheets?.length || 0,
+      })
+      return NextResponse.json(
+        {
+          error: 'Failed to save session data. This may be a serverless limitation.',
+        },
+        { status: 500 }
+      )
+    }
+    
+    console.log('Process route: Session created and verified:', {
       sessionId,
       factsheetsCount: factsheets.length,
       entriesCount: entries.length,
+      verifiedFactsheetsCount: verifySession.factsheets.length,
     })
 
     return NextResponse.json({
