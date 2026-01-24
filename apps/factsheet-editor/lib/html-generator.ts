@@ -82,7 +82,6 @@ Deployment Instructions:
 2. Paste into WordPress Custom HTML block
 3. Load factsheet.js via Code Snippets (footer)
 
-Version: 4.0 (Sidebar + Nested Hierarchy)
 =============================================================================
 -->
 `

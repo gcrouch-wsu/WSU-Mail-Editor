@@ -411,6 +411,7 @@ Process WordPress WXR exports and generate HTML blocks for graduate program list
 - **HTML generation** - Generate WordPress-ready HTML blocks with embedded data
 - **factsheet.js integration** - Download and serve the runtime JavaScript file
 - **Review interface** - View and edit factsheet entries before generating output
+- **Session storage** - Sessions stored in Vercel Blob for serverless compatibility
 
 ### Workflow
 
@@ -430,6 +431,11 @@ Process WordPress WXR exports and generate HTML blocks for graduate program list
 - **GET `/api/factsheet/download/js`** - Download factsheet.js
 - **GET `/api/factsheet/runtime.js`** - Serve factsheet.js
 - **POST `/api/factsheet/update`** - Update entry overrides
+- **POST `/api/factsheet/delete`** - Delete a session by ID
+
+### Environment Variables
+
+- `BLOB_READ_WRITE_TOKEN` - Required for Vercel Blob session storage.
 
 ### Local Development
 

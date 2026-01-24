@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Download } from 'lucide-react'
 
 interface Entry {
@@ -19,6 +19,13 @@ interface Entry {
   needs_edit: boolean
 }
 
+interface EntryOverride {
+  name?: string
+  shortname?: string
+  program_name?: string
+  degree_types?: string[]
+}
+
 export default function FactsheetEditorPage() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])
@@ -34,6 +41,9 @@ export default function FactsheetEditorPage() {
     skipped: '-',
     size: '-',
   })
+  const [overrides, setOverrides] = useState<Record<string, EntryOverride>>({})
+  const [filter, setFilter] = useState<'needs' | 'all'>('needs')
+  const updateTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -79,6 +89,7 @@ export default function FactsheetEditorPage() {
       setCounts(data.counts)
       setSourceName(data.source_name)
       setBaseAdminUrl(data.base_admin_url || '')
+      setOverrides({})
       
       // Use HTML from response if available (generated in same request)
       if (data.html) {
@@ -153,6 +164,72 @@ export default function FactsheetEditorPage() {
     }
   }
 
+  const degreeTypeOptions = useMemo(() => {
+    const options = new Set<string>()
+    entries.forEach((entry) => {
+      entry.degree_types.forEach((type) => options.add(type))
+    })
+    return Array.from(options).sort()
+  }, [entries])
+
+  const filteredEntries = useMemo(() => {
+    if (filter === 'needs') {
+      return entries.filter((entry) => entry.needs_edit)
+    }
+    return entries
+  }, [entries, filter])
+
+  const scheduleUpdate = (
+    entryId: string,
+    payload: Record<string, string | string[]>
+  ) => {
+    if (updateTimers.current[entryId]) {
+      clearTimeout(updateTimers.current[entryId])
+    }
+    updateTimers.current[entryId] = setTimeout(() => {
+      handleEntryUpdate(entryId, payload)
+    }, 200)
+  }
+
+  const handleEntryUpdate = async (
+    entryId: string,
+    payload: Record<string, string | string[]>
+  ) => {
+    if (!sessionId) return
+    try {
+      const res = await fetch('/api/factsheet/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          id: entryId,
+          ...payload,
+        }),
+      })
+      if (!res.ok) {
+        throw new Error('Update failed')
+      }
+      await res.json()
+      refreshHtml(sessionId)
+    } catch (err) {
+      setError('Failed to update entry. Please try again.')
+    }
+  }
+
+  const updateOverrideField = (
+    entryId: string,
+    field: keyof EntryOverride,
+    value: string | string[]
+  ) => {
+    setOverrides((prev) => ({
+      ...prev,
+      [entryId]: {
+        ...prev[entryId],
+        [field]: value,
+      },
+    }))
+  }
+
   const handleDownloadHtml = () => {
     if (!sessionId) return
     window.open(`/api/factsheet/download/html?sessionId=${sessionId}`, '_blank')
@@ -179,6 +256,7 @@ export default function FactsheetEditorPage() {
       setCounts({ total: 0, needs_edit: 0 })
       setHtmlOutput('')
       setHtmlMeta({ groups: '-', processed: '-', skipped: '-', size: '-' })
+      setOverrides({})
       setError('')
     } catch (err) {
       setError('Failed to delete session. Please try again.')
@@ -319,49 +397,185 @@ export default function FactsheetEditorPage() {
                     Delete session
                   </button>
                 </div>
+                <div className="text-sm text-wsu-text-muted mt-2">
+                  factsheet.js link:{' '}
+                  <a
+                    className="text-wsu-crimson underline"
+                    href="/api/factsheet/runtime.js"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    /api/factsheet/runtime.js
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mb-4 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setFilter('needs')}
+                  className={`px-3 py-1 rounded border ${filter === 'needs' ? 'bg-wsu-crimson text-white border-wsu-crimson' : 'bg-white text-wsu-crimson border-wsu-crimson'}`}
+                >
+                  Needs edits only
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilter('all')}
+                  className={`px-3 py-1 rounded border ${filter === 'all' ? 'bg-wsu-crimson text-white border-wsu-crimson' : 'bg-white text-wsu-crimson border-wsu-crimson'}`}
+                >
+                  Show all
+                </button>
               </div>
 
               <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                {entries
-                  .filter((e) => e.needs_edit)
-                  .map((entry) => (
+                {filteredEntries.map((entry) => {
+                  const entryOverride = overrides[entry.id] || {}
+                  const selectedDegreeTypes =
+                    entryOverride.degree_types ?? entry.degree_types
+
+                  return (
                     <div
                       key={entry.id}
                       className="border border-gray-200 rounded-lg p-4"
                     >
-                      <h3 className="font-semibold text-wsu-text-dark mb-2">
-                        {entry.title}
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <h3 className="font-semibold text-wsu-text-dark">
+                          {entry.title}
+                        </h3>
+                        <span
+                          className={`text-xs font-semibold px-2 py-1 rounded-full ${entry.needs_edit ? 'bg-wsu-crimson text-white' : 'bg-gray-200 text-gray-700'}`}
+                        >
+                          {entry.needs_edit ? 'Needs edit' : 'OK'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                         <div>
-                          <p className="text-wsu-text-muted">Current:</p>
+                          <p className="text-wsu-text-muted font-semibold">Current</p>
                           <p>Shortname: {entry.shortname_raw || '(empty)'}</p>
-                          <p>
-                            Program: {entry.program_name_raw || '(missing)'}
-                          </p>
+                          <p>Program: {entry.program_name_raw || '(missing)'}</p>
                           <p>
                             Degree Types:{' '}
                             {entry.degree_types.join(', ') || '(missing)'}
                           </p>
+                          {entry.edit_link && (
+                            <p className="mt-2">
+                              <a
+                                className="text-wsu-crimson underline"
+                                href={entry.edit_link}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Edit in WordPress
+                              </a>
+                            </p>
+                          )}
                         </div>
                         <div>
-                          <p className="text-wsu-text-muted">Suggested:</p>
-                          <p>
-                            Shortname:{' '}
-                            {entry.suggested.Shortname || 'no change'}
-                          </p>
-                          <p>
-                            Program:{' '}
-                            {entry.suggested['Program Name'] || 'no change'}
-                          </p>
+                          <p className="text-wsu-text-muted font-semibold">Suggested</p>
+                          <p>Name: {entry.suggested['Post Title'] || 'no change'}</p>
+                          <p>Shortname: {entry.suggested.Shortname || 'no change'}</p>
+                          <p>Program: {entry.suggested['Program Name'] || 'no change'}</p>
                           <p>
                             Degree Types:{' '}
                             {entry.suggested['Degree Types'] || 'no change'}
                           </p>
                         </div>
                       </div>
+
+                      <div className="mt-4">
+                        <p className="text-wsu-text-muted font-semibold mb-2">Edit overrides</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-wsu-text-dark mb-1">Name</label>
+                            <input
+                              type="text"
+                              value={entryOverride.name ?? ''}
+                              placeholder={entry.suggested['Post Title'] || entry.title}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                updateOverrideField(entry.id, 'name', value)
+                                scheduleUpdate(entry.id, { name: value })
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-wsu-text-dark mb-1">Short name</label>
+                            <input
+                              type="text"
+                              value={entryOverride.shortname ?? ''}
+                              placeholder={entry.suggested.Shortname || entry.shortname_raw || ''}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                updateOverrideField(entry.id, 'shortname', value)
+                                scheduleUpdate(entry.id, { shortname: value })
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-wsu-text-dark mb-1">Program name</label>
+                            <input
+                              type="text"
+                              value={entryOverride.program_name ?? ''}
+                              placeholder={entry.suggested['Program Name'] || entry.program_name_raw || ''}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                updateOverrideField(entry.id, 'program_name', value)
+                                scheduleUpdate(entry.id, { program_name: value })
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-wsu-text-dark mb-1">Degree types</label>
+                            {degreeTypeOptions.length ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {degreeTypeOptions.map((type) => (
+                                  <label key={type} className="flex items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedDegreeTypes.includes(type)}
+                                      onChange={(event) => {
+                                        const isChecked = event.target.checked
+                                        const next = isChecked
+                                          ? Array.from(new Set([...selectedDegreeTypes, type]))
+                                          : selectedDegreeTypes.filter((entryType) => entryType !== type)
+                                        updateOverrideField(entry.id, 'degree_types', next)
+                                        scheduleUpdate(entry.id, { degree_types: next })
+                                      }}
+                                    />
+                                    {type}
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <input
+                                type="text"
+                                value={selectedDegreeTypes.join(', ')}
+                                placeholder="Comma-separated degree types"
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  const next = value
+                                    .split(',')
+                                    .map((item) => item.trim())
+                                    .filter(Boolean)
+                                  updateOverrideField(entry.id, 'degree_types', next)
+                                  scheduleUpdate(entry.id, { degree_types: next })
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                              />
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-wsu-text-muted mt-2">
+                          Leave a field blank to keep the current value.
+                        </p>
+                      </div>
                     </div>
-                  ))}
+                  )
+                })}
               </div>
             </section>
 
