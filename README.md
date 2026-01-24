@@ -4,59 +4,29 @@ A Next.js-based monorepo for WSU Graduate School tools, with separate apps per t
 
 ## Applications
 
-<details>
-<summary><h3>Platform (Homepage)</h3></summary>
+### Home
+Landing page with links to all tools.  
+https://wsu-slate-editor.vercel.app/
 
-Landing page with links to all tools.
+### HTML Editor
+HTML newsletter editor for Friday Focus, Graduate School Briefing, and Slate Campaign.  
+https://wsu-mail-editor-newsletter-editor.vercel.app/
 
-Live: https://wsu-slate-editor.vercel.app/
+### Org Chart Editor
+Org chart builder and exporter.  
+https://wsu-mail-editor-org-chart-editor.vercel.app/
 
-</details>
+### Export Translation
+Export and edit Outcomes translation tables from pasted data.  
+https://wsu-mail-editor-translation-tables.vercel.app/
 
-<details>
-<summary><h3>Newsletter Editor</h3></summary>
+### Validate
+Validate Outcomes translation mappings against Outcomes and myWSU SIS data.  
+https://validate-outcomes-translation-table.vercel.app/
 
-HTML newsletter editor for Friday Focus, Graduate School Briefing, and Slate Campaign.
-
-Live: https://wsu-mail-editor-newsletter-editor.vercel.app/
-
-</details>
-
-<details>
-<summary><h3>Org Chart Editor</h3></summary>
-
-Org chart builder and exporter.
-
-Live: https://wsu-mail-editor-org-chart-editor.vercel.app/
-
-</details>
-
-<details>
-<summary><h3>Export Outcomes Translation Tables</h3></summary>
-
-Export and edit Outcomes translation tables from pasted data.
-
-Live: https://wsu-mail-editor-translation-tables.vercel.app/
-
-</details>
-
-<details>
-<summary><h3>Validate Outcomes Translation Tables</h3></summary>
-
-Validate Outcomes translation mappings against Outcomes and myWSU SIS data.
-
-Live: https://validate-outcomes-translation-table.vercel.app/
-
-</details>
-
-<details>
-<summary><h3>Factsheet Editor</h3></summary>
-
-Process WordPress WXR exports and generate HTML blocks for factsheets.
-
-Live: https://wsu-factsheet-editor-q.vercel.app/
-
-</details>
+### Factsheet
+Process WordPress WXR exports and generate HTML blocks for factsheets.  
+https://wsu-factsheet-editor-q.vercel.app/
 
 ## Requirements
 
