@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validate Outcomes Translation Tables</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+
+    <link rel="stylesheet" href="styles.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'wsu-crimson': '#981e32',
+                        'wsu-gray': '#3f3f3f',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <header class="bg-wsu-crimson text-white shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <h1 class="text-3xl font-bold">Validate Outcomes Translation Tables</h1>
+            <p class="text-gray-200 mt-2">Outcomes ↔ myWSU SIS Translation Verification</p>
+                    </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-8 rounded">
+            <div class="flex items-start">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">How to use this tool</h3>
+                    <div class="mt-2 text-sm text-blue-700">
+                        <p>1. Upload all three required files below</p>
+                        <p>2. Select which columns to include in your report (optional)</p>
+                        <p>3. Click "Validate Mappings" to identify errors</p>
+                        <p>4. Review the error dashboard and download the Excel report</p>
+                        <p class="mt-2 font-semibold">Privacy: All files are processed locally in your browser. No data is uploaded to any server.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+
+            <div class="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-gray-300 hover:border-wsu-crimson transition-colors">
+                <div class="text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">Outcomes Source</h3>
+                    <p class="text-xs text-gray-500 mt-1">Excel or CSV</p>
+                    <div class="mt-4">
+                        <label for="outcomes-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            Choose File
+                        </label>
+                        <input id="outcomes-file" name="outcomes-file" type="file" accept=".csv,.xlsx" class="hidden">
+                    </div>
+                    <div id="outcomes-status" class="mt-3 text-sm hidden">
+                        <div class="flex items-center justify-center text-green-600">
+                            <svg class="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span id="outcomes-filename"></span>
+                        </div>
+                        <p id="outcomes-rows" class="text-gray-600 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-gray-300 hover:border-wsu-crimson transition-colors">
+                <div class="text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">Outcomes Translation Table</h3>
+                    <p class="text-xs text-gray-500 mt-1">Excel or CSV</p>
+                    <div class="mt-4">
+                        <label for="translate-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            Choose File
+                        </label>
+                        <input id="translate-file" name="translate-file" type="file" accept=".xlsx,.csv" class="hidden">
+                    </div>
+                    <div id="translate-status" class="mt-3 text-sm hidden">
+                        <div class="flex items-center justify-center text-green-600">
+                            <svg class="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span id="translate-filename"></span>
+                        </div>
+                        <p id="translate-rows" class="text-gray-600 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-gray-300 hover:border-wsu-crimson transition-colors">
+                <div class="text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">WSU Tables</h3>
+                    <p class="text-xs text-gray-500 mt-1">Excel or CSV</p>
+                    <div class="mt-4">
+                        <label for="wsu-org-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            Choose File
+                        </label>
+                        <input id="wsu-org-file" name="wsu-org-file" type="file" accept=".xlsx,.csv" class="hidden">
+                    </div>
+                    <div id="wsu-org-status" class="mt-3 text-sm hidden">
+                        <div class="flex items-center justify-center text-green-600">
+                            <svg class="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span id="wsu-org-filename"></span>
+                        </div>
+                        <p id="wsu-org-rows" class="text-gray-600 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="column-selection" class="bg-white rounded-lg shadow-md p-6 mb-8 hidden">
+            <button id="toggle-columns" class="flex items-center justify-between w-full text-left">
+                <h2 class="text-xl font-semibold text-gray-800">Select Columns for Report</h2>
+                <svg class="h-6 w-6 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <div id="column-checkboxes" class="mt-4 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <div>
+                        <h3 class="font-medium text-gray-700 mb-3">From Outcomes Source:</h3>
+                        <div id="outcomes-columns" class="space-y-2">
+                            
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="font-medium text-gray-700 mb-3">From WSU Tables:</h3>
+                        <div id="wsu-org-columns" class="space-y-2">
+                            
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="name-compare" class="mt-6 border-t pt-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="font-medium text-gray-700">Name comparison (optional)</h3>
+                        <p class="text-xs text-gray-500">
+                            Enable only when the table represents schools and name matching is required.
+                        </p>
+                    </div>
+                    <label class="flex items-center text-sm text-gray-700">
+                        <input id="name-compare-enabled" type="checkbox" class="mr-2">
+                        Enable name comparison
+                    </label>
+                </div>
+                <div id="name-compare-fields" class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Outcomes name column</label>
+                        <select id="name-compare-outcomes" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="">Select column</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">WSU name column</label>
+                        <select id="name-compare-wsu" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="">Select column</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Mismatch threshold</label>
+                        <input
+                            id="name-compare-threshold"
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value="0.5"
+                            class="w-full border border-gray-300 rounded-md p-2 text-sm"
+                        >
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mb-8">
+            <button id="validate-btn" disabled class="bg-gray-400 text-white px-8 py-3 rounded-lg text-lg font-semibold shadow-lg cursor-not-allowed transition-all">
+                Validate Mappings
+            </button>
+            <p id="validation-message" class="mt-2 text-sm text-gray-600"></p>
+        </div>
+
+        <div id="loading" class="hidden text-center py-8">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-wsu-crimson"></div>
+            <p class="mt-4 text-gray-600">Analyzing mappings...</p>
+        </div>
+
+        <div id="results" class="hidden">
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600 uppercase">Total Mappings</p>
+                            <p id="total-mappings" class="text-3xl font-bold text-gray-800">0</p>
+                        </div>
+                        <svg class="h-12 w-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600 uppercase">Valid Mappings</p>
+                            <p id="valid-count" class="text-3xl font-bold text-green-600">0</p>
+                            <p id="valid-percentage" class="text-sm text-gray-600">0%</p>
+                        </div>
+                        <svg class="h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600 uppercase">Errors Found</p>
+                            <p id="error-count" class="text-3xl font-bold text-red-600">0</p>
+                            <p id="error-percentage" class="text-sm text-gray-600">0%</p>
+                        </div>
+                        <svg class="h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600 uppercase">Data Quality</p>
+                            <p id="quality-score" class="text-3xl font-bold text-gray-800">0%</p>
+                            <p class="text-sm text-gray-600">Overall Score</p>
+                        </div>
+                        <svg class="h-12 w-12 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Error Distribution</h2>
+                <canvas id="error-chart" height="100"></canvas>
+            </div>
+
+            <div id="error-details" class="space-y-6 mb-8">
+                
+            </div>
+
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-6 mb-8 rounded">
+                <h3 class="text-lg font-semibold text-blue-900 mb-4">Error Reporting Logic</h3>
+
+                <div class="space-y-4 text-sm text-blue-800">
+                    <div>
+                        <strong class="text-red-700">Invalid WSU Org IDs:</strong>
+                        <p class="mt-1">Rows in Translation Table have WSU Org IDs (Output column) that do not exist in WSU Tables. These may be broken integrations - the mapping points to organizations that don't exist in myWSU. When Outcomes tries to sync data using these mappings, it may fail because the target Org ID is invalid.</p>
+                    </div>
+
+                    <div>
+                        <strong class="text-orange-700">Duplicate Org ID Mapping (Many-to-One):</strong>
+                        <p class="mt-1">Multiple different mdb_codes in the Translation Table all map to the same WSU Org ID. Example: Miami University West Chester, Hamilton, Middletown, and Oxford all map to Org ID 187730. This causes multiple schools' data to be merged into one organization.</p>
+                    </div>
+
+                    <div>
+                        <strong class="text-yellow-700">Name Mismatches:</strong>
+                        <p class="mt-1">School names in Outcomes Source don't exactly match the organization names in WSU Tables (less than 50% similarity). Example: "University of Texas Dental School" mapped to "University of Texas Medical Branch" - these are different institutions. Review these mappings to ensure the correct organizations are linked.</p>
+                    </div>
+
+                    <div>
+                        <strong class="text-yellow-700">Orphaned Mappings in Translation Table:</strong>
+                        <p class="mt-1">The Translation Table contains mdb_codes that don't exist in the Outcomes Source data. These may be errors that should be cleaned up.</p>
+                    </div>
+
+                    <div>
+                        <strong class="text-blue-700">Missing Mappings (Sheet 2):</strong>
+                        <p class="mt-1">Schools in Outcomes Source that have no entry in Translation Table. These may not be errors - they simply haven't been integrated yet. This is informational only and shown on Sheet 2 of the Excel report.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 p-4 bg-white rounded border border-blue-200">
+                    <p class="text-sm text-gray-700">
+                        <strong>Key Point:</strong> The app validates <strong>only your Translation Table</strong> (the integration table).
+                        It flags errors that will cause integration failures or data integrity issues.
+                        Fix these errors in your source system to ensure reliable data sync between Outcomes and myWSU.
+                    </p>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <button id="download-btn" class="bg-wsu-crimson hover:bg-red-800 text-white px-8 py-3 rounded-lg text-lg font-semibold shadow-lg transition-colors inline-flex items-center">
+                    <svg class="h-6 w-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    Download Full Report
+                </button>
+                <button id="reset-btn" class="ml-4 bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold shadow-lg transition-colors">
+                    Start Over
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="bg-gray-800 text-white mt-16 py-6">
+        <div class="container mx-auto px-4 text-center">
+            <p>&copy; 2026 Washington State University. </p>
+            <p class="text-xs text-gray-400 mt-1">All processing happens locally in your browser. No data is uploaded to any server.</p>
+        </div>
+    </footer>
+
+    <script src="validation.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

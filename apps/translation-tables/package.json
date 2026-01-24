@@ -1,7 +1,7 @@
 {
   "name": "translation-tables",
   "version": "1.0.0",
-  "description": "WSU Outcomes Translation Table Exporter",
+  "description": "Export Outcomes Translation Tables",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3003",

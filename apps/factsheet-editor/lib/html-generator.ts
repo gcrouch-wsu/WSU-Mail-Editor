@@ -1,5 +1,6 @@
 import type { Program, Rules } from './types'
 import { HTML_TEMPLATE } from './html-template'
+import { formatPacificDateTime } from './time'
 
 export function buildBadgeStyles(rules: Rules): string {
   const styles: string[] = []
@@ -65,7 +66,7 @@ export function generateHtmlBlock(
     throw new Error('Failed to inject data into HTML template.')
   }
 
-  const generationTime = new Date().toISOString().slice(0, 16).replace('T', ' ')
+  const generationTime = formatPacificDateTime(new Date())
   const rulesVersion = rules.version || 'unknown'
   const htmlComment = `<!--
 =============================================================================

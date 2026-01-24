@@ -4,6 +4,7 @@ import { buildProgramsFromFactsheets } from '@/lib/program-builder'
 import { generateHtmlBlock } from '@/lib/html-generator'
 import { getDefaultRules } from '@/lib/rules'
 import { getSession } from '@/lib/session-store'
+import { formatPacificTimestamp } from '@/lib/time'
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('sessionId')
@@ -35,11 +36,7 @@ export async function GET(request: NextRequest) {
       rules
     )
 
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[-:]/g, '')
-      .slice(0, 15)
-      .replace('T', '_')
+    const timestamp = formatPacificTimestamp(new Date())
     const filename = `Factsheet_${timestamp}.html`
 
     return new NextResponse(htmlBlock, {

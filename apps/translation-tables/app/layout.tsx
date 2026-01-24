@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Outcomes Translation Table Exporter',
-  description: 'WSU Outcomes Translation Table Exporter',
+  title: 'Export Outcomes Translation Tables',
+  description: 'Export Outcomes Translation Tables',
 }
 
 export default function RootLayout({

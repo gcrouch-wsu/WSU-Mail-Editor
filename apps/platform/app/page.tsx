@@ -1,7 +1,7 @@
 // app/page.tsx - Homepage: WSU Graduate School Tools
 
 import ToolTile from '@/components/ToolTile'
-import { FileText, Network, Table2, FileCode } from 'lucide-react'
+import { FileText, Network, Table2, FileCode, CheckCircle } from 'lucide-react'
 
 export default function HomePage() {
   return (
@@ -34,10 +34,16 @@ export default function HomePage() {
             icon={Network}
           />
           <ToolTile
-            title="Translation Tables"
-            description="Export and process Outcomes Translation Table data to Excel or text format"
+            title="Export Outcomes Translation Tables"
+            description="Export and process Outcomes Translation Tables data to Excel or text format"
             href="https://outcomes-translation-tables.vercel.app/"
             icon={Table2}
+          />
+          <ToolTile
+            title="Validate Outcomes Translation Tables"
+            description="Validate Outcomes translation mappings against Outcomes and myWSU SIS data"
+            href="https://validate-outcomes-translation-tables.vercel.app/"
+            icon={CheckCircle}
           />
           <ToolTile
             title="Factsheet Editor"
@@ -60,4 +66,3 @@ export default function HomePage() {
     </div>
   )
 }
-

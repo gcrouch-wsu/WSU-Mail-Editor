@@ -144,7 +144,7 @@ export default function TranslationTablesPage() {
             Washington State University
           </h1>
           <h2 className="text-xl mt-1 opacity-90">
-            Outcomes Translation Table Exporter
+            Export Outcomes Translation Tables
           </h2>
         </div>
       </header>
@@ -160,7 +160,7 @@ export default function TranslationTablesPage() {
           <div className="mb-6 p-4 bg-gray-50 border-l-4 border-wsu-crimson rounded">
             <ol className="list-decimal list-inside space-y-2 text-wsu-text-body">
               <li>
-                Navigate to the <strong className="text-wsu-crimson">Outcomes Translation Table</strong> (Settings &gt; Import/Export).
+                Navigate to the <strong className="text-wsu-crimson">Outcomes Translation Tables</strong> (Settings &gt; Import/Export).
               </li>
               <li>
                 Select the table content and copy it (<strong className="text-wsu-crimson">Ctrl + C</strong>).
