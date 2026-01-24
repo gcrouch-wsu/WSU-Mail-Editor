@@ -162,6 +162,29 @@ export default function FactsheetEditorPage() {
     window.open('/api/factsheet/download/js', '_blank')
   }
 
+  const handleDeleteSession = async () => {
+    if (!sessionId) return
+
+    try {
+      const res = await fetch('/api/factsheet/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      })
+      if (!res.ok) {
+        throw new Error('Delete failed')
+      }
+      setSessionId(null)
+      setEntries([])
+      setCounts({ total: 0, needs_edit: 0 })
+      setHtmlOutput('')
+      setHtmlMeta({ groups: '-', processed: '-', skipped: '-', size: '-' })
+      setError('')
+    } catch (err) {
+      setError('Failed to delete session. Please try again.')
+    }
+  }
+
   // handleUpdateEntry is reserved for future edit functionality
   // const handleUpdateEntry = async (
   //   entryId: string,
@@ -274,7 +297,7 @@ export default function FactsheetEditorPage() {
                     Total: {counts.total} | Needs Edit: {counts.needs_edit}
                   </p>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-4 flex-wrap">
                   <button
                     onClick={handleDownloadJs}
                     className="bg-wsu-gray-light text-white px-4 py-2 rounded font-semibold hover:bg-wsu-gray transition-colors flex items-center gap-2"
@@ -288,6 +311,12 @@ export default function FactsheetEditorPage() {
                   >
                     <Download className="w-4 h-4" />
                     Download HTML
+                  </button>
+                  <button
+                    onClick={handleDeleteSession}
+                    className="bg-white text-wsu-crimson px-4 py-2 rounded font-semibold border border-wsu-crimson hover:bg-wsu-crimson hover:text-white transition-colors"
+                  >
+                    Delete session
                   </button>
                 </div>
               </div>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseWxr } from '@/lib/xml-parser'
 import { generateRecommendations } from '@/lib/recommendations'
 import { getDefaultRules } from '@/lib/rules'
-import { setSession, getSession } from '@/lib/session-store'
+import { cleanupOldSessions, getSession, setSession } from '@/lib/session-store'
 import { buildEffectiveFactsheets, buildProgramsFromFactsheets } from '@/lib/program-builder'
 import { generateHtmlBlock } from '@/lib/html-generator'
 import type { Factsheet, Override } from '@/lib/types'
@@ -84,10 +84,13 @@ export async function POST(request: NextRequest) {
       baseAdminUrl,
     }
     
-    setSession(sessionId, sessionData)
+    await setSession(sessionId, sessionData)
+    cleanupOldSessions().catch((error) => {
+      console.warn('Process route: Session cleanup failed', error)
+    })
     
     // Verify session was saved
-    const verifySession = getSession(sessionId)
+    const verifySession = await getSession(sessionId)
     if (!verifySession || verifySession.factsheets.length === 0) {
       console.error('Process route: Session verification failed', {
         sessionExists: !!verifySession,
@@ -164,16 +167,22 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('sessionId')
-  const { getSession, hasSession } = await import('@/lib/session-store')
+  const { getSession } = await import('@/lib/session-store')
   
-  if (!sessionId || !hasSession(sessionId)) {
+  if (!sessionId) {
     return NextResponse.json(
       { error: 'Invalid or expired session' },
       { status: 400 }
     )
   }
 
-  const session = getSession(sessionId)!
+  const session = await getSession(sessionId)
+  if (!session) {
+    return NextResponse.json(
+      { error: 'Invalid or expired session' },
+      { status: 400 }
+    )
+  }
   return NextResponse.json({
     entries: session.entries,
     counts: {

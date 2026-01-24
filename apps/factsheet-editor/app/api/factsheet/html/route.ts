@@ -3,7 +3,7 @@ import { buildEffectiveFactsheets } from '@/lib/program-builder'
 import { buildProgramsFromFactsheets } from '@/lib/program-builder'
 import { generateHtmlBlock } from '@/lib/html-generator'
 import { getDefaultRules } from '@/lib/rules'
-import { getSession, hasSession } from '@/lib/session-store'
+import { getSession } from '@/lib/session-store'
 import type { Program } from '@/lib/types'
 
 export async function GET(request: NextRequest) {
@@ -17,16 +17,8 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  if (!hasSession(sessionId)) {
-    console.error('HTML route: Session not found:', sessionId)
-    return NextResponse.json(
-      { error: 'Session not found. Please reload your export file.' },
-      { status: 400 }
-    )
-  }
-
   try {
-    const session = getSession(sessionId)
+    const session = await getSession(sessionId)
     if (!session) {
       console.error('HTML route: Session is null for ID:', sessionId)
       return NextResponse.json(

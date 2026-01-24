@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { Override } from '@/lib/types'
-import { getSession, hasSession, setSession } from '@/lib/session-store'
+import { getSession, setSession } from '@/lib/session-store'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,14 +15,21 @@ export async function POST(request: NextRequest) {
       (t) => typeof t === 'string' && t.trim()
     )
 
-    if (!sessionId || !hasSession(sessionId)) {
+    if (!sessionId) {
       return NextResponse.json(
         { ok: false, error: 'Invalid session' },
         { status: 400 }
       )
     }
 
-    const session = getSession(sessionId)!
+    const session = await getSession(sessionId)
+    if (!session) {
+      return NextResponse.json(
+        { ok: false, error: 'Invalid session' },
+        { status: 400 }
+      )
+    }
+
     const entryMap = new Map(
       session.entries.map((e) => [e.id, e])
     )
@@ -47,8 +54,8 @@ export async function POST(request: NextRequest) {
     } else {
       delete session.overrides[entryId]
     }
-    
-    setSession(sessionId, session)
+
+    await setSession(sessionId, session)
 
     const entry = entryMap.get(entryId)!
     const suggested = entry.suggested

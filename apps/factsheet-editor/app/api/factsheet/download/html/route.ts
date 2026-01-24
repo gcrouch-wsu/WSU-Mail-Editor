@@ -3,11 +3,11 @@ import { buildEffectiveFactsheets } from '@/lib/program-builder'
 import { buildProgramsFromFactsheets } from '@/lib/program-builder'
 import { generateHtmlBlock } from '@/lib/html-generator'
 import { getDefaultRules } from '@/lib/rules'
-import { getSession, hasSession } from '@/lib/session-store'
+import { getSession } from '@/lib/session-store'
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('sessionId')
-  if (!sessionId || !hasSession(sessionId)) {
+  if (!sessionId) {
     return NextResponse.json(
       { error: 'No HTML available.' },
       { status: 400 }
@@ -15,7 +15,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const session = getSession(sessionId)!
+    const session = await getSession(sessionId)
+    if (!session) {
+      return NextResponse.json(
+        { error: 'No HTML available.' },
+        { status: 400 }
+      )
+    }
     const rules = getDefaultRules()
 
     const effective = buildEffectiveFactsheets(
