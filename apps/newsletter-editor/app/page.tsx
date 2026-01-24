@@ -404,7 +404,7 @@ export default function EditorPage() {
   }, [undo, redo, handleExport, loading, initialData]) // Include loading state
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col">
       {/* Top Bar */}
       <header className="flex justify-between items-center px-4 py-3 bg-white border-b border-wsu-border-light sticky top-0 z-50">
         <div className="flex items-center gap-3">
@@ -671,7 +671,13 @@ export default function EditorPage() {
         onConfirm={confirmTemplateChange}
         onCancel={() => setTemplateChangeConfirm({ isOpen: false, newType: null })}
       />
+      <footer className="border-t border-wsu-border-light bg-white">
+        <div className="px-4 py-6">
+          <p className="text-sm text-wsu-text-muted text-center">
+            Graduate School | Washington State University
+          </p>
+        </div>
+      </footer>
     </div>
   )
 }
-

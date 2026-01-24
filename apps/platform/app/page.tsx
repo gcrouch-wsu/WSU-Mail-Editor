@@ -59,7 +59,7 @@ export default function HomePage() {
       <footer className="border-t border-wsu-border-light bg-white">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <p className="text-sm text-wsu-text-muted text-center">
-            © 2025 Greg & Sherry. All rights reserved.
+            Graduate School | Washington State University
           </p>
         </div>
       </footer>

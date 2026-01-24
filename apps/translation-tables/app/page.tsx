@@ -355,6 +355,13 @@ export default function TranslationTablesPage() {
           </section>
         )}
       </main>
+      <footer className="border-t border-wsu-border-light bg-white mt-auto">
+        <div className="max-w-5xl mx-auto px-4 py-6">
+          <p className="text-sm text-wsu-text-muted text-center">
+            Graduate School | Washington State University
+          </p>
+        </div>
+      </footer>
     </div>
   )
 }
