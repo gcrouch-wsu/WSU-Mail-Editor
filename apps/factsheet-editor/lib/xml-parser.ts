@@ -25,9 +25,10 @@ export async function parseWxr(
       return String(value)
     }
     if (typeof value === 'object') {
-      const obj = value as { _: unknown; '#text'?: unknown }
+      const obj = value as { _: unknown; '#text'?: unknown; value?: unknown }
       if (obj._ !== undefined) return String(obj._)
       if (obj['#text'] !== undefined) return String(obj['#text'])
+      if (obj.value !== undefined) return String(obj.value)
     }
     return ''
   }
