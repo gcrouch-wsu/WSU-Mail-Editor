@@ -11,6 +11,8 @@ export async function POST(request: NextRequest) {
     const shortname = (body.shortname || '').trim()
     const programName = (body.program_name || '').trim()
     const degreeTypes = (body.degree_types || []) as string[]
+    const rulesOk = body.rules_ok === true
+    const rulesOkProvided = Object.prototype.hasOwnProperty.call(body, 'rules_ok')
     const cleanedDegreeTypes = degreeTypes.filter(
       (t) => typeof t === 'string' && t.trim()
     )
@@ -47,6 +49,11 @@ export async function POST(request: NextRequest) {
     if (programName) override.program_name = programName
     if (cleanedDegreeTypes.length > 0) {
       override.degree_types = cleanedDegreeTypes
+    }
+    if (rulesOk) {
+      override.rules_ok = true
+    } else if (rulesOkProvided) {
+      delete override.rules_ok
     }
 
     if (Object.keys(override).length > 0) {

@@ -411,13 +411,16 @@ Process WordPress WXR exports and generate HTML blocks for graduate program list
 - **HTML generation** - Generate WordPress-ready HTML blocks with embedded data
 - **factsheet.js integration** - Download and serve the runtime JavaScript file
 - **Review interface** - View and edit factsheet entries before generating output
+- **Rules editor** - Upload or paste rules JSON to control normalization and filters
+- **Overrides + OK flag** - Apply per-entry overrides or mark a recommendation as OK
 - **Session storage** - Sessions stored in Vercel Blob for serverless compatibility
 
 ### Workflow
 
 1. Upload a WordPress WXR export file (.xml)
 2. Review edit recommendations for factsheet entries
-3. Optionally edit entries to override suggestions
+3. Optionally update rules JSON to refine recommendations
+4. Optionally edit entries to override suggestions or mark items OK
 4. Generate and download HTML block
 5. Download factsheet.js for WordPress integration
 6. Paste HTML into WordPress Custom HTML block
@@ -432,6 +435,7 @@ Process WordPress WXR exports and generate HTML blocks for graduate program list
 - **GET `/api/factsheet/runtime.js`** - Serve factsheet.js
 - **POST `/api/factsheet/update`** - Update entry overrides
 - **POST `/api/factsheet/delete`** - Delete a session by ID
+- **POST `/api/factsheet/rules`** - Apply rules JSON to the current session
 
 ### Environment Variables
 

@@ -22,16 +22,18 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
-    const rules = getDefaultRules()
-
+    const rules = session.rules || getDefaultRules()
     const effective = buildEffectiveFactsheets(
       session.factsheets,
-      session.overrides,
-      rules
+      session.overrides
     )
 
     const [programs] = buildProgramsFromFactsheets(effective, rules)
-    const [htmlBlock] = generateHtmlBlock(programs, session.sourceName, rules)
+    const [htmlBlock] = generateHtmlBlock(
+      programs,
+      session.sourceName,
+      rules
+    )
 
     const timestamp = new Date()
       .toISOString()

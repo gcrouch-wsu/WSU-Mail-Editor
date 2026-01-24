@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseWxr } from '@/lib/xml-parser'
 import { generateRecommendations } from '@/lib/recommendations'
-import { getDefaultRules } from '@/lib/rules'
+import { buildRulesSummary, getDefaultRules } from '@/lib/rules'
 import { cleanupOldSessions, getSession, setSession } from '@/lib/session-store'
 import { buildEffectiveFactsheets, buildProgramsFromFactsheets } from '@/lib/program-builder'
 import { generateHtmlBlock } from '@/lib/html-generator'
@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     }
 
     const rules = getDefaultRules()
+    const rulesStatus = 'Loaded default rules'
+    const rulesError = ''
     const xmlBytes = Buffer.from(await wxrFile.arrayBuffer())
 
     let factsheets: Factsheet[]
@@ -82,6 +84,10 @@ export async function POST(request: NextRequest) {
       overrides,
       sourceName: wxrFile.name,
       baseAdminUrl,
+      rules,
+      rulesJson: JSON.stringify(rules, null, 2),
+      rulesStatus,
+      rulesError,
     }
     
     await setSession(sessionId, sessionData)
@@ -121,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const effective = buildEffectiveFactsheets(factsheets, overrides, rules)
+      const effective = buildEffectiveFactsheets(factsheets, overrides)
       if (effective.length > 0) {
         const [programs, processedCount, skippedCount] = buildProgramsFromFactsheets(effective, rules)
         const [html, dataSize] = generateHtmlBlock(programs, wxrFile.name, rules)
@@ -150,6 +156,10 @@ export async function POST(request: NextRequest) {
       },
       source_name: wxrFile.name,
       base_admin_url: baseAdminUrl,
+      rules_json: sessionData.rulesJson,
+      rules_status: sessionData.rulesStatus,
+      rules_error: sessionData.rulesError,
+      rules_summary: buildRulesSummary(rules),
       html: htmlBlock, // Include HTML in response
       html_meta: htmlMeta, // Include HTML metadata
     })
@@ -191,5 +201,9 @@ export async function GET(request: NextRequest) {
     },
     source_name: session.sourceName,
     base_admin_url: session.baseAdminUrl,
+    rules_json: session.rulesJson,
+    rules_status: session.rulesStatus,
+    rules_error: session.rulesError,
+    rules_summary: buildRulesSummary(session.rules),
   })
 }

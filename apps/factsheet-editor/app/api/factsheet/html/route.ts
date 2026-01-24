@@ -57,12 +57,10 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const rules = getDefaultRules()
-
+    const rules = session.rules || getDefaultRules()
     const effective = buildEffectiveFactsheets(
       session.factsheets,
-      session.overrides,
-      rules
+      session.overrides
     )
 
     console.log('HTML route: Effective factsheets:', {
@@ -127,7 +125,7 @@ export async function GET(request: NextRequest) {
     let dataSize: number
     
     try {
-      [htmlBlock, dataSize] = generateHtmlBlock(
+      ;[htmlBlock, dataSize] = generateHtmlBlock(
         programs,
         session.sourceName,
         rules

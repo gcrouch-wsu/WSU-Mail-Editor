@@ -93,4 +93,5 @@ export interface Override {
   shortname?: string
   program_name?: string
   degree_types?: string[]
+  rules_ok?: boolean
 }

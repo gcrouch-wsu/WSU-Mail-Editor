@@ -1,4 +1,4 @@
-import type { Factsheet, Override, RecommendationEntry } from './types'
+import type { Factsheet, Override, RecommendationEntry, Rules } from './types'
 import { del, list, put } from '@vercel/blob'
 
 interface Session {
@@ -7,6 +7,10 @@ interface Session {
   overrides: Record<string, Override>
   sourceName: string
   baseAdminUrl: string
+  rules: Rules
+  rulesJson: string
+  rulesStatus: string
+  rulesError: string
 }
 
 const SESSION_PREFIX = 'factsheet/sessions/'

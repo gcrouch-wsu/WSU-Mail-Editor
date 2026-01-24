@@ -64,29 +64,25 @@ export async function parseWxr(
           const factsheets: Factsheet[] = []
           
           console.log('XML parser: Total items found:', items.length)
-          if (items.length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const sampleItem = items[0] as any
-            console.log('XML parser: Sample item keys:', Object.keys(sampleItem || {}))
-            console.log('XML parser: Sample item wp:post_type:', sampleItem?.['wp:post_type'])
-            console.log('XML parser: Sample item post_type:', sampleItem?.post_type)
-          }
 
           for (const item of items) {
             if (!item) continue
 
             // Handle namespaced elements - xml2js with xmlns:true may use different structures
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const itemObj = item as any
+            const itemObj = item as Record<string, unknown>
             
             // Try multiple ways to access post_type
             // xml2js with xmlns:true might use: item['wp:post_type'], item['$']['wp:post_type'], or nested structure
             const actualPostType = getText(
               itemObj['wp:post_type'] ||
                 itemObj.post_type ||
-                itemObj.$?.['wp:post_type'] ||
-                itemObj.$?.post_type ||
-                itemObj['http://wordpress.org/export/1.2/']?.post_type ||
+                (itemObj.$ as Record<string, unknown> | undefined)?.[
+                  'wp:post_type'
+                ] ||
+                (itemObj.$ as Record<string, unknown> | undefined)?.post_type ||
+                (itemObj[
+                  'http://wordpress.org/export/1.2/'
+                ] as Record<string, unknown> | undefined)?.post_type ||
                 ''
             )
 
@@ -118,7 +114,7 @@ export async function parseWxr(
 
             for (const meta of postmeta) {
               if (!meta) continue
-              const metaObj = meta as any
+              const metaObj = meta as Record<string, unknown>
               const key = getText(
                 metaObj['wp:meta_key'] || metaObj.meta_key || ''
               )
@@ -149,8 +145,12 @@ export async function parseWxr(
 
             for (const category of categories) {
               if (!category) continue
-              const catObj = category as any
-              const domain = getText(catObj.$?.domain || catObj.domain || '')
+              const catObj = category as Record<string, unknown>
+              const domain = getText(
+                (catObj.$ as Record<string, unknown> | undefined)?.domain ||
+                  catObj.domain ||
+                  ''
+              )
               const text = getText(catObj._ || catObj || '')
 
               if (domain === 'gs-program-name') {

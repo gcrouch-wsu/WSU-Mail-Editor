@@ -24,13 +24,13 @@ interface EntryOverride {
   shortname?: string
   program_name?: string
   degree_types?: string[]
+  rules_ok?: boolean
 }
 
 export default function FactsheetEditorPage() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])
-  const [counts, setCounts] = useState({ total: 0, needs_edit: 0 })
-  const [_sourceName, setSourceName] = useState('')
+  const [sourceName, setSourceName] = useState('')
   const [baseAdminUrl, setBaseAdminUrl] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -41,6 +41,18 @@ export default function FactsheetEditorPage() {
     skipped: '-',
     size: '-',
   })
+  const [overrides, setOverrides] = useState<Record<string, EntryOverride>>({})
+  const [filter, setFilter] = useState<'needs' | 'all'>('needs')
+  const [rulesJson, setRulesJson] = useState('')
+  const [rulesStatus, setRulesStatus] = useState('')
+  const [rulesError, setRulesError] = useState('')
+  const [rulesSummary, setRulesSummary] = useState({
+    degree_type_count: 0,
+    classification_count: 0,
+    badge_count: 0,
+    filter_count: 0,
+  })
+  const updateTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const [overrides, setOverrides] = useState<Record<string, EntryOverride>>({})
   const [filter, setFilter] = useState<'needs' | 'all'>('needs')
   const updateTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -86,10 +98,15 @@ export default function FactsheetEditorPage() {
       const newSessionId = data.sessionId
       setSessionId(newSessionId)
       setEntries(data.entries)
-      setCounts(data.counts)
       setSourceName(data.source_name)
       setBaseAdminUrl(data.base_admin_url || '')
       setOverrides({})
+      setRulesJson(data.rules_json || '')
+      setRulesStatus(data.rules_status || '')
+      setRulesError(data.rules_error || '')
+      if (data.rules_summary) {
+        setRulesSummary(data.rules_summary)
+      }
       
       // Use HTML from response if available (generated in same request)
       if (data.html) {
@@ -172,16 +189,27 @@ export default function FactsheetEditorPage() {
     return Array.from(options).sort()
   }, [entries])
 
+  const isNeedsEdit = (entry: Entry) => {
+    return entry.needs_edit && !overrides[entry.id]?.rules_ok
+  }
+
   const filteredEntries = useMemo(() => {
     if (filter === 'needs') {
-      return entries.filter((entry) => entry.needs_edit)
+      return entries.filter((entry) => isNeedsEdit(entry))
     }
     return entries
-  }, [entries, filter])
+  }, [entries, filter, overrides])
+
+  const computedCounts = useMemo(() => {
+    return {
+      total: entries.length,
+      needs_edit: entries.filter((entry) => isNeedsEdit(entry)).length,
+    }
+  }, [entries, overrides])
 
   const scheduleUpdate = (
     entryId: string,
-    payload: Record<string, string | string[]>
+    payload: Record<string, string | string[] | boolean>
   ) => {
     if (updateTimers.current[entryId]) {
       clearTimeout(updateTimers.current[entryId])
@@ -193,7 +221,7 @@ export default function FactsheetEditorPage() {
 
   const handleEntryUpdate = async (
     entryId: string,
-    payload: Record<string, string | string[]>
+    payload: Record<string, string | string[] | boolean>
   ) => {
     if (!sessionId) return
     try {
@@ -230,6 +258,68 @@ export default function FactsheetEditorPage() {
     }))
   }
 
+  const handleRulesSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+    action: 'apply' | 'reload'
+  ) => {
+    event.preventDefault()
+    if (!sessionId) return
+
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const rulesFile = formData.get('rules_file') as File | null
+    const rulesText = String(formData.get('rules_json') || '')
+
+    let payload: Record<string, string> = {
+      sessionId,
+      action,
+      rules_json: rulesText,
+      source: 'rules editor',
+    }
+
+    if (rulesFile && rulesFile.size) {
+      payload = {
+        sessionId,
+        action,
+        rules_json: await rulesFile.text(),
+        source: rulesFile.name || 'rules file',
+      }
+    }
+
+    try {
+      const res = await fetch('/api/factsheet/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) {
+        const message = data.error || 'Failed to apply rules'
+        setRulesError(message)
+        setError(message)
+        return
+      }
+      setEntries(data.entries || [])
+      setRulesJson(data.rules_json || '')
+      setRulesStatus(data.rules_status || '')
+      setRulesError(data.rules_error || '')
+      if (data.rules_summary) {
+        setRulesSummary(data.rules_summary)
+      }
+      setError('')
+      refreshHtml(sessionId)
+    } catch (err) {
+      setError('Failed to apply rules. Please try again.')
+    }
+  }
+
+
+  const entriesContainerClass =
+    filter === 'all'
+      ? 'space-y-4'
+      : 'space-y-4 max-h-[600px] overflow-y-auto'
+
+
   const handleDownloadHtml = () => {
     if (!sessionId) return
     window.open(`/api/factsheet/download/html?sessionId=${sessionId}`, '_blank')
@@ -257,6 +347,15 @@ export default function FactsheetEditorPage() {
       setHtmlOutput('')
       setHtmlMeta({ groups: '-', processed: '-', skipped: '-', size: '-' })
       setOverrides({})
+      setRulesJson('')
+      setRulesStatus('')
+      setRulesError('')
+      setRulesSummary({
+        degree_type_count: 0,
+        classification_count: 0,
+        badge_count: 0,
+        filter_count: 0,
+      })
       setError('')
     } catch (err) {
       setError('Failed to delete session. Please try again.')
@@ -372,7 +471,10 @@ export default function FactsheetEditorPage() {
                     Review & Edit
                   </h2>
                   <p className="text-wsu-text-muted">
-                    Total: {counts.total} | Needs Edit: {counts.needs_edit}
+                    Total: {computedCounts.total} | Needs Edit: {computedCounts.needs_edit}
+                  </p>
+                  <p className="text-wsu-text-muted text-sm">
+                    Source: {sourceName || '?'} | Base admin URL: {baseAdminUrl || '?'}
                   </p>
                 </div>
                 <div className="flex gap-4 flex-wrap">
@@ -410,6 +512,47 @@ export default function FactsheetEditorPage() {
                 </div>
               </div>
 
+              <div className="border border-gray-200 rounded-lg p-4 mb-4">
+                <div className="font-semibold text-wsu-text-dark mb-2">Rules JSON</div>
+                <p className="text-sm text-wsu-text-muted">
+                  Update rules to control program normalization, degree types, and UI filters.
+                </p>
+                <div className="text-sm text-wsu-text-muted mt-2">
+                  Status: {rulesStatus || '?'}
+                </div>
+                {rulesError ? (
+                  <div className="text-sm text-red-600 mt-2">{rulesError}</div>
+                ) : null}
+                <div className="text-sm text-wsu-text-muted mt-2">
+                  Degree types: {rulesSummary.degree_type_count} | Classifications: {rulesSummary.classification_count} | Badges: {rulesSummary.badge_count} | Filters: {rulesSummary.filter_count}
+                </div>
+                <form
+                  className="mt-3 space-y-3"
+                  onSubmit={(event) => handleRulesSubmit(event, 'apply')}
+                >
+                  <input
+                    type="file"
+                    name="rules_file"
+                    accept=".json"
+                    className="block"
+                  />
+                  <textarea
+                    name="rules_json"
+                    value={rulesJson}
+                    onChange={(event) => setRulesJson(event.target.value)}
+                    className="w-full h-56 p-3 border border-gray-300 rounded-lg font-mono text-xs"
+                  />
+                  <div className="flex gap-3 flex-wrap">
+                    <button
+                      type="submit"
+                      className="bg-wsu-crimson text-white px-4 py-2 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors"
+                    >
+                      Apply rules
+                    </button>
+                  </div>
+                </form>
+              </div>
+
               <div className="flex gap-3 mb-4 flex-wrap">
                 <button
                   type="button"
@@ -427,11 +570,13 @@ export default function FactsheetEditorPage() {
                 </button>
               </div>
 
-              <div className="space-y-4 max-h-[600px] overflow-y-auto">
+              <div className={entriesContainerClass}>
                 {filteredEntries.map((entry) => {
                   const entryOverride = overrides[entry.id] || {}
                   const selectedDegreeTypes =
                     entryOverride.degree_types ?? entry.degree_types
+                  const needsEdit = isNeedsEdit(entry)
+                  const rulesOk = entryOverride.rules_ok === true
 
                   return (
                     <div
@@ -442,11 +587,40 @@ export default function FactsheetEditorPage() {
                         <h3 className="font-semibold text-wsu-text-dark">
                           {entry.title}
                         </h3>
-                        <span
-                          className={`text-xs font-semibold px-2 py-1 rounded-full ${entry.needs_edit ? 'bg-wsu-crimson text-white' : 'bg-gray-200 text-gray-700'}`}
-                        >
-                          {entry.needs_edit ? 'Needs edit' : 'OK'}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`text-xs font-semibold px-2 py-1 rounded-full ${needsEdit ? 'bg-wsu-crimson text-white' : 'bg-gray-200 text-gray-700'}`}
+                          >
+                            {needsEdit ? 'Needs edit' : 'OK'}
+                          </span>
+                          {entry.needs_edit && (
+                            <label className="flex items-center gap-2 text-xs text-wsu-text-muted">
+                              <input
+                                type="checkbox"
+                                checked={rulesOk}
+                                onChange={(event) => {
+                                  const checked = event.target.checked
+                                  setOverrides((prev) => {
+                                    const next = { ...prev }
+                                    const existing = next[entry.id] || {}
+                                    if (checked) {
+                                      next[entry.id] = { ...existing, rules_ok: true }
+                                    } else {
+                                      const { rules_ok, ...rest } = existing
+                                      next[entry.id] = rest
+                                      if (Object.keys(next[entry.id]).length == 0) {
+                                        delete next[entry.id]
+                                      }
+                                    }
+                                    return next
+                                  })
+                                  scheduleUpdate(entry.id, { rules_ok: checked })
+                                }}
+                              />
+                              Mark OK
+                            </label>
+                          )}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -458,7 +632,7 @@ export default function FactsheetEditorPage() {
                             Degree Types:{' '}
                             {entry.degree_types.join(', ') || '(missing)'}
                           </p>
-                          {entry.edit_link && (
+                          {entry.edit_link ? (
                             <p className="mt-2">
                               <a
                                 className="text-wsu-crimson underline"
@@ -468,6 +642,10 @@ export default function FactsheetEditorPage() {
                               >
                                 Edit in WordPress
                               </a>
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-xs text-wsu-text-muted">
+                              Edit link unavailable (missing base admin URL)
                             </p>
                           )}
                         </div>

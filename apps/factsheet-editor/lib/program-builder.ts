@@ -184,8 +184,7 @@ export function buildProgramsFromFactsheets(
 
 export function buildEffectiveFactsheets(
   factsheets: Factsheet[],
-  overrides: Record<string, Override>,
-  _rules: Rules
+  overrides: Record<string, Override>
 ): Factsheet[] {
   if (!factsheets || factsheets.length === 0) {
     console.warn('buildEffectiveFactsheets: No factsheets provided')
