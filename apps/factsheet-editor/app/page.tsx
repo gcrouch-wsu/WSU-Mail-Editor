@@ -403,172 +403,197 @@ export default function FactsheetEditorPage() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Upload Section */}
-        <section className="bg-white rounded-lg shadow-md p-8 mb-8">
-          <h2 className="text-2xl font-semibold text-wsu-crimson mb-4">
-            Load Export
-          </h2>
-          <p className="text-sm text-wsu-text-muted mb-4">
-            Upload a WordPress WXR export file (.xml) to process and generate HTML blocks.
-            The factsheet.js file will be available for download after processing.
-          </p>
+        <details
+          className="bg-white rounded-lg shadow-md mb-8"
+          open={entries.length === 0}
+        >
+          <summary className="cursor-pointer select-none px-8 py-6">
+            <h2 className="text-2xl font-semibold text-wsu-crimson">
+              Load Export
+            </h2>
+            <p className="text-sm text-wsu-text-muted mt-2">
+              Upload a WordPress WXR export file (.xml) to process and generate HTML blocks.
+              The factsheet.js file will be available for download after processing.
+            </p>
+          </summary>
+          <div className="px-8 pb-8">
+            <form onSubmit={handleUpload} className="space-y-4" noValidate>
+              <div>
+                <label className="block text-sm font-medium text-wsu-text-dark mb-2">
+                  Base Admin URL (optional)
+                </label>
+                <input
+                  type="text"
+                  name="base_admin_url"
+                  value={baseAdminUrl}
+                  onChange={(e) => setBaseAdminUrl(e.target.value)}
+                  placeholder="https://example.com/wp/"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-wsu-crimson focus:outline-none"
+                />
+              </div>
 
-          <form onSubmit={handleUpload} className="space-y-4" noValidate>
-            <div>
-              <label className="block text-sm font-medium text-wsu-text-dark mb-2">
-                Base Admin URL (optional)
-              </label>
-              <input
-                type="text"
-                name="base_admin_url"
-                value={baseAdminUrl}
-                onChange={(e) => setBaseAdminUrl(e.target.value)}
-                placeholder="https://example.com/wp/"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-wsu-crimson focus:outline-none"
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-medium text-wsu-text-dark mb-2">
+                  WXR Export File (.xml)
+                </label>
+                <input
+                  type="file"
+                  name="wxr_file"
+                  accept=".xml"
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-wsu-crimson focus:outline-none"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-wsu-text-dark mb-2">
-                WXR Export File (.xml)
-              </label>
-              <input
-                type="file"
-                name="wxr_file"
-                accept=".xml"
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-wsu-crimson focus:outline-none"
-              />
-            </div>
+              <button
+                type="submit"
+                disabled={loading}
+                onClick={() => {
+                  console.log('Load Export button clicked')
+                  // Form submission will be handled by onSubmit
+                }}
+                className="bg-wsu-crimson text-white px-6 py-3 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Processing...' : 'Load Export'}
+              </button>
+            </form>
 
-            <button
-              type="submit"
-              disabled={loading}
-              onClick={() => {
-                console.log('Load Export button clicked')
-                // Form submission will be handled by onSubmit
-              }}
-              className="bg-wsu-crimson text-white px-6 py-3 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Processing...' : 'Load Export'}
-            </button>
-          </form>
-
-          {error && (
-            <div className="mt-4 text-red-600 font-semibold">{error}</div>
-          )}
-        </section>
+            {error && (
+              <div className="mt-4 text-red-600 font-semibold">{error}</div>
+            )}
+          </div>
+        </details>
 
         {/* Results Section */}
         {entries.length > 0 && (
           <>
-            <section className="bg-white rounded-lg shadow-md p-8 mb-8">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h2 className="text-2xl font-semibold text-wsu-crimson mb-2">
-                    Review & Edit
-                  </h2>
-                  <p className="text-wsu-text-muted">
-                    Total: {computedCounts.total} | Needs Edit: {computedCounts.needs_edit}
-                  </p>
-                  <p className="text-wsu-text-muted text-sm">
-                    Source: {sourceName || '?'} | Base admin URL: {baseAdminUrl || '?'}
-                  </p>
-                </div>
-                <div className="flex gap-4 flex-wrap">
-                  <button
-                    onClick={handleDownloadJs}
-                    className="bg-wsu-gray-light text-white px-4 py-2 rounded font-semibold hover:bg-wsu-gray transition-colors flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download factsheet.js
-                  </button>
-                  <button
-                    onClick={handleDownloadHtml}
-                    className="bg-wsu-crimson text-white px-4 py-2 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download HTML
-                  </button>
-                  <button
-                    onClick={handleDeleteSession}
-                    className="bg-white text-wsu-crimson px-4 py-2 rounded font-semibold border border-wsu-crimson hover:bg-wsu-crimson hover:text-white transition-colors"
-                  >
-                    Delete session
-                  </button>
-                </div>
-                <div className="text-sm text-wsu-text-muted mt-2">
-                  factsheet.js link:{' '}
-                  <a
-                    className="text-wsu-crimson underline"
-                    href="/api/factsheet/runtime.js"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    /api/factsheet/runtime.js
-                  </a>
-                </div>
-              </div>
-
-              <div className="border border-gray-200 rounded-lg p-4 mb-4">
-                <div className="font-semibold text-wsu-text-dark mb-2">Rules JSON</div>
-                <p className="text-sm text-wsu-text-muted">
-                  Update rules to control program normalization, degree types, and UI filters.
-                </p>
-                <div className="text-sm text-wsu-text-muted mt-2">
-                  Status: {rulesStatus || '?'}
-                </div>
-                {rulesError ? (
-                  <div className="text-sm text-red-600 mt-2">{rulesError}</div>
-                ) : null}
-                <div className="text-sm text-wsu-text-muted mt-2">
-                  Degree types: {rulesSummary.degree_type_count} | Classifications: {rulesSummary.classification_count} | Badges: {rulesSummary.badge_count} | Filters: {rulesSummary.filter_count}
-                </div>
-                <form
-                  className="mt-3 space-y-3"
-                  onSubmit={(event) => handleRulesSubmit(event, 'apply')}
-                >
-                  <input
-                    type="file"
-                    name="rules_file"
-                    accept=".json"
-                    className="block"
-                  />
-                  <textarea
-                    name="rules_json"
-                    value={rulesJson}
-                    onChange={(event) => setRulesJson(event.target.value)}
-                    className="w-full h-56 p-3 border border-gray-300 rounded-lg font-mono text-xs"
-                  />
-                  <div className="flex gap-3 flex-wrap">
+            <details className="bg-white rounded-lg shadow-md mb-8" open>
+              <summary className="cursor-pointer select-none px-8 py-6">
+                <div className="flex justify-between items-center gap-4 flex-wrap">
+                  <div>
+                    <h2 className="text-2xl font-semibold text-wsu-crimson">
+                      Review & Edit
+                    </h2>
+                    <p className="text-wsu-text-muted mt-2">
+                      Total: {computedCounts.total} | Needs Edit: {computedCounts.needs_edit}
+                    </p>
+                    <p className="text-wsu-text-muted text-sm">
+                      Source: {sourceName || '?'} | Base admin URL: {baseAdminUrl || '?'}
+                    </p>
+                  </div>
+                  <div className="flex gap-4 flex-wrap">
                     <button
-                      type="submit"
-                      className="bg-wsu-crimson text-white px-4 py-2 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors"
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        handleDownloadJs()
+                      }}
+                      className="bg-wsu-gray-light text-white px-4 py-2 rounded font-semibold hover:bg-wsu-gray transition-colors flex items-center gap-2"
                     >
-                      Apply rules
+                      <Download className="w-4 h-4" />
+                      Download factsheet.js
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        handleDownloadHtml()
+                      }}
+                      className="bg-wsu-crimson text-white px-4 py-2 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors flex items-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download HTML
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        handleDeleteSession()
+                      }}
+                      className="bg-white text-wsu-crimson px-4 py-2 rounded font-semibold border border-wsu-crimson hover:bg-wsu-crimson hover:text-white transition-colors"
+                    >
+                      Delete session
                     </button>
                   </div>
-                </form>
-              </div>
+                  <div className="text-sm text-wsu-text-muted mt-2">
+                    factsheet.js link:{' '}
+                    <a
+                      className="text-wsu-crimson underline"
+                      href="/api/factsheet/runtime.js"
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      /api/factsheet/runtime.js
+                    </a>
+                  </div>
+                </div>
+              </summary>
+              <div className="px-8 pb-8">
+                <details className="border border-gray-200 rounded-lg p-4 mb-4">
+                  <summary className="cursor-pointer select-none font-semibold text-wsu-text-dark">
+                    Rules JSON
+                  </summary>
+                  <div className="mt-3">
+                    <p className="text-sm text-wsu-text-muted">
+                      Update rules to control program normalization, degree types, and UI filters.
+                    </p>
+                    <div className="text-sm text-wsu-text-muted mt-2">
+                      Status: {rulesStatus || '?'}
+                    </div>
+                    {rulesError ? (
+                      <div className="text-sm text-red-600 mt-2">{rulesError}</div>
+                    ) : null}
+                    <div className="text-sm text-wsu-text-muted mt-2">
+                      Degree types: {rulesSummary.degree_type_count} | Classifications: {rulesSummary.classification_count} | Badges: {rulesSummary.badge_count} | Filters: {rulesSummary.filter_count}
+                    </div>
+                    <form
+                      className="mt-3 space-y-3"
+                      onSubmit={(event) => handleRulesSubmit(event, 'apply')}
+                    >
+                      <input
+                        type="file"
+                        name="rules_file"
+                        accept=".json"
+                        className="block"
+                      />
+                      <textarea
+                        name="rules_json"
+                        value={rulesJson}
+                        onChange={(event) => setRulesJson(event.target.value)}
+                        className="w-full h-56 p-3 border border-gray-300 rounded-lg font-mono text-xs"
+                      />
+                      <div className="flex gap-3 flex-wrap">
+                        <button
+                          type="submit"
+                          className="bg-wsu-crimson text-white px-4 py-2 rounded font-semibold hover:bg-wsu-crimson-dark transition-colors"
+                        >
+                          Apply rules
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </details>
 
-              <div className="flex gap-3 mb-4 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setFilter('needs')}
-                  className={`px-3 py-1 rounded border ${filter === 'needs' ? 'bg-wsu-crimson text-white border-wsu-crimson' : 'bg-white text-wsu-crimson border-wsu-crimson'}`}
-                >
-                  Needs edits only
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilter('all')}
-                  className={`px-3 py-1 rounded border ${filter === 'all' ? 'bg-wsu-crimson text-white border-wsu-crimson' : 'bg-white text-wsu-crimson border-wsu-crimson'}`}
-                >
-                  Show all
-                </button>
-              </div>
+                <div className="flex gap-3 mb-4 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setFilter('needs')}
+                    className={`px-3 py-1 rounded border ${filter === 'needs' ? 'bg-wsu-crimson text-white border-wsu-crimson' : 'bg-white text-wsu-crimson border-wsu-crimson'}`}
+                  >
+                    Needs edits only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilter('all')}
+                    className={`px-3 py-1 rounded border ${filter === 'all' ? 'bg-wsu-crimson text-white border-wsu-crimson' : 'bg-white text-wsu-crimson border-wsu-crimson'}`}
+                  >
+                    Show all
+                  </button>
+                </div>
 
-              <div className={entriesContainerClass}>
-                {filteredEntries.map((entry) => {
+                <div className={entriesContainerClass}>
+                  {filteredEntries.map((entry) => {
                   const entryOverride = overrides[entry.id] || {}
                   const selectedDegreeTypes =
                     entryOverride.degree_types ?? entry.degree_types
@@ -752,35 +777,43 @@ export default function FactsheetEditorPage() {
                     </div>
                   )
                 })}
+                </div>
               </div>
-            </section>
+            </details>
 
             {/* HTML Output Section */}
-            <section className="bg-white rounded-lg shadow-md p-8">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-semibold text-wsu-crimson">
-                  HTML Output
-                </h2>
-                <button
-                  onClick={() => refreshHtml()}
-                  className="bg-wsu-gray-light text-white px-4 py-2 rounded font-semibold hover:bg-wsu-gray transition-colors"
-                >
-                  Refresh
-                </button>
-              </div>
+            <details className="bg-white rounded-lg shadow-md">
+              <summary className="cursor-pointer select-none px-8 py-6">
+                <div className="flex justify-between items-center gap-4 flex-wrap">
+                  <h2 className="text-2xl font-semibold text-wsu-crimson">
+                    HTML Output
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      refreshHtml()
+                    }}
+                    className="bg-wsu-gray-light text-white px-4 py-2 rounded font-semibold hover:bg-wsu-gray transition-colors"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </summary>
+              <div className="px-8 pb-8">
+                <div className="text-sm text-wsu-text-muted mb-4">
+                  Groups: {htmlMeta.groups} | Processed: {htmlMeta.processed} |
+                  Skipped: {htmlMeta.skipped} | Size: {htmlMeta.size}
+                </div>
 
-              <div className="text-sm text-wsu-text-muted mb-4">
-                Groups: {htmlMeta.groups} | Processed: {htmlMeta.processed} |
-                Skipped: {htmlMeta.skipped} | Size: {htmlMeta.size}
+                <textarea
+                  value={htmlOutput}
+                  readOnly
+                  className="w-full h-96 p-4 border border-gray-300 rounded-lg font-mono text-sm"
+                  placeholder="HTML will appear here after processing..."
+                />
               </div>
-
-              <textarea
-                value={htmlOutput}
-                readOnly
-                className="w-full h-96 p-4 border border-gray-300 rounded-lg font-mono text-sm"
-                placeholder="HTML will appear here after processing..."
-              />
-            </section>
+            </details>
           </>
         )}
       </main>
