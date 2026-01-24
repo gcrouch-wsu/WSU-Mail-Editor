@@ -36,13 +36,13 @@ export default function HomePage() {
           <ToolTile
             title="Export Outcomes Translation Tables"
             description="Export and process Outcomes Translation Tables data to Excel or text format"
-            href="https://outcomes-translation-tables.vercel.app/"
+            href="https://wsu-mail-editor-translation-tables.vercel.app/"
             icon={Table2}
           />
           <ToolTile
             title="Validate Outcomes Translation Tables"
             description="Validate Outcomes translation mappings against Outcomes and myWSU SIS data"
-            href="https://validate-outcomes-translation-tables.vercel.app/"
+            href="https://validate-outcomes-translation-table.vercel.app/"
             icon={CheckCircle}
           />
           <ToolTile
