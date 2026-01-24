@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Download } from 'lucide-react'
 
 interface Entry {
@@ -52,9 +52,6 @@ export default function FactsheetEditorPage() {
     badge_count: 0,
     filter_count: 0,
   })
-  const updateTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  const [overrides, setOverrides] = useState<Record<string, EntryOverride>>({})
-  const [filter, setFilter] = useState<'needs' | 'all'>('needs')
   const updateTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -189,23 +186,24 @@ export default function FactsheetEditorPage() {
     return Array.from(options).sort()
   }, [entries])
 
-  const isNeedsEdit = (entry: Entry) => {
-    return entry.needs_edit && !overrides[entry.id]?.rules_ok
-  }
+  const isNeedsEdit = useCallback(
+    (entry: Entry) => entry.needs_edit && !overrides[entry.id]?.rules_ok,
+    [overrides]
+  )
 
   const filteredEntries = useMemo(() => {
     if (filter === 'needs') {
       return entries.filter((entry) => isNeedsEdit(entry))
     }
     return entries
-  }, [entries, filter, overrides])
+  }, [entries, filter, isNeedsEdit])
 
   const computedCounts = useMemo(() => {
     return {
       total: entries.length,
       needs_edit: entries.filter((entry) => isNeedsEdit(entry)).length,
     }
-  }, [entries, overrides])
+  }, [entries, isNeedsEdit])
 
   const scheduleUpdate = (
     entryId: string,
@@ -343,7 +341,6 @@ export default function FactsheetEditorPage() {
       }
       setSessionId(null)
       setEntries([])
-      setCounts({ total: 0, needs_edit: 0 })
       setHtmlOutput('')
       setHtmlMeta({ groups: '-', processed: '-', skipped: '-', size: '-' })
       setOverrides({})
@@ -606,9 +603,10 @@ export default function FactsheetEditorPage() {
                                     if (checked) {
                                       next[entry.id] = { ...existing, rules_ok: true }
                                     } else {
-                                      const { rules_ok, ...rest } = existing
+                                      const rest = { ...existing }
+                                      delete rest.rules_ok
                                       next[entry.id] = rest
-                                      if (Object.keys(next[entry.id]).length == 0) {
+                                      if (Object.keys(next[entry.id]).length === 0) {
                                         delete next[entry.id]
                                       }
                                     }
