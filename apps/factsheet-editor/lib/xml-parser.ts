@@ -16,6 +16,22 @@ export async function parseWxr(
   xmlBytes: Buffer,
   rules: Rules
 ): Promise<Factsheet[]> {
+  const getText = (value: unknown): string => {
+    if (value === null || value === undefined) return ''
+    if (Array.isArray(value)) {
+      return getText(value[0])
+    }
+    if (typeof value === 'string' || typeof value === 'number') {
+      return String(value)
+    }
+    if (typeof value === 'object') {
+      const obj = value as { _: unknown; '#text'?: unknown }
+      if (obj._ !== undefined) return String(obj._)
+      if (obj['#text'] !== undefined) return String(obj['#text'])
+    }
+    return ''
+  }
+
   return new Promise((resolve, reject) => {
     parseString(
       xmlBytes.toString('utf-8'),
@@ -64,26 +80,14 @@ export async function parseWxr(
             
             // Try multiple ways to access post_type
             // xml2js with xmlns:true might use: item['wp:post_type'], item['$']['wp:post_type'], or nested structure
-            let actualPostType = ''
-            
-            // Method 1: Direct access with namespace prefix
-            actualPostType = itemObj['wp:post_type'] || ''
-            
-            // Method 2: Without prefix (if namespace was stripped)
-            if (!actualPostType) {
-              actualPostType = itemObj.post_type || ''
-            }
-            
-            // Method 3: Check if it's nested in attributes or other structures
-            if (!actualPostType && itemObj.$) {
-              actualPostType = itemObj.$['wp:post_type'] || itemObj.$.post_type || ''
-            }
-            
-            // Method 4: Check if namespace is in a different format
-            if (!actualPostType && itemObj['http://wordpress.org/export/1.2/']) {
-              const wpNs = itemObj['http://wordpress.org/export/1.2/']
-              actualPostType = wpNs.post_type || (Array.isArray(wpNs.post_type) ? wpNs.post_type[0] : '') || ''
-            }
+            const actualPostType = getText(
+              itemObj['wp:post_type'] ||
+                itemObj.post_type ||
+                itemObj.$?.['wp:post_type'] ||
+                itemObj.$?.post_type ||
+                itemObj['http://wordpress.org/export/1.2/']?.post_type ||
+                ''
+            )
 
             if (actualPostType !== 'gs-factsheet') {
               if (items.length <= 5) {
@@ -95,10 +99,10 @@ export async function parseWxr(
             
             console.log('XML parser: Found gs-factsheet item')
 
-            const postId = itemObj['wp:post_id'] || itemObj.post_id || ''
-            const status = itemObj['wp:status'] || itemObj.status || ''
-            const title = (typeof itemObj.title === 'string' ? itemObj.title : itemObj.title?._ || itemObj.title?.[0] || '') || ''
-            const link = (typeof itemObj.link === 'string' ? itemObj.link : itemObj.link?._ || itemObj.link?.[0] || '') || ''
+            const postId = getText(itemObj['wp:post_id'] || itemObj.post_id || '')
+            const status = getText(itemObj['wp:status'] || itemObj.status || '')
+            const title = getText(itemObj.title || '')
+            const link = getText(itemObj.link || '')
 
             let includeInPrograms = ''
             let shortnameRaw = ''
@@ -114,8 +118,12 @@ export async function parseWxr(
             for (const meta of postmeta) {
               if (!meta) continue
               const metaObj = meta as any
-              const key = metaObj['wp:meta_key']?._ || metaObj['wp:meta_key'] || metaObj.meta_key?._ || metaObj.meta_key || ''
-              const value = metaObj['wp:meta_value']?._ || metaObj['wp:meta_value'] || metaObj.meta_value?._ || metaObj.meta_value || ''
+              const key = getText(
+                metaObj['wp:meta_key'] || metaObj.meta_key || ''
+              )
+              const value = getText(
+                metaObj['wp:meta_value'] || metaObj.meta_value || ''
+              )
               
               if (!key) continue
 
@@ -141,8 +149,8 @@ export async function parseWxr(
             for (const category of categories) {
               if (!category) continue
               const catObj = category as any
-              const domain = catObj.$.domain || catObj.domain || ''
-              const text = catObj._ || catObj.$?._ || (typeof catObj === 'string' ? catObj : '') || ''
+              const domain = getText(catObj.$?.domain || catObj.domain || '')
+              const text = getText(catObj._ || catObj || '')
 
               if (domain === 'gs-program-name') {
                 if (text) {
