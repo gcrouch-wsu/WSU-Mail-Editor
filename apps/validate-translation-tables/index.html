@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Validate Outcomes Translation Tables</title>
+    <title>Validate Translation Tables</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -32,8 +32,8 @@
     
     <header class="bg-wsu-crimson text-white shadow-lg">
         <div class="container mx-auto px-4 py-6">
-            <h1 class="text-3xl font-bold">Validate Outcomes Translation Tables</h1>
-            <p class="text-gray-200 mt-2">Outcomes ↔ myWSU SIS Translation Verification</p>
+            <h1 class="text-3xl font-bold">Validate Translation Tables</h1>
+            <p class="text-gray-200 mt-2">Outcomes ↔ myWSU Translation Verification</p>
                     </div>
     </header>
 
@@ -49,10 +49,11 @@
                 <div class="ml-3">
                     <h3 class="text-sm font-medium text-blue-800">How to use this tool</h3>
                     <div class="mt-2 text-sm text-blue-700">
-                        <p>1. Upload all three required files below</p>
-                        <p>2. Select which columns to include in your report (optional)</p>
-                        <p>3. Click "Validate Mappings" to identify errors</p>
-                        <p>4. Review the error dashboard and download the Excel report</p>
+                        <p>1. Upload the Outcomes source, Translation table, and myWSU table</p>
+                        <p>2. Choose the key columns used to match Outcomes → Translation → myWSU</p>
+                        <p>3. (Optional) Select which columns to include in your report</p>
+                        <p>4. Click "Validate Mappings" to identify errors</p>
+                        <p>5. Review the error dashboard and download the Excel report</p>
                         <p class="mt-2 font-semibold">Privacy: All files are processed locally in your browser. No data is uploaded to any server.</p>
                     </div>
                 </div>
@@ -116,7 +117,7 @@
                     <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                     </svg>
-                    <h3 class="mt-2 text-sm font-medium text-gray-900">WSU Tables</h3>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">myWSU Tables</h3>
                     <p class="text-xs text-gray-500 mt-1">Excel or CSV</p>
                     <div class="mt-4">
                         <label for="wsu-org-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
@@ -138,6 +139,38 @@
         </div>
 
         <div id="column-selection" class="bg-white rounded-lg shadow-md p-6 mb-8 hidden">
+            <div class="mb-6 border-b pb-5">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Match Keys</h2>
+                <p class="text-sm text-gray-500">
+                    Select which columns define the source and target keys used in validation.
+                </p>
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Outcomes key column</label>
+                        <select id="key-outcomes" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="">Select column</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Translation input column</label>
+                        <select id="key-translate-input" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="">Select column</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Translation output column</label>
+                        <select id="key-translate-output" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="">Select column</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">myWSU key column</label>
+                        <select id="key-wsu" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="">Select column</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
             <button id="toggle-columns" class="flex items-center justify-between w-full text-left">
                 <h2 class="text-xl font-semibold text-gray-800">Select Columns for Report</h2>
                 <svg class="h-6 w-6 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -156,7 +189,7 @@
                     </div>
 
                     <div>
-                        <h3 class="font-medium text-gray-700 mb-3">From WSU Tables:</h3>
+                        <h3 class="font-medium text-gray-700 mb-3">From myWSU Tables:</h3>
                         <div id="wsu-org-columns" class="space-y-2">
                             
                         </div>
@@ -185,7 +218,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">WSU name column</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">myWSU name column</label>
                         <select id="name-compare-wsu" class="w-full border border-gray-300 rounded-md p-2 text-sm">
                             <option value="">Select column</option>
                         </select>
@@ -288,34 +321,34 @@
 
                 <div class="space-y-4 text-sm text-blue-800">
                     <div>
-                        <strong class="text-red-700">Invalid WSU Org IDs:</strong>
-                        <p class="mt-1">Rows in Translation Table have WSU Org IDs (Output column) that do not exist in WSU Tables. These may be broken integrations - the mapping points to organizations that don't exist in myWSU. When Outcomes tries to sync data using these mappings, it may fail because the target Org ID is invalid.</p>
+                        <strong class="text-red-700">Invalid Target Keys:</strong>
+                        <p class="mt-1">Rows in the Translation Table reference target keys that do not exist in the myWSU table. These mappings will fail during integration because the target record is missing.</p>
                     </div>
 
                     <div>
-                        <strong class="text-orange-700">Duplicate Org ID Mapping (Many-to-One):</strong>
-                        <p class="mt-1">Multiple different mdb_codes in the Translation Table all map to the same WSU Org ID. Example: Miami University West Chester, Hamilton, Middletown, and Oxford all map to Org ID 187730. This causes multiple schools' data to be merged into one organization.</p>
+                        <strong class="text-orange-700">Duplicate Target Keys (Many-to-One):</strong>
+                        <p class="mt-1">Multiple different source keys in the Translation Table map to the same target key. This merges multiple Outcomes records into one myWSU record.</p>
                     </div>
 
                     <div>
                         <strong class="text-yellow-700">Name Mismatches:</strong>
-                        <p class="mt-1">School names in Outcomes Source don't exactly match the organization names in WSU Tables (less than 50% similarity). Example: "University of Texas Dental School" mapped to "University of Texas Medical Branch" - these are different institutions. Review these mappings to ensure the correct organizations are linked.</p>
+                        <p class="mt-1">Names in Outcomes Source don't match names in myWSU (below the similarity threshold). Review these mappings to confirm they are correct.</p>
                     </div>
 
                     <div>
                         <strong class="text-yellow-700">Orphaned Mappings in Translation Table:</strong>
-                        <p class="mt-1">The Translation Table contains mdb_codes that don't exist in the Outcomes Source data. These may be errors that should be cleaned up.</p>
+                        <p class="mt-1">The Translation Table contains source keys that don't exist in the Outcomes Source data. These should usually be cleaned up.</p>
                     </div>
 
                     <div>
                         <strong class="text-blue-700">Missing Mappings (Sheet 2):</strong>
-                        <p class="mt-1">Schools in Outcomes Source that have no entry in Translation Table. These may not be errors - they simply haven't been integrated yet. This is informational only and shown on Sheet 2 of the Excel report.</p>
+                        <p class="mt-1">Outcomes records that have no entry in the Translation Table. These may be intentional but are listed for visibility.</p>
                     </div>
                 </div>
 
                 <div class="mt-4 p-4 bg-white rounded border border-blue-200">
                     <p class="text-sm text-gray-700">
-                        <strong>Key Point:</strong> The app validates <strong>only your Translation Table</strong> (the integration table).
+                        <strong>Key Point:</strong> The app validates <strong>your Translation Table</strong> as the integration map.
                         It flags errors that will cause integration failures or data integrity issues.
                         Fix these errors in your source system to ensure reliable data sync between Outcomes and myWSU.
                     </p>

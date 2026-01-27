@@ -56,7 +56,7 @@ function normalizeHeader(value) {
 
 function sheetToJsonWithHeaderDetection(sheet, expectedHeaders) {
     let jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '' });
-    if (!expectedHeaders.length || hasExpectedHeaders(jsonData, expectedHeaders)) {
+    if (expectedHeaders.length && hasExpectedHeaders(jsonData, expectedHeaders)) {
         return jsonData;
     }
 
@@ -66,13 +66,15 @@ function sheetToJsonWithHeaderDetection(sheet, expectedHeaders) {
     }
 
     const expectedNormalized = expectedHeaders.map(normalizeHeader);
-    const headerRowIndex = rows.findIndex(row => {
-        const normalizedRow = row.map(normalizeHeader);
-        return expectedNormalized.every(header => normalizedRow.includes(header));
-    });
+    const headerRowIndex = expectedHeaders.length
+        ? rows.findIndex(row => {
+            const normalizedRow = row.map(normalizeHeader);
+            return expectedNormalized.every(header => normalizedRow.includes(header));
+        })
+        : detectHeaderRowIndex(rows);
 
     if (headerRowIndex === -1 || headerRowIndex === rows.length - 1) {
-        return jsonData;
+        throw new Error('Header row not found.');
     }
 
     const headers = rows[headerRowIndex];
@@ -102,11 +104,64 @@ function rowsToObjects(headers, dataRows) {
     });
 }
 
+function detectHeaderRowIndex(rows) {
+    const maxScan = Math.min(rows.length, 10);
+    const scored = [];
+
+    for (let i = 0; i < maxScan; i++) {
+        const row = rows[i] || [];
+        const cells = row.map(cell => String(cell || '').trim());
+        const nonEmpty = cells.filter(cell => cell.length > 0);
+        if (nonEmpty.length === 0) {
+            continue;
+        }
+        const alphaCount = nonEmpty.filter(cell => /[A-Za-z]/.test(cell)).length;
+        const numericCount = nonEmpty.filter(cell => /^[0-9]+$/.test(cell)).length;
+        const uniqueCount = new Set(nonEmpty.map(normalizeHeader)).size;
+
+        scored.push({
+            index: i,
+            nonEmpty: nonEmpty.length,
+            alphaCount,
+            numericCount,
+            uniqueCount
+        });
+    }
+
+    if (!scored.length) {
+        return -1;
+    }
+
+    scored.sort((a, b) => {
+        if (b.nonEmpty !== a.nonEmpty) return b.nonEmpty - a.nonEmpty;
+        if (b.alphaCount !== a.alphaCount) return b.alphaCount - a.alphaCount;
+        if (b.uniqueCount !== a.uniqueCount) return b.uniqueCount - a.uniqueCount;
+        return a.index - b.index;
+    });
+
+    const best = scored[0];
+    const first = scored.find(row => row.index === 0);
+    if (first && first.nonEmpty >= best.nonEmpty && first.alphaCount >= 2) {
+        return 0;
+    }
+
+    if (best.nonEmpty < 2 || best.alphaCount === 0 || best.numericCount === best.nonEmpty) {
+        return -1;
+    }
+
+    return best.index;
+}
+
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(line => line.trim());
     if (lines.length === 0) return [];
 
     const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+    const headerCells = headers.filter(cell => cell.length > 0);
+    const headerHasAlpha = headerCells.some(cell => /[A-Za-z]/.test(cell));
+    if (headerCells.length === 0 || !headerHasAlpha) {
+        throw new Error('Header row not found.');
+    }
     const data = [];
 
     for (let i = 1; i < lines.length; i++) {
@@ -208,51 +263,54 @@ function similarityRatio(str1, str2) {
     return maxLen === 0 ? 1.0 : (maxLen - distance) / maxLen;
 }
 
-function normalizeMdbCode(value) {
-    return String(value || '').trim();
+function normalizeKeyValue(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    const raw = String(value).trim();
+    if (raw === '') {
+        return '';
+    }
+    if (/^\d+$/.test(raw)) {
+        const cleaned = raw.replace(/^0+/, '');
+        return cleaned === '' ? '0' : cleaned;
+    }
+    return raw.toLowerCase();
 }
 
-function normalizeOrgId(value) {
-    if (value === null || value === undefined || value === '') {
-        return NaN;
-    }
-    const cleaned = String(value).replace(/^0+/, '');
-    if (cleaned === '') {
-        return 0;
-    }
-    const parsed = parseInt(cleaned, 10);
-    return Number.isNaN(parsed) ? NaN : parsed;
-}
-
-function mergeData(outcomes, translate, wsuOrg) {
+function mergeData(outcomes, translate, wsuOrg, keyConfig) {
     const merged = [];
     const outcomesMap = new Map();
     const wsuOrgMap = new Map();
 
     outcomes.forEach(row => {
-        outcomesMap.set(normalizeMdbCode(row.mdb_code), row);
+        const key = normalizeKeyValue(row[keyConfig.outcomes]);
+        if (key) {
+            outcomesMap.set(key, row);
+        }
     });
 
     wsuOrg.forEach(row => {
-        const normalized = normalizeOrgId(row['Org ID']);
-        if (!Number.isNaN(normalized)) {
+        const normalized = normalizeKeyValue(row[keyConfig.wsu]);
+        if (normalized) {
             wsuOrgMap.set(normalized, row);
         }
     });
 
     for (const tRow of translate) {
-        const mdbCode = normalizeMdbCode(tRow.Input);
-        const orgIdRaw = tRow.Output;
-        const orgIdNumeric = normalizeOrgId(orgIdRaw);
+        const inputRaw = tRow[keyConfig.translateInput] ?? '';
+        const outputRaw = tRow[keyConfig.translateOutput] ?? '';
+        const inputNormalized = normalizeKeyValue(inputRaw);
+        const outputNormalized = normalizeKeyValue(outputRaw);
 
-        const outcomesMatch = outcomesMap.get(mdbCode);
-
-        const wsuMatch = wsuOrgMap.get(orgIdNumeric);
+        const outcomesMatch = outcomesMap.get(inputNormalized);
+        const wsuMatch = wsuOrgMap.get(outputNormalized);
 
         const mergedRow = {
-            mdb_code: mdbCode,
-            Org_ID_raw: orgIdRaw,
-            Output_numeric: orgIdNumeric
+            translate_input: inputRaw,
+            translate_output: outputRaw,
+            translate_input_norm: inputNormalized,
+            translate_output_norm: outputNormalized
         };
 
         if (outcomesMatch) {
@@ -274,89 +332,91 @@ function mergeData(outcomes, translate, wsuOrg) {
     return merged;
 }
 
-function detectInvalidOrgIds(translate, wsuOrg) {
-    const wsuOrgIds = new Set();
+function detectInvalidTargets(translate, wsuOrg, keyConfig) {
+    const wsuKeys = new Set();
     wsuOrg.forEach(row => {
-        const normalized = normalizeOrgId(row['Org ID']);
-        if (!Number.isNaN(normalized)) {
-            wsuOrgIds.add(normalized);
+        const normalized = normalizeKeyValue(row[keyConfig.wsu]);
+        if (normalized) {
+            wsuKeys.add(normalized);
         }
     });
 
-    const invalidIds = [];
+    const invalidKeys = [];
     for (const row of translate) {
-        const orgId = normalizeOrgId(row.Output);
-        if (Number.isNaN(orgId) || !wsuOrgIds.has(orgId)) {
-            invalidIds.push(orgId);
+        const targetKey = normalizeKeyValue(row[keyConfig.translateOutput]);
+        if (!targetKey || !wsuKeys.has(targetKey)) {
+            invalidKeys.push(targetKey);
         }
     }
 
-    console.log(`[OK] Found ${invalidIds.length} invalid Org IDs`);
-    return invalidIds;
+    console.log(`[OK] Found ${invalidKeys.length} invalid target keys`);
+    return invalidKeys;
 }
 
-function detectDuplicateOrgIds(translate) {
-    const orgIdMap = {};
+function detectDuplicateTargets(translate, keyConfig) {
+    const targetMap = {};
 
     for (const row of translate) {
-        const orgId = normalizeOrgId(row.Output);
-        if (Number.isNaN(orgId)) {
+        const targetKey = normalizeKeyValue(row[keyConfig.translateOutput]);
+        const sourceKey = normalizeKeyValue(row[keyConfig.translateInput]);
+        if (!targetKey) {
             continue;
         }
-        const mdbCode = normalizeMdbCode(row.Input);
-
-        if (!orgIdMap[orgId]) {
-            orgIdMap[orgId] = [];
+        if (!targetMap[targetKey]) {
+            targetMap[targetKey] = [];
         }
-        orgIdMap[orgId].push(mdbCode);
+        targetMap[targetKey].push(sourceKey);
     }
 
     const duplicates = {};
-    for (const [orgId, codes] of Object.entries(orgIdMap)) {
-        if (codes.length > 1) {
-            duplicates[orgId] = codes;
+    for (const [target, sources] of Object.entries(targetMap)) {
+        if (sources.length > 1) {
+            duplicates[target] = sources;
         }
     }
 
     const totalDuplicateRows = Object.values(duplicates).reduce((sum, codes) => sum + codes.length, 0);
-    console.log(`[OK] Found ${Object.keys(duplicates).length} Org IDs with duplicates (${totalDuplicateRows} total rows)`);
+    console.log(`[OK] Found ${Object.keys(duplicates).length} target keys with duplicates (${totalDuplicateRows} total rows)`);
 
     return duplicates;
 }
 
-function detectDuplicateMdbCodes(translate) {
-    const mdbMap = {};
+function detectDuplicateSources(translate, keyConfig) {
+    const sourceMap = {};
 
     for (const row of translate) {
-        const mdbCode = normalizeMdbCode(row.Input);
-        const orgId = normalizeOrgId(row.Output);
-        if (!mdbMap[mdbCode]) {
-            mdbMap[mdbCode] = [];
+        const sourceKey = normalizeKeyValue(row[keyConfig.translateInput]);
+        const targetKey = normalizeKeyValue(row[keyConfig.translateOutput]);
+        if (!sourceKey) {
+            continue;
         }
-        if (!Number.isNaN(orgId)) {
-            mdbMap[mdbCode].push(orgId);
+        if (!sourceMap[sourceKey]) {
+            sourceMap[sourceKey] = [];
+        }
+        if (targetKey) {
+            sourceMap[sourceKey].push(targetKey);
         }
     }
 
     const duplicates = {};
-    for (const [code, orgIds] of Object.entries(mdbMap)) {
-        if (orgIds.length > 1) {
-            duplicates[code] = orgIds;
+    for (const [source, targets] of Object.entries(sourceMap)) {
+        if (targets.length > 1) {
+            duplicates[source] = targets;
         }
     }
 
-    console.log(`[OK] Found ${Object.keys(duplicates).length} mdb_codes with duplicate mappings`);
+    console.log(`[OK] Found ${Object.keys(duplicates).length} source keys with duplicate mappings`);
     return duplicates;
 }
 
-function detectOrphanedMappings(translate, outcomes) {
-    const outcomesCodes = new Set(outcomes.map(o => normalizeMdbCode(o.mdb_code)));
+function detectOrphanedMappings(translate, outcomes, keyConfig) {
+    const outcomesKeys = new Set(outcomes.map(o => normalizeKeyValue(o[keyConfig.outcomes])));
     const orphaned = [];
 
     for (const row of translate) {
-        const mdbCode = normalizeMdbCode(row.Input);
-        if (!outcomesCodes.has(mdbCode)) {
-            orphaned.push(mdbCode);
+        const sourceKey = normalizeKeyValue(row[keyConfig.translateInput]);
+        if (sourceKey && !outcomesKeys.has(sourceKey)) {
+            orphaned.push(sourceKey);
         }
     }
 
@@ -364,24 +424,27 @@ function detectOrphanedMappings(translate, outcomes) {
     return orphaned;
 }
 
-function detectMissingMappings(outcomes, translate) {
-    const translateCodes = new Set(translate.map(t => normalizeMdbCode(t.Input)));
-    const missing = outcomes.filter(o => !translateCodes.has(normalizeMdbCode(o.mdb_code)));
+function detectMissingMappings(outcomes, translate, keyConfig) {
+    const translateKeys = new Set(translate.map(t => normalizeKeyValue(t[keyConfig.translateInput])));
+    const missing = outcomes.filter(o => {
+        const key = normalizeKeyValue(o[keyConfig.outcomes]);
+        return key && !translateKeys.has(key);
+    });
 
     console.log(`[OK] Found ${missing.length} missing mappings`);
     return missing;
 }
 
-function validateMappings(merged, translate, outcomes, wsuOrg, nameCompare = {}) {
+function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCompare = {}) {
     console.log('\n=== Running Validation ===');
 
-    const invalidOrgIds = new Set(detectInvalidOrgIds(translate, wsuOrg));
-    const duplicateOrgIdsDict = detectDuplicateOrgIds(translate);
-    const duplicateMdbDict = detectDuplicateMdbCodes(translate);
-    const orphanedCodes = new Set(detectOrphanedMappings(translate, outcomes));
+    const invalidTargets = new Set(detectInvalidTargets(translate, wsuOrg, keyConfig));
+    const duplicateTargetsDict = detectDuplicateTargets(translate, keyConfig);
+    const duplicateSourcesDict = detectDuplicateSources(translate, keyConfig);
+    const orphanedSources = new Set(detectOrphanedMappings(translate, outcomes, keyConfig));
 
     const duplicateGroups = {};
-    const sortedDuplicates = Object.entries(duplicateOrgIdsDict)
+    const sortedDuplicates = Object.entries(duplicateTargetsDict)
         .sort((a, b) => b[1].length - a[1].length);
 
     sortedDuplicates.forEach(([orgId, codes], idx) => {
@@ -407,27 +470,27 @@ function validateMappings(merged, translate, outcomes, wsuOrg, nameCompare = {})
             Duplicate_Group: ''
         };
 
-        if (orphanedCodes.has(row.mdb_code)) {
+        if (orphanedSources.has(row.translate_input_norm)) {
             result.Error_Type = 'Orphaned_Mapping';
-            result.Error_Description = 'mdb_code does not exist in Outcomes.csv';
+            result.Error_Description = 'Source key does not exist in Outcomes data';
         }
 
-        if (invalidOrgIds.has(row.Output_numeric)) {
-            result.Error_Type = 'Invalid_OrgID';
-            result.Error_Description = 'Org ID does not exist in WSU_org.xlsx';
+        if (invalidTargets.has(row.translate_output_norm)) {
+            result.Error_Type = 'Invalid_Target';
+            result.Error_Description = 'Target key does not exist in myWSU data';
         }
 
-        const duplicateMdbCount = duplicateMdbDict[row.mdb_code]?.length || 0;
-        if (duplicateMdbCount > 1) {
-            result.Error_Type = 'Duplicate_mdb';
-            result.Error_Description = `mdb_code maps to ${duplicateMdbCount} different Org IDs`;
+        const duplicateSourceCount = duplicateSourcesDict[row.translate_input_norm]?.length || 0;
+        if (duplicateSourceCount > 1) {
+            result.Error_Type = 'Duplicate_Source';
+            result.Error_Description = `Source key maps to ${duplicateSourceCount} different target keys`;
         }
 
-        const duplicateCount = duplicateOrgIdsDict[row.Output_numeric]?.length || 0;
-        if (duplicateCount > 1) {
-            result.Error_Type = 'Duplicate_OrgID';
-            result.Error_Description = `Org ID maps to ${duplicateCount} different schools (one-to-many error)`;
-            result.Duplicate_Group = duplicateGroups[row.mdb_code] || '';
+        const duplicateTargetCount = duplicateTargetsDict[row.translate_output_norm]?.length || 0;
+        if (duplicateTargetCount > 1) {
+            result.Error_Type = 'Duplicate_Target';
+            result.Error_Description = `Target key maps to ${duplicateTargetCount} different source keys (one-to-many error)`;
+            result.Duplicate_Group = duplicateGroups[row.translate_input_norm] || '';
         }
 
         if (result.Error_Type === 'Valid' && canCompareNames && row[outcomesKey] && row[wsuKey]) {
@@ -490,9 +553,9 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
             error_percentage: Math.round(errorCount / totalMappings * 1000) / 10
         },
         errors: {
-            invalid_org_ids: errorCounts.Invalid_OrgID || 0,
-            duplicate_org_ids: errorCounts.Duplicate_OrgID || 0,
-            duplicate_mdb_codes: errorCounts.Duplicate_mdb || 0,
+            invalid_targets: errorCounts.Invalid_Target || 0,
+            duplicate_targets: errorCounts.Duplicate_Target || 0,
+            duplicate_sources: errorCounts.Duplicate_Source || 0,
             orphaned_mappings: errorCounts.Orphaned_Mapping || 0
         }
     };
@@ -502,15 +565,15 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
 
 function getErrorSamples(validated, limit = 10) {
     const samples = {};
-    const errorTypes = ['Invalid_OrgID', 'Duplicate_OrgID', 'Duplicate_mdb', 'Name_Mismatch', 'Orphaned_Mapping'];
+    const errorTypes = ['Invalid_Target', 'Duplicate_Target', 'Duplicate_Source', 'Name_Mismatch', 'Orphaned_Mapping'];
 
     errorTypes.forEach(errorType => {
         const rows = validated.filter(r => r.Error_Type === errorType);
         samples[errorType] = {
             count: rows.length,
             rows: rows.slice(0, limit).map(r => ({
-                mdb_code: r.mdb_code,
-                Org_ID_raw: r.Org_ID_raw,
+                translate_input: r.translate_input,
+                translate_output: r.translate_output,
                 Error_Description: r.Error_Description
             }))
         };

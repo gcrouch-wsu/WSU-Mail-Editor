@@ -23,6 +23,18 @@ let selectedColumns = {
     outcomes: [],
     wsu_org: []
 };
+let keyConfig = {
+    outcomes: '',
+    translateInput: '',
+    translateOutput: '',
+    wsu: ''
+};
+let keyLabels = {
+    outcomes: '',
+    translateInput: '',
+    translateOutput: '',
+    wsu: ''
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     setupFileUploads();
@@ -60,9 +72,7 @@ async function handleFileSelect(event, fileKey) {
         filenameSpan.textContent = file.name;
         statusDiv.classList.remove('hidden');
 
-        const data = await loadFile(file, {
-            expectedHeaders: fileKey === 'wsu_org' ? ['Org ID'] : []
-        });
+        const data = await loadFile(file);
 
         fileObjects[fileKey] = file;
         loadedData[fileKey] = data;
@@ -86,9 +96,12 @@ function processAllFiles() {
     try {
         const outcomesColumns = Object.keys(loadedData.outcomes[0] || {})
             .filter(col => !col.startsWith('Unnamed'));
+        const translateColumns = Object.keys(loadedData.translate[0] || {})
+            .filter(col => !col.startsWith('Unnamed'));
         const wsuOrgColumns = Object.keys(loadedData.wsu_org[0] || {})
             .filter(col => !col.startsWith('Unnamed'));
 
+        populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns);
         populateColumnSelection(outcomesColumns, wsuOrgColumns);
         populateNameCompareOptions(outcomesColumns, wsuOrgColumns);
 
@@ -113,6 +126,7 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
 
     const outcomesDiv = document.getElementById('outcomes-columns');
     outcomesDiv.innerHTML = '';
+    selectedColumns.outcomes = [];
     outcomesColumns.forEach(col => {
         const isChecked = defaultOutcomes.includes(col);
         const label = document.createElement('label');
@@ -131,6 +145,7 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
 
     const wsuOrgDiv = document.getElementById('wsu-org-columns');
     wsuOrgDiv.innerHTML = '';
+    selectedColumns.wsu_org = [];
     wsuOrgColumns.forEach(col => {
         const isChecked = defaultWsuOrg.includes(col);
         const label = document.createElement('label');
@@ -153,6 +168,129 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
     document.querySelectorAll('input[name="wsu-org-col"]').forEach(cb => {
         cb.addEventListener('change', updateSelectedColumns);
     });
+}
+
+function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) {
+    const outcomesSelect = document.getElementById('key-outcomes');
+    const translateInputSelect = document.getElementById('key-translate-input');
+    const translateOutputSelect = document.getElementById('key-translate-output');
+    const wsuSelect = document.getElementById('key-wsu');
+
+    if (!outcomesSelect || !translateInputSelect || !translateOutputSelect || !wsuSelect) {
+        return;
+    }
+
+    outcomesSelect.innerHTML = '<option value="">Select column</option>';
+    translateInputSelect.innerHTML = '<option value="">Select column</option>';
+    translateOutputSelect.innerHTML = '<option value="">Select column</option>';
+    wsuSelect.innerHTML = '<option value="">Select column</option>';
+
+    outcomesColumns.forEach(col => {
+        outcomesSelect.insertAdjacentHTML(
+            'beforeend',
+            `<option value="${col}">${col}</option>`
+        );
+    });
+    translateColumns.forEach(col => {
+        translateInputSelect.insertAdjacentHTML(
+            'beforeend',
+            `<option value="${col}">${col}</option>`
+        );
+        translateOutputSelect.insertAdjacentHTML(
+            'beforeend',
+            `<option value="${col}">${col}</option>`
+        );
+    });
+    wsuOrgColumns.forEach(col => {
+        wsuSelect.insertAdjacentHTML(
+            'beforeend',
+            `<option value="${col}">${col}</option>`
+        );
+    });
+
+    const findColumn = (columns, candidates) => {
+        const lowerMap = new Map(columns.map(col => [col.toLowerCase(), col]));
+        for (const candidate of candidates) {
+            const match = lowerMap.get(candidate.toLowerCase());
+            if (match) return match;
+        }
+        return '';
+    };
+
+    const defaultOutcomes = findColumn(outcomesColumns, [
+        'mdb_code',
+        'state',
+        'outcomes_state',
+        'outcomes state',
+        'input'
+    ]) || (outcomesColumns[0] || '');
+
+    const defaultTranslateInput = findColumn(translateColumns, [
+        'input',
+        'mdb_code',
+        'outcomes_state',
+        'outcomes state',
+        'state'
+    ]) || (translateColumns[0] || '');
+
+    const defaultTranslateOutput = findColumn(translateColumns, [
+        'output',
+        'org id',
+        'mywsu_state',
+        'mywsu state',
+        'state'
+    ]) || (translateColumns[1] || translateColumns[0] || '');
+
+    const defaultWsu = findColumn(wsuOrgColumns, [
+        'org id',
+        'state',
+        'mywsu_state',
+        'mywsu state'
+    ]) || (wsuOrgColumns[0] || '');
+
+    outcomesSelect.value = defaultOutcomes;
+    translateInputSelect.value = defaultTranslateInput;
+    translateOutputSelect.value = defaultTranslateOutput;
+    wsuSelect.value = defaultWsu;
+
+    keyConfig = {
+        outcomes: defaultOutcomes,
+        translateInput: defaultTranslateInput,
+        translateOutput: defaultTranslateOutput,
+        wsu: defaultWsu
+    };
+
+    keyLabels = {
+        outcomes: defaultOutcomes,
+        translateInput: defaultTranslateInput,
+        translateOutput: defaultTranslateOutput,
+        wsu: defaultWsu
+    };
+
+    [outcomesSelect, translateInputSelect, translateOutputSelect, wsuSelect].forEach(select => {
+        select.addEventListener('change', updateKeyConfig);
+    });
+}
+
+function updateKeyConfig() {
+    const outcomesSelect = document.getElementById('key-outcomes');
+    const translateInputSelect = document.getElementById('key-translate-input');
+    const translateOutputSelect = document.getElementById('key-translate-output');
+    const wsuSelect = document.getElementById('key-wsu');
+
+    keyConfig = {
+        outcomes: outcomesSelect?.value || '',
+        translateInput: translateInputSelect?.value || '',
+        translateOutput: translateOutputSelect?.value || '',
+        wsu: wsuSelect?.value || ''
+    };
+
+    keyLabels = {
+        outcomes: keyConfig.outcomes,
+        translateInput: keyConfig.translateInput,
+        translateOutput: keyConfig.translateOutput,
+        wsu: keyConfig.wsu
+    };
 }
 
 function updateSelectedColumns() {
@@ -241,34 +379,52 @@ async function runValidation() {
 
         await new Promise(resolve => setTimeout(resolve, 100));
 
-    const nameCompareEnabled = document.getElementById('name-compare-enabled')?.checked;
-    const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
-    const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
-    const nameCompareThreshold = parseFloat(
-        document.getElementById('name-compare-threshold')?.value || '0.5'
-    );
-
-    if (nameCompareEnabled && (!nameCompareOutcomes || !nameCompareWsu)) {
-        alert('Select both name columns or disable name comparison.');
-        return;
-    }
-
-    const merged = mergeData(loadedData.outcomes, loadedData.translate, loadedData.wsu_org);
-
-    validatedData = validateMappings(
-        merged,
-        loadedData.translate,
-        loadedData.outcomes,
-        loadedData.wsu_org,
-        {
-            enabled: Boolean(nameCompareEnabled),
-            outcomes_column: nameCompareOutcomes,
-            wsu_column: nameCompareWsu,
-            threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
+        updateKeyConfig();
+        if (!keyConfig.outcomes || !keyConfig.translateInput || !keyConfig.translateOutput || !keyConfig.wsu) {
+            alert('Select all key columns before validating.');
+            document.getElementById('loading').classList.add('hidden');
+            return;
         }
-    );
 
-        missingData = detectMissingMappings(loadedData.outcomes, loadedData.translate);
+        const nameCompareEnabled = document.getElementById('name-compare-enabled')?.checked;
+        const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
+        const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
+        const nameCompareThreshold = parseFloat(
+            document.getElementById('name-compare-threshold')?.value || '0.5'
+        );
+
+        if (nameCompareEnabled && (!nameCompareOutcomes || !nameCompareWsu)) {
+            alert('Select both name columns or disable name comparison.');
+            document.getElementById('loading').classList.add('hidden');
+            return;
+        }
+
+        const merged = mergeData(
+            loadedData.outcomes,
+            loadedData.translate,
+            loadedData.wsu_org,
+            keyConfig
+        );
+
+        validatedData = validateMappings(
+            merged,
+            loadedData.translate,
+            loadedData.outcomes,
+            loadedData.wsu_org,
+            keyConfig,
+            {
+                enabled: Boolean(nameCompareEnabled),
+                outcomes_column: nameCompareOutcomes,
+                wsu_column: nameCompareWsu,
+                threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
+            }
+        );
+
+        missingData = detectMissingMappings(
+            loadedData.outcomes,
+            loadedData.translate,
+            keyConfig
+        );
 
         stats = generateSummaryStats(validatedData, loadedData.outcomes, loadedData.translate, loadedData.wsu_org);
 
@@ -311,17 +467,17 @@ function createErrorChart(errors) {
 
     const data = {
         labels: [
-            'Invalid Org IDs',
-            'Duplicate Org IDs',
-            'Duplicate mdb_codes',
+            'Invalid Target Keys',
+            'Duplicate Target Keys',
+            'Duplicate Source Keys',
             'Orphaned Mappings'
         ],
         datasets: [{
             label: 'Error Count',
             data: [
-                errors.invalid_org_ids,
-                errors.duplicate_org_ids,
-                errors.duplicate_mdb_codes,
+                errors.invalid_targets,
+                errors.duplicate_targets,
+                errors.duplicate_sources,
                 errors.orphaned_mappings
             ],
             backgroundColor: [
@@ -375,9 +531,9 @@ function displayErrorDetails(errorSamples) {
     detailsDiv.innerHTML = '';
 
     const errorTypes = [
-        { key: 'Invalid_OrgID', title: 'Invalid Org IDs', color: 'red' },
-        { key: 'Duplicate_OrgID', title: 'Duplicate Org IDs (Many-to-One Errors)', color: 'orange' },
-        { key: 'Duplicate_mdb', title: 'Duplicate mdb_codes', color: 'red' },
+        { key: 'Invalid_Target', title: 'Invalid Target Keys', color: 'red' },
+        { key: 'Duplicate_Target', title: 'Duplicate Target Keys (Many-to-One Errors)', color: 'orange' },
+        { key: 'Duplicate_Source', title: 'Duplicate Source Keys', color: 'red' },
         { key: 'Name_Mismatch', title: 'Name Mismatches (Possible Wrong Mappings)', color: 'yellow' },
         { key: 'Orphaned_Mapping', title: 'Orphaned Mappings', color: 'yellow' }
     ];
@@ -399,29 +555,29 @@ function createErrorCard(title, sample, color) {
     };
 
     const explanations = {
-        'Invalid Org IDs': {
+        'Invalid Target Keys': {
             icon: '🔴',
-            text: 'These mappings point to WSU Org IDs that do not exist in WSU_org.xlsx. Integration will fail for these schools.',
+            text: 'These mappings point to target keys that do not exist in the myWSU table. Integration will fail for these records.',
             impact: 'Critical - Must be fixed to enable data sync'
         },
-        'Duplicate Org IDs (Many-to-One Errors)': {
+        'Duplicate Target Keys (Many-to-One Errors)': {
             icon: '🟠',
-            text: 'Multiple different mdb_codes map to the SAME WSU Org ID. Multiple schools are pointing to one organization.',
-            impact: 'Critical - Multiple schools\' data will be merged into one organization'
+            text: 'Multiple different source keys map to the SAME target key. Multiple Outcomes records are pointing to one myWSU record.',
+            impact: 'Critical - Multiple Outcomes records will be merged into one target record'
         },
-        'Duplicate mdb_codes': {
+        'Duplicate Source Keys': {
             icon: '',
-            text: 'The same mdb_code maps to multiple WSU Org IDs. This creates conflicting mappings for a single Outcomes school.',
-            impact: 'Critical - Fix conflicting mappings for the same school'
+            text: 'The same source key maps to multiple target keys. This creates conflicting mappings for a single Outcomes record.',
+            impact: 'Critical - Fix conflicting mappings for the same source record'
         },
         'Name Mismatches (Possible Wrong Mappings)': {
             icon: '⚠️',
-            text: 'School names do not match between Outcomes and WSU (less than 50% similarity). These may be incorrect mappings that need review.',
-            impact: 'Warning - Review these mappings to ensure correct organizations'
+            text: 'Names do not match between Outcomes and myWSU (below similarity threshold). These may be incorrect mappings that need review.',
+            impact: 'Warning - Review these mappings to ensure correct records'
         },
         'Orphaned Mappings': {
             icon: '🟡',
-            text: 'These mappings reference mdb_codes that no longer exist in Outcomes.csv. Clean up recommended.',
+            text: 'These mappings reference source keys that no longer exist in Outcomes. Clean up recommended.',
             impact: 'Warning - Clean up old data to maintain quality'
         }
     };
@@ -430,8 +586,8 @@ function createErrorCard(title, sample, color) {
 
     const rowsHtml = sample.rows.map(row => `
         <tr class="border-b">
-            <td class="py-2 px-4 text-sm">${row.mdb_code}</td>
-            <td class="py-2 px-4 text-sm">${row.Org_ID_raw}</td>
+            <td class="py-2 px-4 text-sm">${row.translate_input}</td>
+            <td class="py-2 px-4 text-sm">${row.translate_output}</td>
             <td class="py-2 px-4 text-sm">${row.Error_Description}</td>
         </tr>
     `).join('');
@@ -453,8 +609,8 @@ function createErrorCard(title, sample, color) {
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-100">
                         <tr>
-                            <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">mdb_code</th>
-                            <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">Org ID</th>
+                            <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">${keyLabels.translateInput || 'Source key'}</th>
+                            <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">${keyLabels.translateOutput || 'Target key'}</th>
                             <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
                         </tr>
                     </thead>
@@ -502,7 +658,7 @@ async function createExcelOutput(validated, missing, selectedCols) {
 
     const sheet1 = workbook.addWorksheet('Errors_in_Translate');
 
-    const outputColumns = ['Error_Type', 'Error_Description', 'Duplicate_Group', 'mdb_code', 'Org_ID_raw'];
+    const outputColumns = ['Error_Type', 'Error_Description', 'Duplicate_Group', 'translate_input', 'translate_output'];
 
     selectedCols.outcomes.forEach(col => {
         outputColumns.push(`outcomes_${col}`);
@@ -521,12 +677,18 @@ async function createExcelOutput(validated, missing, selectedCols) {
     });
 
     const headers = outputColumns.map(col => {
-        if (col === 'mdb_code') return 'mdb_code (Input)';
-        if (col === 'Org_ID_raw') return 'Org ID (Output)';
+        if (col === 'translate_input') return `${keyLabels.translateInput || 'Source key'} (Translate Input)`;
+        if (col === 'translate_output') return `${keyLabels.translateOutput || 'Target key'} (Translate Output)`;
         if (col === 'outcomes_name') return 'School Name (Outcomes)';
-        if (col === 'outcomes_mdb_code') return 'mdb_code (Outcomes)';
-        if (col === 'wsu_Descr') return 'Organization Name (WSU)';
-        if (col === 'wsu_Org ID') return 'Org ID (WSU)';
+        if (col === `outcomes_${keyLabels.outcomes}` && keyLabels.outcomes) {
+            return `${keyLabels.outcomes} (Outcomes Key)`;
+        }
+        if (col === 'outcomes_mdb_code') return 'Outcomes Key';
+        if (col === 'wsu_Descr') return 'Organization Name (myWSU)';
+        if (col === `wsu_${keyLabels.wsu}` && keyLabels.wsu) {
+            return `${keyLabels.wsu} (myWSU Key)`;
+        }
+        if (col === 'wsu_Org ID') return 'myWSU Key';
         return col;
     });
 
@@ -537,7 +699,10 @@ async function createExcelOutput(validated, missing, selectedCols) {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
         const errorCols = ['Error_Type', 'Error_Description', 'Duplicate_Group'];
-        const translateCols = ['mdb_code (Input)', 'Org ID (Output)'];
+        const translateCols = [
+            `${keyLabels.translateInput || 'Source key'} (Translate Input)`,
+            `${keyLabels.translateOutput || 'Target key'} (Translate Output)`
+        ];
 
         if (errorCols.includes(header)) {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } }; // Red
@@ -556,7 +721,7 @@ async function createExcelOutput(validated, missing, selectedCols) {
         if (['Error_Type', 'Error_Description', 'Duplicate_Group'].includes(col)) {
             return { argb: 'FFFEE2E2' };
         }
-        if (['mdb_code', 'Org_ID_raw'].includes(col)) {
+        if (['translate_input', 'translate_output'].includes(col)) {
             return { argb: 'FFDBEAFE' };
         }
         if (col.startsWith('outcomes_')) {
@@ -569,9 +734,9 @@ async function createExcelOutput(validated, missing, selectedCols) {
     });
 
     const rowBorderByError = {
-        Invalid_OrgID: 'FFEF4444',
-        Duplicate_OrgID: 'FFEF4444',
-        Duplicate_mdb: 'FFEF4444',
+        Invalid_Target: 'FFEF4444',
+        Duplicate_Target: 'FFEF4444',
+        Duplicate_Source: 'FFEF4444',
         Orphaned_Mapping: 'FFF59E0B',
         Name_Mismatch: 'FFF59E0B',
         Valid: 'FF16A34A'
@@ -615,9 +780,9 @@ async function createExcelOutput(validated, missing, selectedCols) {
 
     const sheet2 = workbook.addWorksheet('Missing_from_Translate');
 
-    const missingColumns = ['mdb_code'];
+    const missingColumns = [keyLabels.outcomes || 'Outcomes Key'];
     selectedCols.outcomes.forEach(col => {
-        if (col !== 'mdb_code') {
+        if (col !== keyLabels.outcomes) {
             missingColumns.push(col);
         }
     });
