@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 
-type ExportRow = Record<string, string | number>
+interface TranslationRow {
+  Input: string
+  Output: string
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const data: ExportRow[] = body.data || []
+    const data: TranslationRow[] = body.data || []
     const format: string = body.format || 'xlsx'
     const originalFilename: string = body.filename || 'processed_data'
 
@@ -42,13 +45,9 @@ export async function POST(request: NextRequest) {
       })
     } else if (format === 'txt') {
       // Convert to tab-delimited text (TSV)
-      const headers = Object.keys(data[0] || {})
       const tsvContent =
-        headers.join('\t') +
-        '\n' +
-        data
-          .map((row) => headers.map((header) => String(row[header] ?? '')).join('\t'))
-          .join('\n')
+        'Input\tOutput\n' +
+        data.map((row) => `${row.Input}\t${row.Output}`).join('\n')
 
       return new NextResponse(tsvContent, {
         headers: {
