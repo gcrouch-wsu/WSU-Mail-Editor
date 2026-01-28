@@ -321,8 +321,23 @@
 
                 <div class="space-y-4 text-sm text-blue-800">
                     <div>
-                        <strong class="text-red-700">Invalid Target Keys:</strong>
-                        <p class="mt-1">Rows in the Translation Table reference target keys that do not exist in the myWSU table. These mappings will fail during integration because the target record is missing.</p>
+                        <strong class="text-red-700">Missing Inputs:</strong>
+                        <p class="mt-1">Translation rows where the input/source key is blank.</p>
+                    </div>
+
+                    <div>
+                        <strong class="text-red-700">Missing Outputs:</strong>
+                        <p class="mt-1">Translation rows where the output/target key is blank.</p>
+                    </div>
+
+                    <div>
+                        <strong class="text-red-700">Inputs Not Found in Outcomes:</strong>
+                        <p class="mt-1">Translation inputs that do not exist in the Outcomes source data.</p>
+                    </div>
+
+                    <div>
+                        <strong class="text-red-700">Outputs Not Found in myWSU:</strong>
+                        <p class="mt-1">Translation outputs that do not exist in the myWSU data.</p>
                     </div>
 
                     <div>
@@ -333,11 +348,6 @@
                     <div>
                         <strong class="text-yellow-700">Name Mismatches:</strong>
                         <p class="mt-1">Names in Outcomes Source don't match names in myWSU (below the similarity threshold). Review these mappings to confirm they are correct.</p>
-                    </div>
-
-                    <div>
-                        <strong class="text-yellow-700">Orphaned Mappings in Translation Table:</strong>
-                        <p class="mt-1">The Translation Table contains source keys that don't exist in the Outcomes Source data. These should usually be cleaned up.</p>
                     </div>
 
                     <div>

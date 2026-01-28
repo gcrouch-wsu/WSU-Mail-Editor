@@ -467,30 +467,38 @@ function createErrorChart(errors) {
 
     const data = {
         labels: [
-            'Invalid Target Keys',
+            'Missing Inputs',
+            'Missing Outputs',
+            'Inputs Not Found',
+            'Outputs Not Found',
             'Duplicate Target Keys',
-            'Duplicate Source Keys',
-            'Orphaned Mappings'
+            'Duplicate Source Keys'
         ],
         datasets: [{
             label: 'Error Count',
             data: [
-                errors.invalid_targets,
+                errors.missing_inputs,
+                errors.missing_outputs,
+                errors.input_not_found,
+                errors.output_not_found,
                 errors.duplicate_targets,
-                errors.duplicate_sources,
-                errors.orphaned_mappings
+                errors.duplicate_sources
             ],
             backgroundColor: [
                 'rgba(239, 68, 68, 0.8)',   // Red
                 'rgba(249, 115, 22, 0.8)',  // Orange
                 'rgba(251, 191, 36, 0.8)',  // Yellow
-                'rgba(59, 130, 246, 0.8)'   // Blue
+                'rgba(59, 130, 246, 0.8)',  // Blue
+                'rgba(14, 116, 144, 0.8)',  // Teal
+                'rgba(94, 234, 212, 0.8)'   // Cyan
             ],
             borderColor: [
                 'rgb(239, 68, 68)',
                 'rgb(249, 115, 22)',
                 'rgb(251, 191, 36)',
-                'rgb(59, 130, 246)'
+                'rgb(59, 130, 246)',
+                'rgb(14, 116, 144)',
+                'rgb(94, 234, 212)'
             ],
             borderWidth: 2
         }]
@@ -531,11 +539,13 @@ function displayErrorDetails(errorSamples) {
     detailsDiv.innerHTML = '';
 
     const errorTypes = [
-        { key: 'Invalid_Target', title: 'Invalid Target Keys', color: 'red' },
-        { key: 'Duplicate_Target', title: 'Duplicate Target Keys (Many-to-One Errors)', color: 'orange' },
-        { key: 'Duplicate_Source', title: 'Duplicate Source Keys', color: 'red' },
+        { key: 'Missing_Input', title: 'Missing Inputs', color: 'red' },
+        { key: 'Missing_Output', title: 'Missing Outputs', color: 'red' },
+        { key: 'Input_Not_Found', title: 'Inputs Not Found in Outcomes', color: 'orange' },
+        { key: 'Output_Not_Found', title: 'Outputs Not Found in myWSU', color: 'orange' },
+        { key: 'Duplicate_Target', title: 'Duplicate Target Keys (Many-to-One Errors)', color: 'yellow' },
+        { key: 'Duplicate_Source', title: 'Duplicate Source Keys', color: 'yellow' },
         { key: 'Name_Mismatch', title: 'Name Mismatches (Possible Wrong Mappings)', color: 'yellow' },
-        { key: 'Orphaned_Mapping', title: 'Orphaned Mappings', color: 'yellow' }
     ];
 
     errorTypes.forEach(errorType => {
@@ -555,9 +565,24 @@ function createErrorCard(title, sample, color) {
     };
 
     const explanations = {
-        'Invalid Target Keys': {
+        'Missing Inputs': {
             icon: '🔴',
-            text: 'These mappings point to target keys that do not exist in the myWSU table. Integration will fail for these records.',
+            text: 'The translation table row is missing the input/source key.',
+            impact: 'Critical - Mapping cannot be used'
+        },
+        'Missing Outputs': {
+            icon: '🔴',
+            text: 'The translation table row is missing the output/target key.',
+            impact: 'Critical - Mapping cannot be used'
+        },
+        'Inputs Not Found in Outcomes': {
+            icon: '🔴',
+            text: 'Translation inputs do not exist in the Outcomes source data.',
+            impact: 'Critical - Must be fixed to enable data sync'
+        },
+        'Outputs Not Found in myWSU': {
+            icon: '🔴',
+            text: 'Translation outputs do not exist in the myWSU data.',
             impact: 'Critical - Must be fixed to enable data sync'
         },
         'Duplicate Target Keys (Many-to-One Errors)': {
@@ -575,11 +600,6 @@ function createErrorCard(title, sample, color) {
             text: 'Names do not match between Outcomes and myWSU (below similarity threshold). These may be incorrect mappings that need review.',
             impact: 'Warning - Review these mappings to ensure correct records'
         },
-        'Orphaned Mappings': {
-            icon: '🟡',
-            text: 'These mappings reference source keys that no longer exist in Outcomes. Clean up recommended.',
-            impact: 'Warning - Clean up old data to maintain quality'
-        }
     };
 
     const explanation = explanations[title] || { icon: '', text: '', impact: '' };
@@ -734,10 +754,12 @@ async function createExcelOutput(validated, missing, selectedCols) {
     });
 
     const rowBorderByError = {
-        Invalid_Target: 'FFEF4444',
-        Duplicate_Target: 'FFEF4444',
-        Duplicate_Source: 'FFEF4444',
-        Orphaned_Mapping: 'FFF59E0B',
+        Missing_Input: 'FFEF4444',
+        Missing_Output: 'FFEF4444',
+        Input_Not_Found: 'FFEF4444',
+        Output_Not_Found: 'FFEF4444',
+        Duplicate_Target: 'FFF59E0B',
+        Duplicate_Source: 'FFF59E0B',
         Name_Mismatch: 'FFF59E0B',
         Valid: 'FF16A34A'
     };
@@ -778,7 +800,7 @@ async function createExcelOutput(validated, missing, selectedCols) {
         column.width = Math.min(maxLength + 2, 50);
     });
 
-    const sheet2 = workbook.addWorksheet('Missing_from_Translate');
+    const sheet2 = workbook.addWorksheet('Missing_from_Translate_Outcomes');
 
     const missingColumns = [keyLabels.outcomes || 'Outcomes Key'];
     selectedCols.outcomes.forEach(col => {
@@ -822,6 +844,57 @@ async function createExcelOutput(validated, missing, selectedCols) {
         let maxLength = missingColumns[idx].length;
         missingRows.forEach(row => {
             const value = String(row[missingColumns[idx]] || '');
+            if (value.length > maxLength) {
+                maxLength = value.length;
+            }
+        });
+        column.width = Math.min(maxLength + 2, 50);
+    });
+
+    const validRows = validated.filter(row => row.Error_Type === 'Valid');
+    const sheet3 = workbook.addWorksheet('Valid_Mappings');
+    sheet3.addRow(headers);
+    headers.forEach((header, idx) => {
+        const cell = sheet3.getCell(1, idx + 1);
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+        const errorCols = ['Error_Type', 'Error_Description', 'Duplicate_Group'];
+        const translateCols = [
+            `${keyLabels.translateInput || 'Source key'} (Translate Input)`,
+            `${keyLabels.translateOutput || 'Target key'} (Translate Output)`
+        ];
+
+        if (errorCols.includes(header)) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16A34A' } };
+        } else if (translateCols.includes(header)) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+        } else if (outputColumns[idx].startsWith('outcomes_')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } };
+        } else if (outputColumns[idx].startsWith('wsu_')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC2410C' } };
+        } else {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF981e32' } };
+        }
+    });
+
+    validRows.forEach(row => {
+        const rowData = outputColumns.map(col => row[col]);
+        const excelRow = sheet3.addRow(rowData);
+        excelRow.eachCell((cell, colNumber) => {
+            const fill = sourceFillByColumn[colNumber - 1];
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fill };
+        });
+    });
+
+    sheet3.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet3.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: headers.length }
+    };
+    sheet3.columns.forEach((column, idx) => {
+        let maxLength = headers[idx].length;
+        validRows.forEach(row => {
+            const value = String(row[outputColumns[idx]] || '');
             if (value.length > maxLength) {
                 maxLength = value.length;
             }

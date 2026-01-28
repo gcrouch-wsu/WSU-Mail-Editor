@@ -344,7 +344,10 @@ function detectInvalidTargets(translate, wsuOrg, keyConfig) {
     const invalidKeys = [];
     for (const row of translate) {
         const targetKey = normalizeKeyValue(row[keyConfig.translateOutput]);
-        if (!targetKey || !wsuKeys.has(targetKey)) {
+        if (!targetKey) {
+            continue;
+        }
+        if (!wsuKeys.has(targetKey)) {
             invalidKeys.push(targetKey);
         }
     }
@@ -438,10 +441,19 @@ function detectMissingMappings(outcomes, translate, keyConfig) {
 function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCompare = {}) {
     console.log('\n=== Running Validation ===');
 
-    const invalidTargets = new Set(detectInvalidTargets(translate, wsuOrg, keyConfig));
     const duplicateTargetsDict = detectDuplicateTargets(translate, keyConfig);
     const duplicateSourcesDict = detectDuplicateSources(translate, keyConfig);
-    const orphanedSources = new Set(detectOrphanedMappings(translate, outcomes, keyConfig));
+
+    const outcomesKeys = new Set(
+        outcomes
+            .map(row => normalizeKeyValue(row[keyConfig.outcomes]))
+            .filter(Boolean)
+    );
+    const wsuKeys = new Set(
+        wsuOrg
+            .map(row => normalizeKeyValue(row[keyConfig.wsu]))
+            .filter(Boolean)
+    );
 
     const duplicateGroups = {};
     const sortedDuplicates = Object.entries(duplicateTargetsDict)
@@ -470,24 +482,34 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
             Duplicate_Group: ''
         };
 
-        if (orphanedSources.has(row.translate_input_norm)) {
-            result.Error_Type = 'Orphaned_Mapping';
-            result.Error_Description = 'Source key does not exist in Outcomes data';
+        if (!row.translate_input_norm) {
+            result.Error_Type = 'Missing_Input';
+            result.Error_Description = 'Translation input is missing';
         }
 
-        if (invalidTargets.has(row.translate_output_norm)) {
-            result.Error_Type = 'Invalid_Target';
-            result.Error_Description = 'Target key does not exist in myWSU data';
+        if (result.Error_Type === 'Valid' && !row.translate_output_norm) {
+            result.Error_Type = 'Missing_Output';
+            result.Error_Description = 'Translation output is missing';
+        }
+
+        if (result.Error_Type === 'Valid' && row.translate_input_norm && !outcomesKeys.has(row.translate_input_norm)) {
+            result.Error_Type = 'Input_Not_Found';
+            result.Error_Description = 'Translation input does not exist in Outcomes data';
+        }
+
+        if (result.Error_Type === 'Valid' && row.translate_output_norm && !wsuKeys.has(row.translate_output_norm)) {
+            result.Error_Type = 'Output_Not_Found';
+            result.Error_Description = 'Translation output does not exist in myWSU data';
         }
 
         const duplicateSourceCount = duplicateSourcesDict[row.translate_input_norm]?.length || 0;
-        if (duplicateSourceCount > 1) {
+        if (result.Error_Type === 'Valid' && row.translate_input_norm && duplicateSourceCount > 1) {
             result.Error_Type = 'Duplicate_Source';
             result.Error_Description = `Source key maps to ${duplicateSourceCount} different target keys`;
         }
 
         const duplicateTargetCount = duplicateTargetsDict[row.translate_output_norm]?.length || 0;
-        if (duplicateTargetCount > 1) {
+        if (result.Error_Type === 'Valid' && row.translate_output_norm && duplicateTargetCount > 1) {
             result.Error_Type = 'Duplicate_Target';
             result.Error_Description = `Target key maps to ${duplicateTargetCount} different source keys (one-to-many error)`;
             result.Duplicate_Group = duplicateGroups[row.translate_input_norm] || '';
@@ -553,10 +575,12 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
             error_percentage: Math.round(errorCount / totalMappings * 1000) / 10
         },
         errors: {
-            invalid_targets: errorCounts.Invalid_Target || 0,
+            missing_inputs: errorCounts.Missing_Input || 0,
+            missing_outputs: errorCounts.Missing_Output || 0,
+            input_not_found: errorCounts.Input_Not_Found || 0,
+            output_not_found: errorCounts.Output_Not_Found || 0,
             duplicate_targets: errorCounts.Duplicate_Target || 0,
-            duplicate_sources: errorCounts.Duplicate_Source || 0,
-            orphaned_mappings: errorCounts.Orphaned_Mapping || 0
+            duplicate_sources: errorCounts.Duplicate_Source || 0
         }
     };
 
@@ -565,7 +589,15 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
 
 function getErrorSamples(validated, limit = 10) {
     const samples = {};
-    const errorTypes = ['Invalid_Target', 'Duplicate_Target', 'Duplicate_Source', 'Name_Mismatch', 'Orphaned_Mapping'];
+    const errorTypes = [
+        'Missing_Input',
+        'Missing_Output',
+        'Input_Not_Found',
+        'Output_Not_Found',
+        'Duplicate_Target',
+        'Duplicate_Source',
+        'Name_Mismatch'
+    ];
 
     errorTypes.forEach(errorType => {
         const rows = validated.filter(r => r.Error_Type === errorType);
