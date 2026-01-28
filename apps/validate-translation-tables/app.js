@@ -703,6 +703,16 @@ function setupDownloadButton() {
 
 async function createExcelOutput(validated, missing, selectedCols) {
     const workbook = new ExcelJS.Workbook();
+    const normalizeKeyValue = (value) => {
+        if (value === null || value === undefined) return '';
+        const raw = String(value).trim();
+        if (raw === '') return '';
+        if (/^\d+$/.test(raw)) {
+            const cleaned = raw.replace(/^0+/, '');
+            return cleaned === '' ? '0' : cleaned;
+        }
+        return raw.toLowerCase();
+    };
 
     const sheet1 = workbook.addWorksheet('Errors_in_Translate');
 
@@ -923,6 +933,85 @@ async function createExcelOutput(validated, missing, selectedCols) {
         let maxLength = headers[idx].length;
         validRows.forEach(row => {
             const value = String(row[outputColumns[idx]] || '');
+            if (value.length > maxLength) {
+                maxLength = value.length;
+            }
+        });
+        column.width = Math.min(maxLength + 2, 50);
+    });
+
+    const cleanSheet = workbook.addWorksheet('Clean_Translate_Table');
+    const cleanHeaders = [
+        keyLabels.translateInput || 'Translate Input',
+        keyLabels.translateOutput || 'Translate Output',
+        'Notes'
+    ];
+    cleanSheet.addRow(cleanHeaders);
+    cleanHeaders.forEach((header, idx) => {
+        const cell = cleanSheet.getCell(1, idx + 1);
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+    });
+
+    const outcomesKeys = new Set(
+        loadedData.outcomes
+            .map(row => normalizeKeyValue(row[keyConfig.outcomes]))
+            .filter(Boolean)
+    );
+    const wsuKeys = new Set(
+        loadedData.wsu_org
+            .map(row => normalizeKeyValue(row[keyConfig.wsu]))
+            .filter(Boolean)
+    );
+
+    const translatePairs = new Set();
+    const translateInputs = new Set();
+    const translateOutputs = new Set();
+
+    loadedData.translate.forEach(row => {
+        const inputRaw = row[keyConfig.translateInput] ?? '';
+        const outputRaw = row[keyConfig.translateOutput] ?? '';
+        const inputNorm = normalizeKeyValue(inputRaw);
+        const outputNorm = normalizeKeyValue(outputRaw);
+        if (inputNorm) {
+            translateInputs.add(inputNorm);
+        }
+        if (outputNorm) {
+            translateOutputs.add(outputNorm);
+        }
+        if (inputNorm && outputNorm) {
+            translatePairs.add(`${inputNorm}::${outputNorm}`);
+        }
+
+        const inputDisplay = inputNorm && outcomesKeys.has(inputNorm) ? inputRaw : 'Not in Outcomes';
+        const outputDisplay = outputNorm && wsuKeys.has(outputNorm) ? outputRaw : '(Not in myWSU)';
+        const notes = [];
+        if (!inputNorm) notes.push('Missing input');
+        if (!outputNorm) notes.push('Missing output');
+        if (inputNorm && !outcomesKeys.has(inputNorm)) notes.push('Input not in Outcomes');
+        if (outputNorm && !wsuKeys.has(outputNorm)) notes.push('Output not in myWSU');
+        cleanSheet.addRow([inputDisplay, outputDisplay, notes.join(' | ')]);
+    });
+
+    const extraRows = [];
+    outcomesKeys.forEach(key => {
+        if (wsuKeys.has(key) && !translateInputs.has(key) && !translateOutputs.has(key)) {
+            extraRows.push([key, key, 'Present in Outcomes + myWSU; missing from translate']);
+        }
+    });
+    extraRows.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    extraRows.forEach(row => cleanSheet.addRow(row));
+
+    cleanSheet.views = [{ state: 'frozen', ySplit: 1 }];
+    cleanSheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: cleanHeaders.length }
+    };
+    cleanSheet.columns.forEach((column, idx) => {
+        let maxLength = cleanHeaders[idx].length;
+        cleanSheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return;
+            const value = String(row.getCell(idx + 1).value || '');
             if (value.length > maxLength) {
                 maxLength = value.length;
             }
