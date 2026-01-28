@@ -599,11 +599,15 @@ function getErrorSamples(validated, limit = 10) {
         'Name_Mismatch'
     ];
 
+    const resolvedLimit = limit && limit > 0 ? limit : null;
+
     errorTypes.forEach(errorType => {
         const rows = validated.filter(r => r.Error_Type === errorType);
+        const showing = resolvedLimit ? Math.min(rows.length, resolvedLimit) : rows.length;
         samples[errorType] = {
             count: rows.length,
-            rows: rows.slice(0, limit).map(r => ({
+            showing,
+            rows: rows.slice(0, showing).map(r => ({
                 translate_input: r.translate_input,
                 translate_output: r.translate_output,
                 Error_Description: r.Error_Description

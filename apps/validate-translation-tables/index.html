@@ -178,7 +178,7 @@
                 </svg>
             </button>
 
-            <div id="column-checkboxes" class="mt-4 hidden">
+            <div id="column-checkboxes" class="mt-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     
                     <div>
@@ -312,6 +312,13 @@
                 <canvas id="error-chart" height="100"></canvas>
             </div>
 
+            <div class="flex items-center justify-end mb-4">
+                <label class="flex items-center text-sm text-gray-700">
+                    <input id="show-all-errors" type="checkbox" class="mr-2">
+                    Show all errors in cards
+                </label>
+            </div>
+
             <div id="error-details" class="space-y-6 mb-8">
                 
             </div>
@@ -342,7 +349,12 @@
 
                     <div>
                         <strong class="text-orange-700">Duplicate Target Keys (Many-to-One):</strong>
-                        <p class="mt-1">Multiple different source keys in the Translation Table map to the same target key. This merges multiple Outcomes records into one myWSU record.</p>
+                        <p class="mt-1">Multiple different source keys map to the same target key, merging multiple Outcomes records into one myWSU record.</p>
+                    </div>
+
+                    <div>
+                        <strong class="text-orange-700">Duplicate Source Keys (One-to-Many):</strong>
+                        <p class="mt-1">A single source key maps to multiple target keys, creating conflicting mappings.</p>
                     </div>
 
                     <div>

@@ -23,6 +23,7 @@ let selectedColumns = {
     outcomes: [],
     wsu_org: []
 };
+let showAllErrors = false;
 let keyConfig = {
     outcomes: '',
     translateInput: '',
@@ -43,6 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupDownloadButton();
     setupResetButton();
     setupNameCompareControls();
+    setupShowAllErrorsToggle();
 });
 
 function setupFileUploads() {
@@ -359,11 +361,32 @@ function populateNameCompareOptions(outcomesColumns, wsuOrgColumns) {
 function setupColumnSelection() {
     const toggleBtn = document.getElementById('toggle-columns');
     const checkboxesDiv = document.getElementById('column-checkboxes');
+    if (!toggleBtn || !checkboxesDiv) return;
+
+    checkboxesDiv.classList.remove('hidden');
+    const svg = toggleBtn.querySelector('svg');
+    if (svg) {
+        svg.classList.add('rotate-180');
+    }
 
     toggleBtn.addEventListener('click', function() {
         checkboxesDiv.classList.toggle('hidden');
         const svg = toggleBtn.querySelector('svg');
-        svg.classList.toggle('rotate-180');
+        if (svg) {
+            svg.classList.toggle('rotate-180');
+        }
+    });
+}
+
+function setupShowAllErrorsToggle() {
+    const checkbox = document.getElementById('show-all-errors');
+    if (!checkbox) return;
+    checkbox.addEventListener('change', function() {
+        showAllErrors = checkbox.checked;
+        if (validatedData.length > 0) {
+            const limit = showAllErrors ? 0 : 10;
+            displayErrorDetails(getErrorSamples(validatedData, limit));
+        }
     });
 }
 
@@ -428,7 +451,8 @@ async function runValidation() {
 
         stats = generateSummaryStats(validatedData, loadedData.outcomes, loadedData.translate, loadedData.wsu_org);
 
-        const errorSamples = getErrorSamples(validatedData);
+    const limit = showAllErrors ? 0 : 10;
+    const errorSamples = getErrorSamples(validatedData, limit);
 
         document.getElementById('loading').classList.add('hidden');
 
@@ -612,6 +636,10 @@ function createErrorCard(title, sample, color) {
         </tr>
     `).join('');
 
+    const showingLine = sample.showing < sample.count
+        ? `Showing first ${sample.showing} of ${sample.count} errors - download Excel for complete list`
+        : `Showing all ${sample.count} errors`;
+
     return `
         <div class="bg-white rounded-lg shadow-md p-6 border-l-4 ${colorClasses[color]}">
             <div class="flex items-start justify-between mb-4">
@@ -624,7 +652,7 @@ function createErrorCard(title, sample, color) {
                     <span class="text-2xl font-bold text-${color}-700">${sample.count}</span>
                 </div>
             </div>
-            <p class="text-xs text-gray-500 mb-4">Showing first 10 of ${sample.count} errors - download Excel for complete list</p>
+            <p class="text-xs text-gray-500 mb-4">${showingLine}</p>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-100">
