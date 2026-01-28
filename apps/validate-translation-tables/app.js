@@ -838,7 +838,7 @@ async function createExcelOutput(validated, missing, selectedCols) {
         column.width = Math.min(maxLength + 2, 50);
     });
 
-    const sheet2 = workbook.addWorksheet('Missing_from_Translate_Outcomes');
+    const sheet2 = workbook.addWorksheet('In_Outcomes_Not_In_Translate');
 
     const missingColumns = [keyLabels.outcomes || 'Outcomes Key'];
     selectedCols.outcomes.forEach(col => {
@@ -1014,6 +1014,50 @@ async function createExcelOutput(validated, missing, selectedCols) {
             const value = String(row.getCell(idx + 1).value || '');
             if (value.length > maxLength) {
                 maxLength = value.length;
+            }
+        });
+        column.width = Math.min(maxLength + 2, 50);
+    });
+
+    const missingWsu = [];
+    const wsuAllKeys = new Set(
+        loadedData.wsu_org
+            .map(row => normalizeKeyValue(row[keyConfig.wsu]))
+            .filter(Boolean)
+    );
+    const translateOutputsForMissing = new Set(
+        loadedData.translate
+            .map(row => normalizeKeyValue(row[keyConfig.translateOutput]))
+            .filter(Boolean)
+    );
+    wsuAllKeys.forEach(key => {
+        if (!translateOutputsForMissing.has(key)) {
+            missingWsu.push(key);
+        }
+    });
+
+    const sheet4 = workbook.addWorksheet('In_myWSU_Not_In_Translate');
+    const wsuMissingHeader = [keyLabels.wsu || 'myWSU Key'];
+    sheet4.addRow(wsuMissingHeader);
+    wsuMissingHeader.forEach((header, idx) => {
+        const cell = sheet4.getCell(1, idx + 1);
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+    });
+    missingWsu.sort((a, b) => String(a).localeCompare(String(b))).forEach(key => {
+        sheet4.addRow([key]);
+    });
+    sheet4.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet4.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: wsuMissingHeader.length }
+    };
+    sheet4.columns.forEach((column, idx) => {
+        let maxLength = wsuMissingHeader[idx].length;
+        missingWsu.forEach(value => {
+            const text = String(value || '');
+            if (text.length > maxLength) {
+                maxLength = text.length;
             }
         });
         column.width = Math.min(maxLength + 2, 50);

@@ -50,8 +50,8 @@
                     <h3 class="text-sm font-medium text-blue-800">How to use this tool</h3>
                     <div class="mt-2 text-sm text-blue-700">
                         <p>1. Upload the Outcomes source, Translation table, and myWSU table</p>
-                        <p>2. Choose the key columns used to match Outcomes → Translation → myWSU</p>
-                        <p>3. (Optional) Select which columns to include in your report</p>
+                        <p>2. Select the required Match Keys (Outcomes, Translate input/output, myWSU)</p>
+                        <p>3. (Optional) Choose report columns to include in the export</p>
                         <p>4. Click "Validate Mappings" to identify errors</p>
                         <p>5. Review the error dashboard and download the Excel report</p>
                         <p class="mt-2 font-semibold">Privacy: All files are processed locally in your browser. No data is uploaded to any server.</p>
@@ -363,8 +363,12 @@
                     </div>
 
                     <div>
-                        <strong class="text-blue-700">Missing Mappings (Sheet 2):</strong>
+                        <strong class="text-blue-700">Missing Mappings (Sheet: In_Outcomes_Not_In_Translate):</strong>
                         <p class="mt-1">Outcomes records that have no entry in the Translation Table. These may be intentional but are listed for visibility.</p>
+                    </div>
+                    <div>
+                        <strong class="text-blue-700">Missing Mappings (Sheet: In_myWSU_Not_In_Translate):</strong>
+                        <p class="mt-1">myWSU records that are not referenced by any translation output. These may be intentional but are listed for visibility.</p>
                     </div>
                 </div>
 
