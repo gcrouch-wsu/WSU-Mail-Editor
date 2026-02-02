@@ -246,6 +246,20 @@
             <p id="validation-message" class="mt-2 text-sm text-gray-600"></p>
         </div>
 
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Generate Translation Table</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Use Outcomes + myWSU only. Select the key columns above, then generate a clean Input/Output table and
+                a separate error analysis that flags missing values.
+            </p>
+            <div class="text-center">
+                <button id="generate-btn" disabled class="bg-gray-400 text-white px-8 py-3 rounded-lg text-lg font-semibold shadow-lg cursor-not-allowed transition-all inline-flex items-center">
+                    Generate Translation Table
+                </button>
+                <p id="generate-message" class="mt-2 text-sm text-gray-600"></p>
+            </div>
+        </div>
+
         <div id="loading" class="hidden text-center py-8">
             <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-wsu-crimson"></div>
             <p class="mt-4 text-gray-600">Analyzing mappings...</p>

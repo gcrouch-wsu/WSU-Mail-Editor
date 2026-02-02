@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupFileUploads();
     setupColumnSelection();
     setupValidateButton();
+    setupGenerateButton();
     setupDownloadButton();
     setupResetButton();
     setupNameCompareControls();
@@ -82,9 +83,7 @@ async function handleFileSelect(event, fileKey) {
 
         rowsSpan.textContent = `${data.length} rows`;
 
-        if (filesUploaded.outcomes && filesUploaded.translate && filesUploaded.wsu_org) {
-            processAllFiles();
-        }
+        processAvailableFiles();
 
     } catch (error) {
         console.error(`Error loading ${fileKey}:`, error);
@@ -94,27 +93,60 @@ async function handleFileSelect(event, fileKey) {
     }
 }
 
-function processAllFiles() {
+function processAvailableFiles() {
     try {
-        const outcomesColumns = Object.keys(loadedData.outcomes[0] || {})
-            .filter(col => !col.startsWith('Unnamed'));
-        const translateColumns = Object.keys(loadedData.translate[0] || {})
-            .filter(col => !col.startsWith('Unnamed'));
-        const wsuOrgColumns = Object.keys(loadedData.wsu_org[0] || {})
-            .filter(col => !col.startsWith('Unnamed'));
+        const outcomesReady = filesUploaded.outcomes;
+        const translateReady = filesUploaded.translate;
+        const wsuReady = filesUploaded.wsu_org;
 
-        populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns);
-        populateColumnSelection(outcomesColumns, wsuOrgColumns);
-        populateNameCompareOptions(outcomesColumns, wsuOrgColumns);
+        if (!outcomesReady && !translateReady && !wsuReady) {
+            return;
+        }
 
-        document.getElementById('column-selection').classList.remove('hidden');
+        const outcomesColumns = outcomesReady
+            ? Object.keys(loadedData.outcomes[0] || {}).filter(col => !col.startsWith('Unnamed'))
+            : [];
+        const translateColumns = translateReady
+            ? Object.keys(loadedData.translate[0] || {}).filter(col => !col.startsWith('Unnamed'))
+            : [];
+        const wsuOrgColumns = wsuReady
+            ? Object.keys(loadedData.wsu_org[0] || {}).filter(col => !col.startsWith('Unnamed'))
+            : [];
+
+        if (outcomesReady && wsuReady) {
+            populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns);
+            populateColumnSelection(outcomesColumns, wsuOrgColumns);
+            populateNameCompareOptions(outcomesColumns, wsuOrgColumns);
+            document.getElementById('column-selection').classList.remove('hidden');
+        }
 
         const validateBtn = document.getElementById('validate-btn');
-        validateBtn.disabled = false;
-        validateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
-        validateBtn.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+        const validateMessage = document.getElementById('validation-message');
+        if (outcomesReady && translateReady && wsuReady) {
+            validateBtn.disabled = false;
+            validateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+            validateBtn.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+            validateMessage.textContent = 'Ready to validate!';
+        } else {
+            validateBtn.disabled = true;
+            validateBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+            validateBtn.classList.remove('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+            validateMessage.textContent = 'Upload Outcomes, Translation, and myWSU to validate.';
+        }
 
-        document.getElementById('validation-message').textContent = 'Ready to validate!';
+        const generateBtn = document.getElementById('generate-btn');
+        const generateMessage = document.getElementById('generate-message');
+        if (outcomesReady && wsuReady) {
+            generateBtn.disabled = false;
+            generateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+            generateBtn.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+            generateMessage.textContent = 'Ready to generate a clean translation table.';
+        } else {
+            generateBtn.disabled = true;
+            generateBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+            generateBtn.classList.remove('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+            generateMessage.textContent = 'Upload Outcomes + myWSU to generate a translation table.';
+        }
 
     } catch (error) {
         console.error('Error processing files:', error);
@@ -193,16 +225,31 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
             `<option value="${col}">${col}</option>`
         );
     });
-    translateColumns.forEach(col => {
+    if (translateColumns.length) {
+        translateColumns.forEach(col => {
+            translateInputSelect.insertAdjacentHTML(
+                'beforeend',
+                `<option value="${col}">${col}</option>`
+            );
+            translateOutputSelect.insertAdjacentHTML(
+                'beforeend',
+                `<option value="${col}">${col}</option>`
+            );
+        });
+        translateInputSelect.disabled = false;
+        translateOutputSelect.disabled = false;
+    } else {
         translateInputSelect.insertAdjacentHTML(
             'beforeend',
-            `<option value="${col}">${col}</option>`
+            '<option value="">Upload translation table to select</option>'
         );
         translateOutputSelect.insertAdjacentHTML(
             'beforeend',
-            `<option value="${col}">${col}</option>`
+            '<option value="">Upload translation table to select</option>'
         );
-    });
+        translateInputSelect.disabled = true;
+        translateOutputSelect.disabled = true;
+    }
     wsuOrgColumns.forEach(col => {
         wsuSelect.insertAdjacentHTML(
             'beforeend',
@@ -227,21 +274,25 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
         'input'
     ]) || (outcomesColumns[0] || '');
 
-    const defaultTranslateInput = findColumn(translateColumns, [
-        'input',
-        'mdb_code',
-        'outcomes_state',
-        'outcomes state',
-        'state'
-    ]) || (translateColumns[0] || '');
+    const defaultTranslateInput = translateColumns.length
+        ? (findColumn(translateColumns, [
+            'input',
+            'mdb_code',
+            'outcomes_state',
+            'outcomes state',
+            'state'
+        ]) || (translateColumns[0] || ''))
+        : '';
 
-    const defaultTranslateOutput = findColumn(translateColumns, [
-        'output',
-        'org id',
-        'mywsu_state',
-        'mywsu state',
-        'state'
-    ]) || (translateColumns[1] || translateColumns[0] || '');
+    const defaultTranslateOutput = translateColumns.length
+        ? (findColumn(translateColumns, [
+            'output',
+            'org id',
+            'mywsu_state',
+            'mywsu state',
+            'state'
+        ]) || (translateColumns[1] || translateColumns[0] || ''))
+        : '';
 
     const defaultWsu = findColumn(wsuOrgColumns, [
         'org id',
@@ -395,6 +446,12 @@ function setupValidateButton() {
     validateBtn.addEventListener('click', runValidation);
 }
 
+function setupGenerateButton() {
+    const generateBtn = document.getElementById('generate-btn');
+    if (!generateBtn) return;
+    generateBtn.addEventListener('click', runGeneration);
+}
+
 async function runValidation() {
     try {
         document.getElementById('loading').classList.remove('hidden');
@@ -463,6 +520,159 @@ async function runValidation() {
         alert(`Error running validation: ${error.message}`);
         document.getElementById('loading').classList.add('hidden');
     }
+}
+
+async function runGeneration() {
+    try {
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('results').classList.add('hidden');
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        updateKeyConfig();
+        if (!keyConfig.outcomes || !keyConfig.wsu) {
+            alert('Select Outcomes and myWSU key columns before generating.');
+            document.getElementById('loading').classList.add('hidden');
+            return;
+        }
+
+        const generated = generateTranslationTable(
+            loadedData.outcomes,
+            loadedData.wsu_org,
+            keyConfig
+        );
+
+        await createGeneratedTranslationExcel(generated.cleanRows, generated.errorRows);
+
+        document.getElementById('loading').classList.add('hidden');
+    } catch (error) {
+        console.error('Generation error:', error);
+        alert(`Error generating translation table: ${error.message}`);
+        document.getElementById('loading').classList.add('hidden');
+    }
+}
+
+function buildKeyValueMap(rows, keyField) {
+    const map = new Map();
+    rows.forEach(row => {
+        const raw = row[keyField];
+        const normalized = normalizeKeyValue(raw);
+        if (!normalized) {
+            return;
+        }
+        if (!map.has(normalized)) {
+            map.set(normalized, raw);
+        }
+    });
+    return map;
+}
+
+function generateTranslationTable(outcomes, wsuOrg, keyConfig) {
+    const outcomesMap = buildKeyValueMap(outcomes, keyConfig.outcomes);
+    const wsuMap = buildKeyValueMap(wsuOrg, keyConfig.wsu);
+    const allKeys = new Set([...outcomesMap.keys(), ...wsuMap.keys()]);
+
+    const cleanRows = [];
+    const errorRows = [];
+
+    Array.from(allKeys)
+        .sort((a, b) => String(a).localeCompare(String(b)))
+        .forEach(key => {
+            const inputRaw = outcomesMap.get(key) ?? '';
+            const outputRaw = wsuMap.get(key) ?? '';
+
+            cleanRows.push({
+                input: inputRaw,
+                output: outputRaw
+            });
+
+            if (!outcomesMap.has(key)) {
+                errorRows.push({
+                    normalized_key: key,
+                    missing_in: 'Outcomes',
+                    input: '',
+                    output: outputRaw
+                });
+            }
+            if (!wsuMap.has(key)) {
+                errorRows.push({
+                    normalized_key: key,
+                    missing_in: 'myWSU',
+                    input: inputRaw,
+                    output: ''
+                });
+            }
+        });
+
+    return { cleanRows, errorRows };
+}
+
+async function createGeneratedTranslationExcel(cleanRows, errorRows) {
+    const workbook = new ExcelJS.Workbook();
+
+    const inputHeader = keyLabels.outcomes || 'Outcomes Key';
+    const outputHeader = keyLabels.wsu || 'myWSU Key';
+
+    const cleanSheet = workbook.addWorksheet('Clean_Translation_Table');
+    cleanSheet.addRow([`${inputHeader} (Input)`, `${outputHeader} (Output)`]);
+    cleanSheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+    });
+    cleanRows.forEach(row => {
+        cleanSheet.addRow([row.input, row.output]);
+    });
+    cleanSheet.views = [{ state: 'frozen', ySplit: 1 }];
+    cleanSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 2 } };
+    cleanSheet.columns.forEach((column, idx) => {
+        let maxLength = cleanSheet.getRow(1).getCell(idx + 1).value.toString().length;
+        cleanSheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return;
+            const value = String(row.getCell(idx + 1).value || '');
+            if (value.length > maxLength) {
+                maxLength = value.length;
+            }
+        });
+        column.width = Math.min(maxLength + 2, 50);
+    });
+
+    const errorSheet = workbook.addWorksheet('Generation_Errors');
+    const errorHeaders = ['Normalized Key', 'Missing In', `${inputHeader} (Input)`, `${outputHeader} (Output)`];
+    errorSheet.addRow(errorHeaders);
+    errorSheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } };
+    });
+    errorRows.forEach(row => {
+        errorSheet.addRow([row.normalized_key, row.missing_in, row.input, row.output]);
+    });
+    errorSheet.views = [{ state: 'frozen', ySplit: 1 }];
+    errorSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: errorHeaders.length } };
+    errorSheet.columns.forEach((column, idx) => {
+        let maxLength = errorHeaders[idx].length;
+        errorSheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return;
+            const value = String(row.getCell(idx + 1).value || '');
+            if (value.length > maxLength) {
+                maxLength = value.length;
+            }
+        });
+        column.width = Math.min(maxLength + 2, 50);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Generated_Translation_Table.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
 }
 
 function displayResults(stats, errorSamples) {
