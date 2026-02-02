@@ -30,6 +30,7 @@ let keyConfig = {
     translateOutput: '',
     wsu: ''
 };
+let currentMode = 'validate';
 let keyLabels = {
     outcomes: '',
     translateInput: '',
@@ -38,6 +39,7 @@ let keyLabels = {
 };
 
 document.addEventListener('DOMContentLoaded', function() {
+    setupModeSelector();
     setupFileUploads();
     setupColumnSelection();
     setupValidateButton();
@@ -46,7 +48,66 @@ document.addEventListener('DOMContentLoaded', function() {
     setupResetButton();
     setupNameCompareControls();
     setupShowAllErrorsToggle();
+    updateModeUI();
 });
+
+function setupModeSelector() {
+    const validateRadio = document.getElementById('mode-validate');
+    const createRadio = document.getElementById('mode-create');
+    if (!validateRadio || !createRadio) return;
+
+    const handleModeChange = () => {
+        currentMode = validateRadio.checked ? 'validate' : 'create';
+        updateModeUI();
+        processAvailableFiles();
+    };
+
+    validateRadio.addEventListener('change', handleModeChange);
+    createRadio.addEventListener('change', handleModeChange);
+}
+
+function updateModeUI() {
+    const translateCard = document.getElementById('translate-upload-card');
+    const validateAction = document.getElementById('validate-action');
+    const generateAction = document.getElementById('generate-action');
+    const instructionsValidate = document.getElementById('instructions-validate');
+    const instructionsCreate = document.getElementById('instructions-create');
+    const nameCompare = document.getElementById('name-compare');
+    const toggleColumns = document.getElementById('toggle-columns');
+    const columnCheckboxes = document.getElementById('column-checkboxes');
+    const translateInputGroup = document.getElementById('translate-input-group');
+    const translateOutputGroup = document.getElementById('translate-output-group');
+
+    if (translateCard) {
+        translateCard.classList.toggle('hidden', currentMode === 'create');
+    }
+    if (validateAction) {
+        validateAction.classList.toggle('hidden', currentMode === 'create');
+    }
+    if (generateAction) {
+        generateAction.classList.toggle('hidden', currentMode === 'validate');
+    }
+    if (instructionsValidate && instructionsCreate) {
+        instructionsValidate.classList.toggle('hidden', currentMode === 'create');
+        instructionsCreate.classList.toggle('hidden', currentMode === 'validate');
+    }
+    if (nameCompare) {
+        nameCompare.classList.toggle('hidden', currentMode === 'create');
+    }
+    if (translateInputGroup) {
+        translateInputGroup.classList.toggle('hidden', currentMode === 'create');
+    }
+    if (translateOutputGroup) {
+        translateOutputGroup.classList.toggle('hidden', currentMode === 'create');
+    }
+    if (currentMode === 'create') {
+        if (toggleColumns) toggleColumns.classList.add('hidden');
+        if (columnCheckboxes) columnCheckboxes.classList.add('hidden');
+    } else {
+        if (toggleColumns) toggleColumns.classList.remove('hidden');
+        if (columnCheckboxes) columnCheckboxes.classList.remove('hidden');
+    }
+}
 
 function setupFileUploads() {
     const fileInputs = [
@@ -122,7 +183,7 @@ function processAvailableFiles() {
 
         const validateBtn = document.getElementById('validate-btn');
         const validateMessage = document.getElementById('validation-message');
-        if (outcomesReady && translateReady && wsuReady) {
+        if (currentMode === 'validate' && outcomesReady && translateReady && wsuReady) {
             validateBtn.disabled = false;
             validateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
             validateBtn.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
@@ -131,12 +192,14 @@ function processAvailableFiles() {
             validateBtn.disabled = true;
             validateBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
             validateBtn.classList.remove('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
-            validateMessage.textContent = 'Upload Outcomes, Translation, and myWSU to validate.';
+            validateMessage.textContent = currentMode === 'validate'
+                ? 'Upload Outcomes, Translation, and myWSU to validate.'
+                : 'Switch to Validate mode to run validation.';
         }
 
         const generateBtn = document.getElementById('generate-btn');
         const generateMessage = document.getElementById('generate-message');
-        if (outcomesReady && wsuReady) {
+        if (currentMode === 'create' && outcomesReady && wsuReady) {
             generateBtn.disabled = false;
             generateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
             generateBtn.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
@@ -145,7 +208,9 @@ function processAvailableFiles() {
             generateBtn.disabled = true;
             generateBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
             generateBtn.classList.remove('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
-            generateMessage.textContent = 'Upload Outcomes + myWSU to generate a translation table.';
+            generateMessage.textContent = currentMode === 'create'
+                ? 'Upload Outcomes + myWSU to generate a translation table.'
+                : 'Switch to Create mode to generate a translation table.';
         }
 
     } catch (error) {
@@ -454,6 +519,10 @@ function setupGenerateButton() {
 
 async function runValidation() {
     try {
+        if (currentMode !== 'validate') {
+            alert('Switch to Validate mode to run validation.');
+            return;
+        }
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('results').classList.add('hidden');
 
@@ -524,6 +593,10 @@ async function runValidation() {
 
 async function runGeneration() {
     try {
+        if (currentMode !== 'create') {
+            alert('Switch to Create mode to generate a translation table.');
+            return;
+        }
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('results').classList.add('hidden');
 
