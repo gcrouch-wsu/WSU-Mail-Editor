@@ -75,6 +75,7 @@ function updateModeUI() {
     const generateAction = document.getElementById('generate-action');
     const instructionsValidate = document.getElementById('instructions-validate');
     const instructionsCreate = document.getElementById('instructions-create');
+    const columnSelection = document.getElementById('column-selection');
     const nameCompare = document.getElementById('name-compare');
     const matchMethodSection = document.getElementById('match-method');
     const toggleColumns = document.getElementById('toggle-columns');
@@ -94,6 +95,11 @@ function updateModeUI() {
     if (instructionsValidate && instructionsCreate) {
         instructionsValidate.classList.toggle('hidden', currentMode === 'create');
         instructionsCreate.classList.toggle('hidden', currentMode === 'validate');
+    }
+    if (columnSelection) {
+        if (currentMode === 'create') {
+            columnSelection.classList.remove('hidden');
+        }
     }
     if (nameCompare) {
         nameCompare.classList.remove('hidden');
@@ -182,6 +188,8 @@ function processAvailableFiles() {
             populateNameCompareOptions(outcomesColumns, wsuOrgColumns);
             document.getElementById('column-selection').classList.remove('hidden');
             applyCreateDefaults(outcomesColumns, wsuOrgColumns);
+        } else if (currentMode === 'create') {
+            document.getElementById('column-selection').classList.remove('hidden');
         }
 
         const validateBtn = document.getElementById('validate-btn');
@@ -212,7 +220,7 @@ function processAvailableFiles() {
             generateBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
             generateBtn.classList.remove('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
             generateMessage.textContent = currentMode === 'create'
-                ? 'Upload Outcomes + myWSU to generate a translation table.'
+                ? 'Upload Outcomes + myWSU to populate match options.'
                 : 'Switch to Create mode to generate a translation table.';
         }
 
