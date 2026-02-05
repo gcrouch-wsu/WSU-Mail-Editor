@@ -153,51 +153,84 @@ function detectHeaderRowIndex(rows) {
 }
 
 function parseCSV(text) {
-    const lines = text.split(/\r?\n/).filter(line => line.trim());
-    if (lines.length === 0) return [];
+    const rows = parseCSVRows(text);
+    if (rows.length === 0) return [];
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+    const headers = rows[0].map(h => String(h || '').trim());
     const headerCells = headers.filter(cell => cell.length > 0);
     const headerHasAlpha = headerCells.some(cell => /[A-Za-z]/.test(cell));
     if (headerCells.length === 0 || !headerHasAlpha) {
         throw new Error('Header row not found.');
     }
-    const data = [];
 
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length === headers.length) {
-            const row = {};
-            headers.forEach((header, idx) => {
-                row[header] = values[idx];
-            });
-            data.push(row);
-        }
+    const data = [];
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
+        if (!values.length) continue;
+        const row = {};
+        headers.forEach((header, idx) => {
+            if (header) {
+                row[header] = values[idx] !== undefined ? values[idx] : '';
+            }
+        });
+        data.push(row);
     }
 
     return data;
 }
 
-function parseCSVLine(line) {
-    const values = [];
-    let current = '';
+function parseCSVRows(text) {
+    const rows = [];
+    let row = [];
+    let field = '';
     let inQuotes = false;
 
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
 
         if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-            values.push(current.trim().replace(/^["']|["']$/g, ''));
-            current = '';
-        } else {
-            current += char;
+            const nextChar = text[i + 1];
+            if (inQuotes && nextChar === '"') {
+                field += '"';
+                i += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (char === ',' && !inQuotes) {
+            row.push(field);
+            field = '';
+            continue;
+        }
+
+        if ((char === '\n' || char === '\r') && !inQuotes) {
+            if (char === '\r' && text[i + 1] === '\n') {
+                i += 1;
+            }
+            row.push(field);
+            const hasData = row.some(cell => String(cell || '').trim().length > 0);
+            if (hasData) {
+                rows.push(row.map(cell => String(cell || '').trim()));
+            }
+            row = [];
+            field = '';
+            continue;
+        }
+
+        field += char;
+    }
+
+    if (field.length || row.length) {
+        row.push(field);
+        const hasData = row.some(cell => String(cell || '').trim().length > 0);
+        if (hasData) {
+            rows.push(row.map(cell => String(cell || '').trim()));
         }
     }
 
-    values.push(current.trim().replace(/^["']|["']$/g, ''));
-    return values;
+    return rows;
 }
 
 function calculateNameSimilarity(name1, name2) {
