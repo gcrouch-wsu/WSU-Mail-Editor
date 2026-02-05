@@ -187,8 +187,10 @@ function processAvailableFiles() {
             ? Object.keys(loadedData.wsu_org[0] || {}).filter(col => !col.startsWith('Unnamed'))
             : [];
 
-        if (outcomesReady && wsuReady) {
+        if (outcomesReady || translateReady || wsuReady) {
             populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns);
+        }
+        if (outcomesReady || wsuReady) {
             populateColumnSelection(outcomesColumns, wsuOrgColumns);
             populateNameCompareOptions(outcomesColumns, wsuOrgColumns);
             document.getElementById('column-selection').classList.remove('hidden');
@@ -268,40 +270,48 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
     const outcomesDiv = document.getElementById('outcomes-columns');
     outcomesDiv.innerHTML = '';
     selectedColumns.outcomes = [];
-    outcomesColumns.forEach(col => {
-        const isChecked = defaultOutcomes.includes(col);
-        const label = document.createElement('label');
-        label.className = 'flex items-center';
-        label.innerHTML = `
-            <input type="checkbox" name="outcomes-col" value="${col}" ${isChecked ? 'checked' : ''}
-                   class="rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson">
-            <span class="ml-2 text-sm text-gray-700">${col}</span>
-        `;
-        outcomesDiv.appendChild(label);
+    if (!outcomesColumns.length) {
+        outcomesDiv.innerHTML = '<p class="text-xs text-gray-500">Upload Outcomes to see columns.</p>';
+    } else {
+        outcomesColumns.forEach(col => {
+            const isChecked = defaultOutcomes.includes(col);
+            const label = document.createElement('label');
+            label.className = 'flex items-center';
+            label.innerHTML = `
+                <input type="checkbox" name="outcomes-col" value="${col}" ${isChecked ? 'checked' : ''}
+                       class="rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson">
+                <span class="ml-2 text-sm text-gray-700">${col}</span>
+            `;
+            outcomesDiv.appendChild(label);
 
-        if (isChecked) {
-            selectedColumns.outcomes.push(col);
-        }
-    });
+            if (isChecked) {
+                selectedColumns.outcomes.push(col);
+            }
+        });
+    }
 
     const wsuOrgDiv = document.getElementById('wsu-org-columns');
     wsuOrgDiv.innerHTML = '';
     selectedColumns.wsu_org = [];
-    wsuOrgColumns.forEach(col => {
-        const isChecked = defaultWsuOrg.includes(col);
-        const label = document.createElement('label');
-        label.className = 'flex items-center';
-        label.innerHTML = `
-            <input type="checkbox" name="wsu-org-col" value="${col}" ${isChecked ? 'checked' : ''}
-                   class="rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson">
-            <span class="ml-2 text-sm text-gray-700">${col}</span>
-        `;
-        wsuOrgDiv.appendChild(label);
+    if (!wsuOrgColumns.length) {
+        wsuOrgDiv.innerHTML = '<p class="text-xs text-gray-500">Upload myWSU to see columns.</p>';
+    } else {
+        wsuOrgColumns.forEach(col => {
+            const isChecked = defaultWsuOrg.includes(col);
+            const label = document.createElement('label');
+            label.className = 'flex items-center';
+            label.innerHTML = `
+                <input type="checkbox" name="wsu-org-col" value="${col}" ${isChecked ? 'checked' : ''}
+                       class="rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson">
+                <span class="ml-2 text-sm text-gray-700">${col}</span>
+            `;
+            wsuOrgDiv.appendChild(label);
 
-        if (isChecked) {
-            selectedColumns.wsu_org.push(col);
-        }
-    });
+            if (isChecked) {
+                selectedColumns.wsu_org.push(col);
+            }
+        });
+    }
 
     document.querySelectorAll('input[name="outcomes-col"]').forEach(cb => {
         cb.addEventListener('change', updateSelectedColumns);
@@ -326,12 +336,21 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
     translateOutputSelect.innerHTML = '<option value="">Select column</option>';
     wsuSelect.innerHTML = '<option value="">Select column</option>';
 
-    outcomesColumns.forEach(col => {
+    if (outcomesColumns.length) {
+        outcomesColumns.forEach(col => {
+            outcomesSelect.insertAdjacentHTML(
+                'beforeend',
+                `<option value="${col}">${col}</option>`
+            );
+        });
+        outcomesSelect.disabled = false;
+    } else {
         outcomesSelect.insertAdjacentHTML(
             'beforeend',
-            `<option value="${col}">${col}</option>`
+            '<option value="">Upload Outcomes to select</option>'
         );
-    });
+        outcomesSelect.disabled = true;
+    }
     if (translateColumns.length) {
         translateColumns.forEach(col => {
             translateInputSelect.insertAdjacentHTML(
@@ -357,12 +376,21 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
         translateInputSelect.disabled = true;
         translateOutputSelect.disabled = true;
     }
-    wsuOrgColumns.forEach(col => {
+    if (wsuOrgColumns.length) {
+        wsuOrgColumns.forEach(col => {
+            wsuSelect.insertAdjacentHTML(
+                'beforeend',
+                `<option value="${col}">${col}</option>`
+            );
+        });
+        wsuSelect.disabled = false;
+    } else {
         wsuSelect.insertAdjacentHTML(
             'beforeend',
-            `<option value="${col}">${col}</option>`
+            '<option value="">Upload myWSU to select</option>'
         );
-    });
+        wsuSelect.disabled = true;
+    }
 
     const findColumn = (columns, candidates) => {
         const lowerMap = new Map(columns.map(col => [col.toLowerCase(), col]));
@@ -487,18 +515,36 @@ function populateNameCompareOptions(outcomesColumns, wsuOrgColumns) {
     outcomesSelect.innerHTML = '<option value="">Select column</option>';
     wsuSelect.innerHTML = '<option value="">Select column</option>';
 
-    outcomesColumns.forEach(col => {
+    if (outcomesColumns.length) {
+        outcomesColumns.forEach(col => {
+            outcomesSelect.insertAdjacentHTML(
+                'beforeend',
+                `<option value="${col}">${col}</option>`
+            );
+        });
+        outcomesSelect.disabled = false;
+    } else {
         outcomesSelect.insertAdjacentHTML(
             'beforeend',
-            `<option value="${col}">${col}</option>`
+            '<option value="">Upload Outcomes to select</option>'
         );
-    });
-    wsuOrgColumns.forEach(col => {
+        outcomesSelect.disabled = true;
+    }
+    if (wsuOrgColumns.length) {
+        wsuOrgColumns.forEach(col => {
+            wsuSelect.insertAdjacentHTML(
+                'beforeend',
+                `<option value="${col}">${col}</option>`
+            );
+        });
+        wsuSelect.disabled = false;
+    } else {
         wsuSelect.insertAdjacentHTML(
             'beforeend',
-            `<option value="${col}">${col}</option>`
+            '<option value="">Upload myWSU to select</option>'
         );
-    });
+        wsuSelect.disabled = true;
+    }
 
     const defaultOutcomes = outcomesColumns.includes('name') ? 'name' : '';
     const defaultWsu = wsuOrgColumns.includes('Descr') ? 'Descr' : '';
