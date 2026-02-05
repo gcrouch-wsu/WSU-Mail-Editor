@@ -39,6 +39,11 @@ let keyLabels = {
     wsu: ''
 };
 let matchMethodTouched = false;
+let debugState = {
+    outcomes: null,
+    translate: null,
+    wsu_org: null
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     setupModeSelector();
@@ -47,6 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupValidateButton();
     setupGenerateButton();
     setupMatchMethodControls();
+    setupDebugToggle();
     setupDownloadButton();
     setupResetButton();
     setupNameCompareControls();
@@ -120,6 +126,7 @@ function updateModeUI() {
         keyMatchFields.classList.remove('hidden');
     }
     updateMatchMethodUI();
+    renderDebugPanel();
 }
 
 function setupFileUploads() {
@@ -135,6 +142,58 @@ function setupFileUploads() {
             await handleFileSelect(e, input.key);
         });
     });
+}
+
+function setupDebugToggle() {
+    const toggle = document.getElementById('debug-toggle');
+    const previewToggle = document.getElementById('debug-preview-toggle');
+    if (!toggle) return;
+    toggle.addEventListener('change', renderDebugPanel);
+    if (previewToggle) {
+        previewToggle.addEventListener('change', renderDebugPanel);
+    }
+}
+
+function renderDebugPanel() {
+    const toggle = document.getElementById('debug-toggle');
+    const panel = document.getElementById('debug-panel');
+    const previewToggle = document.getElementById('debug-preview-toggle');
+    if (!toggle || !panel) return;
+    panel.classList.toggle('hidden', !toggle.checked);
+    if (!toggle.checked) return;
+    const showPreview = previewToggle ? previewToggle.checked : true;
+
+    const format = (entry) => {
+        if (!entry) return 'No data loaded.';
+        const lines = [
+            `File: ${entry.filename || 'Unknown'}`,
+            `Rows: ${entry.rows}`,
+            `Columns: ${entry.columns.join(', ') || 'None'}`
+        ];
+        if (showPreview) {
+            lines.push('Preview:', JSON.stringify(entry.preview, null, 2));
+        }
+        return lines.join('\n');
+    };
+
+    const outcomesEl = document.getElementById('debug-outcomes');
+    const translateEl = document.getElementById('debug-translate');
+    const wsuEl = document.getElementById('debug-wsu');
+    if (outcomesEl) outcomesEl.textContent = format(debugState.outcomes);
+    if (translateEl) translateEl.textContent = format(debugState.translate);
+    if (wsuEl) wsuEl.textContent = format(debugState.wsu_org);
+}
+
+function updateDebugState(fileKey, file, data) {
+    const columns = Object.keys(data[0] || {}).filter(col => !col.startsWith('Unnamed'));
+    const preview = data.slice(0, 5);
+    debugState[fileKey] = {
+        filename: file?.name || '',
+        rows: data.length,
+        columns,
+        preview
+    };
+    renderDebugPanel();
 }
 
 async function handleFileSelect(event, fileKey) {
@@ -154,6 +213,7 @@ async function handleFileSelect(event, fileKey) {
         fileObjects[fileKey] = file;
         loadedData[fileKey] = data;
         filesUploaded[fileKey] = true;
+        updateDebugState(fileKey, file, data);
 
         rowsSpan.textContent = `${data.length} rows`;
 

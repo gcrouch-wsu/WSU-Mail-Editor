@@ -12,14 +12,19 @@ async function loadFile(file, options = {}) {
             reader.onload = (e) => {
                 try {
                     const text = e.target.result;
-                    if (typeof XLSX !== 'undefined') {
-                        const workbook = XLSX.read(text, { type: 'string' });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const data = sheetToJsonWithHeaderDetection(firstSheet, expectedHeaders);
-                        resolve(data);
-                    } else {
+                    try {
                         const data = parseCSV(text);
                         resolve(data);
+                        return;
+                    } catch (parseError) {
+                        if (typeof XLSX !== 'undefined') {
+                            const workbook = XLSX.read(text, { type: 'string' });
+                            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                            const data = sheetToJsonWithHeaderDetection(firstSheet, expectedHeaders);
+                            resolve(data);
+                            return;
+                        }
+                        throw parseError;
                     }
                 } catch (error) {
                     reject(new Error(`Error parsing CSV: ${error.message}`));
@@ -157,6 +162,9 @@ function parseCSV(text) {
     if (rows.length === 0) return [];
 
     const headers = rows[0].map(h => String(h || '').trim());
+    if (headers.length && headers[0]) {
+        headers[0] = headers[0].replace(/^\uFEFF/, '');
+    }
     const headerCells = headers.filter(cell => cell.length > 0);
     const headerHasAlpha = headerCells.some(cell => /[A-Za-z]/.test(cell));
     if (headerCells.length === 0 || !headerHasAlpha) {
