@@ -31,6 +31,7 @@ let keyConfig = {
     wsu: ''
 };
 let currentMode = 'validate';
+let matchMethod = 'key';
 let keyLabels = {
     outcomes: '',
     translateInput: '',
@@ -44,6 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupColumnSelection();
     setupValidateButton();
     setupGenerateButton();
+    setupMatchMethodControls();
     setupDownloadButton();
     setupResetButton();
     setupNameCompareControls();
@@ -73,6 +75,7 @@ function updateModeUI() {
     const instructionsValidate = document.getElementById('instructions-validate');
     const instructionsCreate = document.getElementById('instructions-create');
     const nameCompare = document.getElementById('name-compare');
+    const matchMethodSection = document.getElementById('match-method');
     const toggleColumns = document.getElementById('toggle-columns');
     const columnCheckboxes = document.getElementById('column-checkboxes');
     const translateInputGroup = document.getElementById('translate-input-group');
@@ -93,6 +96,9 @@ function updateModeUI() {
     }
     if (nameCompare) {
         nameCompare.classList.remove('hidden');
+    }
+    if (matchMethodSection) {
+        matchMethodSection.classList.toggle('hidden', currentMode !== 'create');
     }
     if (translateInputGroup) {
         translateInputGroup.classList.toggle('hidden', currentMode === 'create');
@@ -512,6 +518,24 @@ function setupGenerateButton() {
     generateBtn.addEventListener('click', runGeneration);
 }
 
+function setupMatchMethodControls() {
+    const keyRadio = document.getElementById('match-method-key');
+    const nameRadio = document.getElementById('match-method-name');
+    const nameEnabled = document.getElementById('name-compare-enabled');
+    if (!keyRadio || !nameRadio) return;
+
+    const syncMethod = () => {
+        matchMethod = nameRadio.checked ? 'name' : 'key';
+        if (matchMethod === 'name' && nameEnabled) {
+            nameEnabled.checked = true;
+            updateNameCompareState();
+        }
+    };
+
+    keyRadio.addEventListener('change', syncMethod);
+    nameRadio.addEventListener('change', syncMethod);
+}
+
 async function runValidation() {
     try {
         if (currentMode !== 'validate') {
@@ -608,8 +632,9 @@ async function runGeneration() {
 
         const hasKeyConfig = Boolean(keyConfig.outcomes && keyConfig.wsu);
         const canNameMatch = Boolean(nameCompareEnabled && nameCompareOutcomes && nameCompareWsu);
+        const forceNameMatch = matchMethod === 'name';
 
-        if (!hasKeyConfig && !canNameMatch) {
+        if ((forceNameMatch && !canNameMatch) || (!forceNameMatch && !hasKeyConfig && !canNameMatch)) {
             alert('Select key columns or enable name comparison to generate a table.');
             document.getElementById('loading').classList.add('hidden');
             return;
@@ -630,6 +655,9 @@ async function runGeneration() {
                 outcomes_column: nameCompareOutcomes,
                 wsu_column: nameCompareWsu,
                 threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
+            },
+            {
+                forceNameMatch
             }
         );
 
@@ -683,12 +711,13 @@ function findBestNameMatch(sourceName, targetEntries, nameField, threshold, used
     return best;
 }
 
-function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {}) {
+function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {}, options = {}) {
     const nameCompareEnabled = Boolean(nameCompare.enabled);
     const outcomesNameField = nameCompare.outcomes_column || '';
     const wsuNameField = nameCompare.wsu_column || '';
     const threshold = typeof nameCompare.threshold === 'number' ? nameCompare.threshold : 0.5;
     const canNameMatch = nameCompareEnabled && outcomesNameField && wsuNameField;
+    const forceNameMatch = Boolean(options.forceNameMatch);
 
     const headerLabels = {
         input: keyLabels.outcomes || outcomesNameField || 'Outcomes Key',
@@ -698,7 +727,7 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {})
     const cleanRows = [];
     const errorRows = [];
 
-    if (!keyConfig.outcomes || !keyConfig.wsu) {
+    if (forceNameMatch || !keyConfig.outcomes || !keyConfig.wsu) {
         if (!canNameMatch) {
             return { cleanRows, errorRows, selectedColumns, headerLabels };
         }
