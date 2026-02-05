@@ -92,7 +92,7 @@ function updateModeUI() {
         instructionsCreate.classList.toggle('hidden', currentMode === 'validate');
     }
     if (nameCompare) {
-        nameCompare.classList.toggle('hidden', currentMode === 'create');
+        nameCompare.classList.remove('hidden');
     }
     if (translateInputGroup) {
         translateInputGroup.classList.toggle('hidden', currentMode === 'create');
@@ -100,13 +100,8 @@ function updateModeUI() {
     if (translateOutputGroup) {
         translateOutputGroup.classList.toggle('hidden', currentMode === 'create');
     }
-    if (currentMode === 'create') {
-        if (toggleColumns) toggleColumns.classList.add('hidden');
-        if (columnCheckboxes) columnCheckboxes.classList.add('hidden');
-    } else {
-        if (toggleColumns) toggleColumns.classList.remove('hidden');
-        if (columnCheckboxes) columnCheckboxes.classList.remove('hidden');
-    }
+    if (toggleColumns) toggleColumns.classList.remove('hidden');
+    if (columnCheckboxes) columnCheckboxes.classList.remove('hidden');
 }
 
 function setupFileUploads() {
@@ -609,13 +604,36 @@ async function runGeneration() {
             return;
         }
 
+        const nameCompareEnabled = document.getElementById('name-compare-enabled')?.checked;
+        const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
+        const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
+        const nameCompareThreshold = parseFloat(
+            document.getElementById('name-compare-threshold')?.value || '0.5'
+        );
+
+        if (nameCompareEnabled && (!nameCompareOutcomes || !nameCompareWsu)) {
+            alert('Select both name columns or disable name comparison.');
+            document.getElementById('loading').classList.add('hidden');
+            return;
+        }
+
         const generated = generateTranslationTable(
             loadedData.outcomes,
             loadedData.wsu_org,
-            keyConfig
+            keyConfig,
+            {
+                enabled: Boolean(nameCompareEnabled),
+                outcomes_column: nameCompareOutcomes,
+                wsu_column: nameCompareWsu,
+                threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
+            }
         );
 
-        await createGeneratedTranslationExcel(generated.cleanRows, generated.errorRows);
+        await createGeneratedTranslationExcel(
+            generated.cleanRows,
+            generated.errorRows,
+            generated.selectedColumns
+        );
 
         document.getElementById('loading').classList.add('hidden');
     } catch (error) {
@@ -634,13 +652,33 @@ function buildKeyValueMap(rows, keyField) {
             return;
         }
         if (!map.has(normalized)) {
-            map.set(normalized, raw);
+            map.set(normalized, row);
         }
     });
     return map;
 }
 
-function generateTranslationTable(outcomes, wsuOrg, keyConfig) {
+function findBestNameMatch(sourceName, targetEntries, nameField, threshold, usedKeys) {
+    if (!sourceName) return null;
+    let best = null;
+    let bestScore = -1;
+    targetEntries.forEach(({ key, row }) => {
+        if (usedKeys.has(key)) return;
+        const targetName = row[nameField];
+        if (!targetName) return;
+        const score = calculateNameSimilarity(sourceName, targetName);
+        if (score > bestScore) {
+            bestScore = score;
+            best = { key, row, score };
+        }
+    });
+    if (!best || best.score < threshold) {
+        return null;
+    }
+    return best;
+}
+
+function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {}) {
     const outcomesMap = buildKeyValueMap(outcomes, keyConfig.outcomes);
     const wsuMap = buildKeyValueMap(wsuOrg, keyConfig.wsu);
     const allKeys = new Set([...outcomesMap.keys(), ...wsuMap.keys()]);
@@ -648,55 +686,158 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig) {
     const cleanRows = [];
     const errorRows = [];
 
+    const nameCompareEnabled = Boolean(nameCompare.enabled);
+    const outcomesNameField = nameCompare.outcomes_column || '';
+    const wsuNameField = nameCompare.wsu_column || '';
+    const threshold = typeof nameCompare.threshold === 'number' ? nameCompare.threshold : 0.5;
+    const canNameMatch = nameCompareEnabled && outcomesNameField && wsuNameField;
+
+    const outcomesEntries = Array.from(outcomesMap.entries()).map(([key, row]) => ({ key, row }));
+    const wsuEntries = Array.from(wsuMap.entries()).map(([key, row]) => ({ key, row }));
+    const usedOutcomes = new Set();
+    const usedWsu = new Set();
+
     Array.from(allKeys)
         .sort((a, b) => String(a).localeCompare(String(b)))
         .forEach(key => {
-            const inputRaw = outcomesMap.get(key) ?? '';
-            const outputRaw = wsuMap.get(key) ?? '';
+            let outcomesRow = outcomesMap.get(key) || null;
+            let wsuRow = wsuMap.get(key) || null;
+            let matchMethod = '';
 
-            cleanRows.push({
+            if (outcomesRow) {
+                usedOutcomes.add(key);
+            }
+            if (wsuRow) {
+                usedWsu.add(key);
+            }
+
+            if (outcomesRow && wsuRow) {
+                matchMethod = 'Key';
+            } else if (canNameMatch) {
+                if (outcomesRow && !wsuRow) {
+                    const match = findBestNameMatch(
+                        outcomesRow[outcomesNameField],
+                        wsuEntries,
+                        wsuNameField,
+                        threshold,
+                        usedWsu
+                    );
+                    if (match) {
+                        wsuRow = match.row;
+                        usedWsu.add(match.key);
+                        matchMethod = 'Name';
+                    }
+                } else if (!outcomesRow && wsuRow) {
+                    const match = findBestNameMatch(
+                        wsuRow[wsuNameField],
+                        outcomesEntries,
+                        outcomesNameField,
+                        threshold,
+                        usedOutcomes
+                    );
+                    if (match) {
+                        outcomesRow = match.row;
+                        usedOutcomes.add(match.key);
+                        matchMethod = 'Name';
+                    }
+                }
+            }
+
+            const inputRaw = outcomesRow ? outcomesRow[keyConfig.outcomes] : '';
+            const outputRaw = wsuRow ? wsuRow[keyConfig.wsu] : '';
+
+            const rowData = {
                 input: inputRaw,
-                output: outputRaw
+                output: outputRaw,
+                match_method: matchMethod || (inputRaw || outputRaw ? 'Key' : '')
+            };
+
+            selectedColumns.outcomes.forEach(col => {
+                rowData[`outcomes_${col}`] = outcomesRow ? outcomesRow[col] ?? '' : '';
+            });
+            selectedColumns.wsu_org.forEach(col => {
+                rowData[`wsu_${col}`] = wsuRow ? wsuRow[col] ?? '' : '';
             });
 
-            if (!outcomesMap.has(key)) {
-                errorRows.push({
+            cleanRows.push(rowData);
+
+            if (!outcomesRow) {
+                const errorRow = {
                     normalized_key: key,
                     missing_in: 'Outcomes',
                     input: '',
                     output: outputRaw
+                };
+                selectedColumns.outcomes.forEach(col => {
+                    errorRow[`outcomes_${col}`] = '';
                 });
+                selectedColumns.wsu_org.forEach(col => {
+                    errorRow[`wsu_${col}`] = wsuRow ? wsuRow[col] ?? '' : '';
+                });
+                errorRows.push(errorRow);
             }
-            if (!wsuMap.has(key)) {
-                errorRows.push({
+            if (!wsuRow) {
+                const errorRow = {
                     normalized_key: key,
                     missing_in: 'myWSU',
                     input: inputRaw,
                     output: ''
+                };
+                selectedColumns.outcomes.forEach(col => {
+                    errorRow[`outcomes_${col}`] = outcomesRow ? outcomesRow[col] ?? '' : '';
                 });
+                selectedColumns.wsu_org.forEach(col => {
+                    errorRow[`wsu_${col}`] = '';
+                });
+                errorRows.push(errorRow);
             }
         });
 
-    return { cleanRows, errorRows };
+    return { cleanRows, errorRows, selectedColumns };
 }
 
-async function createGeneratedTranslationExcel(cleanRows, errorRows) {
+async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCols) {
     const workbook = new ExcelJS.Workbook();
 
     const inputHeader = keyLabels.outcomes || 'Outcomes Key';
     const outputHeader = keyLabels.wsu || 'myWSU Key';
 
     const cleanSheet = workbook.addWorksheet('Clean_Translation_Table');
-    cleanSheet.addRow([`${inputHeader} (Input)`, `${outputHeader} (Output)`]);
+    const cleanHeaders = [
+        `${inputHeader} (Input)`,
+        `${outputHeader} (Output)`,
+        'Match Method'
+    ];
+    selectedCols.outcomes.forEach(col => {
+        cleanHeaders.push(`Outcomes: ${col}`);
+    });
+    selectedCols.wsu_org.forEach(col => {
+        cleanHeaders.push(`myWSU: ${col}`);
+    });
+    cleanSheet.addRow(cleanHeaders);
     cleanSheet.getRow(1).eachCell(cell => {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
     });
     cleanRows.forEach(row => {
-        cleanSheet.addRow([row.input, row.output]);
+        const rowData = [
+            row.input,
+            row.output,
+            row.match_method
+        ];
+        selectedCols.outcomes.forEach(col => {
+            rowData.push(row[`outcomes_${col}`] ?? '');
+        });
+        selectedCols.wsu_org.forEach(col => {
+            rowData.push(row[`wsu_${col}`] ?? '');
+        });
+        cleanSheet.addRow(rowData);
     });
     cleanSheet.views = [{ state: 'frozen', ySplit: 1 }];
-    cleanSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 2 } };
+    cleanSheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: cleanHeaders.length }
+    };
     cleanSheet.columns.forEach((column, idx) => {
         let maxLength = cleanSheet.getRow(1).getCell(idx + 1).value.toString().length;
         cleanSheet.eachRow((row, rowNumber) => {
@@ -710,14 +851,37 @@ async function createGeneratedTranslationExcel(cleanRows, errorRows) {
     });
 
     const errorSheet = workbook.addWorksheet('Generation_Errors');
-    const errorHeaders = ['Normalized Key', 'Missing In', `${inputHeader} (Input)`, `${outputHeader} (Output)`];
+    const errorHeaders = [
+        'Normalized Key',
+        'Missing In',
+        `${inputHeader} (Input)`,
+        `${outputHeader} (Output)`
+    ];
+    selectedCols.outcomes.forEach(col => {
+        errorHeaders.push(`Outcomes: ${col}`);
+    });
+    selectedCols.wsu_org.forEach(col => {
+        errorHeaders.push(`myWSU: ${col}`);
+    });
     errorSheet.addRow(errorHeaders);
     errorSheet.getRow(1).eachCell(cell => {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } };
     });
     errorRows.forEach(row => {
-        errorSheet.addRow([row.normalized_key, row.missing_in, row.input, row.output]);
+        const rowData = [
+            row.normalized_key,
+            row.missing_in,
+            row.input,
+            row.output
+        ];
+        selectedCols.outcomes.forEach(col => {
+            rowData.push(row[`outcomes_${col}`] ?? '');
+        });
+        selectedCols.wsu_org.forEach(col => {
+            rowData.push(row[`wsu_${col}`] ?? '');
+        });
+        errorSheet.addRow(rowData);
     });
     errorSheet.views = [{ state: 'frozen', ySplit: 1 }];
     errorSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: errorHeaders.length } };
