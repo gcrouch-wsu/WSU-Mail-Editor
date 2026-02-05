@@ -82,6 +82,7 @@ function updateModeUI() {
     const columnCheckboxes = document.getElementById('column-checkboxes');
     const translateInputGroup = document.getElementById('translate-input-group');
     const translateOutputGroup = document.getElementById('translate-output-group');
+    const keyMatchFields = document.getElementById('key-match-fields');
 
     if (translateCard) {
         translateCard.classList.toggle('hidden', currentMode === 'create');
@@ -115,6 +116,10 @@ function updateModeUI() {
     }
     if (toggleColumns) toggleColumns.classList.remove('hidden');
     if (columnCheckboxes) columnCheckboxes.classList.remove('hidden');
+    if (keyMatchFields && currentMode !== 'create') {
+        keyMatchFields.classList.remove('hidden');
+    }
+    updateMatchMethodUI();
 }
 
 function setupFileUploads() {
@@ -239,8 +244,7 @@ function applyCreateDefaults(outcomesColumns, wsuOrgColumns) {
     }
     const keyRadio = document.getElementById('match-method-key');
     const nameRadio = document.getElementById('match-method-name');
-    const nameEnabled = document.getElementById('name-compare-enabled');
-    if (!keyRadio || !nameRadio || !nameEnabled) {
+    if (!keyRadio || !nameRadio) {
         return;
     }
     const hasKeyDefaults = Boolean(keyConfig.outcomes && keyConfig.wsu);
@@ -252,8 +256,8 @@ function applyCreateDefaults(outcomesColumns, wsuOrgColumns) {
         nameRadio.checked = true;
         keyRadio.checked = false;
         matchMethod = 'name';
-        nameEnabled.checked = true;
         updateNameCompareState();
+        updateMatchMethodUI();
     }
 }
 
@@ -457,34 +461,28 @@ function updateSelectedColumns() {
 }
 
 function setupNameCompareControls() {
-    const enabledCheckbox = document.getElementById('name-compare-enabled');
     const fields = document.getElementById('name-compare-fields');
-    if (!enabledCheckbox || !fields) return;
-
-    enabledCheckbox.addEventListener('change', function() {
-        updateNameCompareState();
-    });
+    if (!fields) return;
+    updateNameCompareState();
 }
 
 function updateNameCompareState() {
-    const enabledCheckbox = document.getElementById('name-compare-enabled');
     const fields = document.getElementById('name-compare-fields');
-    if (!enabledCheckbox || !fields) return;
+    if (!fields) return;
 
     const controls = fields.querySelectorAll('select, input');
     controls.forEach(control => {
-        control.disabled = !enabledCheckbox.checked;
+        control.disabled = false;
     });
-    fields.classList.toggle('opacity-50', !enabledCheckbox.checked);
+    fields.classList.remove('opacity-50');
 }
 
 function populateNameCompareOptions(outcomesColumns, wsuOrgColumns) {
     const outcomesSelect = document.getElementById('name-compare-outcomes');
     const wsuSelect = document.getElementById('name-compare-wsu');
     const thresholdInput = document.getElementById('name-compare-threshold');
-    const enabledCheckbox = document.getElementById('name-compare-enabled');
 
-    if (!outcomesSelect || !wsuSelect || !thresholdInput || !enabledCheckbox) return;
+    if (!outcomesSelect || !wsuSelect || !thresholdInput) return;
 
     outcomesSelect.innerHTML = '<option value="">Select column</option>';
     wsuSelect.innerHTML = '<option value="">Select column</option>';
@@ -507,7 +505,6 @@ function populateNameCompareOptions(outcomesColumns, wsuOrgColumns) {
     if (defaultOutcomes) outcomesSelect.value = defaultOutcomes;
     if (defaultWsu) wsuSelect.value = defaultWsu;
 
-    enabledCheckbox.checked = Boolean(defaultOutcomes && defaultWsu);
     thresholdInput.value = '0.5';
     updateNameCompareState();
 }
@@ -558,20 +555,30 @@ function setupGenerateButton() {
 function setupMatchMethodControls() {
     const keyRadio = document.getElementById('match-method-key');
     const nameRadio = document.getElementById('match-method-name');
-    const nameEnabled = document.getElementById('name-compare-enabled');
     if (!keyRadio || !nameRadio) return;
 
     const syncMethod = () => {
         matchMethodTouched = true;
         matchMethod = nameRadio.checked ? 'name' : 'key';
-        if (matchMethod === 'name' && nameEnabled) {
-            nameEnabled.checked = true;
-            updateNameCompareState();
-        }
+        updateMatchMethodUI();
     };
 
     keyRadio.addEventListener('change', syncMethod);
     nameRadio.addEventListener('change', syncMethod);
+}
+
+function updateMatchMethodUI() {
+    if (currentMode !== 'create') {
+        return;
+    }
+    const keyMatchFields = document.getElementById('key-match-fields');
+    const nameCompare = document.getElementById('name-compare');
+    if (keyMatchFields) {
+        keyMatchFields.classList.toggle('hidden', matchMethod === 'name');
+    }
+    if (nameCompare) {
+        nameCompare.classList.toggle('hidden', matchMethod === 'key');
+    }
 }
 
 async function runValidation() {
@@ -592,14 +599,14 @@ async function runValidation() {
             return;
         }
 
-        const nameCompareEnabled = document.getElementById('name-compare-enabled')?.checked;
         const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
         const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
         const nameCompareThreshold = parseFloat(
             document.getElementById('name-compare-threshold')?.value || '0.5'
         );
 
-        if (nameCompareEnabled && (!nameCompareOutcomes || !nameCompareWsu)) {
+        const nameCompareEnabled = Boolean(nameCompareOutcomes && nameCompareWsu);
+        if (!nameCompareEnabled && (nameCompareOutcomes || nameCompareWsu)) {
             alert('Select both name columns or disable name comparison.');
             document.getElementById('loading').classList.add('hidden');
             return;
@@ -661,13 +668,13 @@ async function runGeneration() {
 
         updateKeyConfig();
 
-        const nameCompareEnabled = document.getElementById('name-compare-enabled')?.checked;
         const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
         const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
         const nameCompareThreshold = parseFloat(
             document.getElementById('name-compare-threshold')?.value || '0.5'
         );
 
+        const nameCompareEnabled = Boolean(nameCompareOutcomes && nameCompareWsu);
         const hasKeyConfig = Boolean(keyConfig.outcomes && keyConfig.wsu);
         const canNameMatch = Boolean(nameCompareEnabled && nameCompareOutcomes && nameCompareWsu);
         const forceNameMatch = matchMethod === 'name';
