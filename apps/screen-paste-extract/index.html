@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Screen Paste Extract</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <main class="container">
+        <header class="header">
+            <h1>Screen Paste Extract</h1>
+            <p>Paste Canvas People page text and extract the column data.</p>
+        </header>
+
+        <section class="card">
+            <h2>Paste Data</h2>
+            <textarea id="raw-text" rows="14" placeholder="Paste the Canvas People page content here..."></textarea>
+            <div class="actions">
+                <button id="extract-btn" type="button">Extract Table</button>
+            </div>
+        </section>
+
+        <section id="summary-card" class="card hidden">
+            <h2>Summary</h2>
+            <div class="summary-grid">
+                <div>
+                    <span class="label">Rows</span>
+                    <span id="summary-total" class="value">0</span>
+                </div>
+                <div>
+                    <span class="label">Missing Login ID</span>
+                    <span id="summary-missing-login" class="value">0</span>
+                </div>
+                <div>
+                    <span class="label">Missing SIS ID</span>
+                    <span id="summary-missing-sis" class="value">0</span>
+                </div>
+                <div>
+                    <span class="label">Missing Section</span>
+                    <span id="summary-missing-section" class="value">0</span>
+                </div>
+                <div>
+                    <span class="label">Missing Role</span>
+                    <span id="summary-missing-role" class="value">0</span>
+                </div>
+            </div>
+            <div class="download-actions">
+                <button id="download-btn" type="button">Download CSV</button>
+            </div>
+        </section>
+
+        <section id="table-card" class="card hidden">
+            <h2>Extracted Table</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Login ID</th>
+                            <th>SIS ID</th>
+                            <th>Section</th>
+                            <th>Role</th>
+                            <th>Last Activity</th>
+                            <th>Total Activity</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
