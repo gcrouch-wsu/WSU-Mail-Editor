@@ -38,6 +38,7 @@ let keyLabels = {
     translateOutput: '',
     wsu: ''
 };
+let matchMethodTouched = false;
 
 document.addEventListener('DOMContentLoaded', function() {
     setupModeSelector();
@@ -180,6 +181,7 @@ function processAvailableFiles() {
             populateColumnSelection(outcomesColumns, wsuOrgColumns);
             populateNameCompareOptions(outcomesColumns, wsuOrgColumns);
             document.getElementById('column-selection').classList.remove('hidden');
+            applyCreateDefaults(outcomesColumns, wsuOrgColumns);
         }
 
         const validateBtn = document.getElementById('validate-btn');
@@ -204,7 +206,7 @@ function processAvailableFiles() {
             generateBtn.disabled = false;
             generateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
             generateBtn.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
-            generateMessage.textContent = 'Ready to generate a clean translation table.';
+            generateMessage.textContent = 'Choose match method and columns, then generate.';
         } else {
             generateBtn.disabled = true;
             generateBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
@@ -217,6 +219,33 @@ function processAvailableFiles() {
     } catch (error) {
         console.error('Error processing files:', error);
         alert('Error processing files. Please try again.');
+    }
+}
+
+function applyCreateDefaults(outcomesColumns, wsuOrgColumns) {
+    if (currentMode !== 'create') {
+        return;
+    }
+    if (matchMethodTouched) {
+        return;
+    }
+    const keyRadio = document.getElementById('match-method-key');
+    const nameRadio = document.getElementById('match-method-name');
+    const nameEnabled = document.getElementById('name-compare-enabled');
+    if (!keyRadio || !nameRadio || !nameEnabled) {
+        return;
+    }
+    const hasKeyDefaults = Boolean(keyConfig.outcomes && keyConfig.wsu);
+    const hasNameDefaults = Boolean(
+        outcomesColumns.includes('name') &&
+        wsuOrgColumns.includes('Descr')
+    );
+    if (!hasKeyDefaults && hasNameDefaults) {
+        nameRadio.checked = true;
+        keyRadio.checked = false;
+        matchMethod = 'name';
+        nameEnabled.checked = true;
+        updateNameCompareState();
     }
 }
 
@@ -525,6 +554,7 @@ function setupMatchMethodControls() {
     if (!keyRadio || !nameRadio) return;
 
     const syncMethod = () => {
+        matchMethodTouched = true;
         matchMethod = nameRadio.checked ? 'name' : 'key';
         if (matchMethod === 'name' && nameEnabled) {
             nameEnabled.checked = true;
