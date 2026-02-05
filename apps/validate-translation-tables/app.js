@@ -77,6 +77,7 @@ function setupModeSelector() {
 
 function updateModeUI() {
     const translateCard = document.getElementById('translate-upload-card');
+    const outcomesCard = document.getElementById('outcomes-upload-card');
     const validateAction = document.getElementById('validate-action');
     const generateAction = document.getElementById('generate-action');
     const instructionsValidate = document.getElementById('instructions-validate');
@@ -92,6 +93,9 @@ function updateModeUI() {
 
     if (translateCard) {
         translateCard.classList.toggle('hidden', currentMode === 'create');
+    }
+    if (outcomesCard) {
+        outcomesCard.classList.remove('hidden');
     }
     if (validateAction) {
         validateAction.classList.toggle('hidden', currentMode === 'create');
