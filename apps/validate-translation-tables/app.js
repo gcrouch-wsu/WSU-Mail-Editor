@@ -598,11 +598,6 @@ async function runGeneration() {
         await new Promise(resolve => setTimeout(resolve, 100));
 
         updateKeyConfig();
-        if (!keyConfig.outcomes || !keyConfig.wsu) {
-            alert('Select Outcomes and myWSU key columns before generating.');
-            document.getElementById('loading').classList.add('hidden');
-            return;
-        }
 
         const nameCompareEnabled = document.getElementById('name-compare-enabled')?.checked;
         const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
@@ -610,6 +605,15 @@ async function runGeneration() {
         const nameCompareThreshold = parseFloat(
             document.getElementById('name-compare-threshold')?.value || '0.5'
         );
+
+        const hasKeyConfig = Boolean(keyConfig.outcomes && keyConfig.wsu);
+        const canNameMatch = Boolean(nameCompareEnabled && nameCompareOutcomes && nameCompareWsu);
+
+        if (!hasKeyConfig && !canNameMatch) {
+            alert('Select key columns or enable name comparison to generate a table.');
+            document.getElementById('loading').classList.add('hidden');
+            return;
+        }
 
         if (nameCompareEnabled && (!nameCompareOutcomes || !nameCompareWsu)) {
             alert('Select both name columns or disable name comparison.');
@@ -632,7 +636,8 @@ async function runGeneration() {
         await createGeneratedTranslationExcel(
             generated.cleanRows,
             generated.errorRows,
-            generated.selectedColumns
+            generated.selectedColumns,
+            generated.headerLabels
         );
 
         document.getElementById('loading').classList.add('hidden');
@@ -679,18 +684,103 @@ function findBestNameMatch(sourceName, targetEntries, nameField, threshold, used
 }
 
 function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {}) {
-    const outcomesMap = buildKeyValueMap(outcomes, keyConfig.outcomes);
-    const wsuMap = buildKeyValueMap(wsuOrg, keyConfig.wsu);
-    const allKeys = new Set([...outcomesMap.keys(), ...wsuMap.keys()]);
-
-    const cleanRows = [];
-    const errorRows = [];
-
     const nameCompareEnabled = Boolean(nameCompare.enabled);
     const outcomesNameField = nameCompare.outcomes_column || '';
     const wsuNameField = nameCompare.wsu_column || '';
     const threshold = typeof nameCompare.threshold === 'number' ? nameCompare.threshold : 0.5;
     const canNameMatch = nameCompareEnabled && outcomesNameField && wsuNameField;
+
+    const headerLabels = {
+        input: keyLabels.outcomes || outcomesNameField || 'Outcomes Key',
+        output: keyLabels.wsu || wsuNameField || 'myWSU Key'
+    };
+
+    const cleanRows = [];
+    const errorRows = [];
+
+    if (!keyConfig.outcomes || !keyConfig.wsu) {
+        if (!canNameMatch) {
+            return { cleanRows, errorRows, selectedColumns, headerLabels };
+        }
+
+        const wsuEntries = wsuOrg.map((row, idx) => ({ key: `w${idx}`, row }));
+        const usedWsu = new Set();
+
+        outcomes.forEach((outcomesRow, idx) => {
+            const match = findBestNameMatch(
+                outcomesRow[outcomesNameField],
+                wsuEntries,
+                wsuNameField,
+                threshold,
+                usedWsu
+            );
+            const wsuRow = match ? match.row : null;
+            if (match) {
+                usedWsu.add(match.key);
+            }
+
+            const inputRaw = outcomesRow[outcomesNameField] ?? '';
+            const outputRaw = wsuRow ? wsuRow[wsuNameField] ?? '' : '';
+
+            const rowData = {
+                input: inputRaw,
+                output: outputRaw,
+                match_method: match ? 'Name' : 'Unmatched'
+            };
+
+            selectedColumns.outcomes.forEach(col => {
+                rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
+            });
+            selectedColumns.wsu_org.forEach(col => {
+                rowData[`wsu_${col}`] = wsuRow ? wsuRow[col] ?? '' : '';
+            });
+
+            cleanRows.push(rowData);
+
+            if (!wsuRow) {
+                const errorRow = {
+                    normalized_key: inputRaw,
+                    missing_in: 'myWSU',
+                    input: inputRaw,
+                    output: ''
+                };
+                selectedColumns.outcomes.forEach(col => {
+                    errorRow[`outcomes_${col}`] = outcomesRow[col] ?? '';
+                });
+                selectedColumns.wsu_org.forEach(col => {
+                    errorRow[`wsu_${col}`] = '';
+                });
+                errorRows.push(errorRow);
+            }
+        });
+
+        wsuEntries.forEach(entry => {
+            if (usedWsu.has(entry.key)) {
+                return;
+            }
+            const wsuRow = entry.row;
+            const outputRaw = wsuRow[wsuNameField] ?? '';
+            const errorRow = {
+                normalized_key: outputRaw,
+                missing_in: 'Outcomes',
+                input: '',
+                output: outputRaw
+            };
+            selectedColumns.outcomes.forEach(col => {
+                errorRow[`outcomes_${col}`] = '';
+            });
+            selectedColumns.wsu_org.forEach(col => {
+                errorRow[`wsu_${col}`] = wsuRow[col] ?? '';
+            });
+            errorRows.push(errorRow);
+        });
+
+        return { cleanRows, errorRows, selectedColumns, headerLabels };
+    }
+
+    const outcomesMap = buildKeyValueMap(outcomes, keyConfig.outcomes);
+    const wsuMap = buildKeyValueMap(wsuOrg, keyConfig.wsu);
+    const allKeys = new Set([...outcomesMap.keys(), ...wsuMap.keys()]);
 
     const outcomesEntries = Array.from(outcomesMap.entries()).map(([key, row]) => ({ key, row }));
     const wsuEntries = Array.from(wsuMap.entries()).map(([key, row]) => ({ key, row }));
@@ -793,14 +883,14 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {})
             }
         });
 
-    return { cleanRows, errorRows, selectedColumns };
+    return { cleanRows, errorRows, selectedColumns, headerLabels };
 }
 
-async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCols) {
+async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCols, headerLabels) {
     const workbook = new ExcelJS.Workbook();
 
-    const inputHeader = keyLabels.outcomes || 'Outcomes Key';
-    const outputHeader = keyLabels.wsu || 'myWSU Key';
+    const inputHeader = headerLabels?.input || keyLabels.outcomes || 'Outcomes Key';
+    const outputHeader = headerLabels?.output || keyLabels.wsu || 'myWSU Key';
 
     const cleanSheet = workbook.addWorksheet('Clean_Translation_Table');
     const cleanHeaders = [
