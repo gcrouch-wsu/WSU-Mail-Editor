@@ -326,14 +326,34 @@ function processAvailableFiles() {
             return;
         }
 
+        const filterSourceColumns = (columns) => {
+            const excluded = new Set([
+                'Error_Type',
+                'Error_Description',
+                'Duplicate_Group',
+                'translate_input',
+                'translate_output',
+                'translate_input_norm',
+                'translate_output_norm',
+                'normalized_key',
+                'missing_in',
+                'match_similarity'
+            ]);
+            return columns.filter(col => !excluded.has(col));
+        };
+
         const outcomesColumns = outcomesReady
-            ? Object.keys(loadedData.outcomes[0] || {}).filter(col => !col.startsWith('Unnamed'))
+            ? filterSourceColumns(
+                Object.keys(loadedData.outcomes[0] || {}).filter(col => !col.startsWith('Unnamed'))
+            )
             : [];
         const translateColumns = translateReady
             ? Object.keys(loadedData.translate[0] || {}).filter(col => !col.startsWith('Unnamed'))
             : [];
         const wsuOrgColumns = wsuReady
-            ? Object.keys(loadedData.wsu_org[0] || {}).filter(col => !col.startsWith('Unnamed'))
+            ? filterSourceColumns(
+                Object.keys(loadedData.wsu_org[0] || {}).filter(col => !col.startsWith('Unnamed'))
+            )
             : [];
 
         if (outcomesReady || translateReady || wsuReady) {
