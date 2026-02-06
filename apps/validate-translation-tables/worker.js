@@ -2,6 +2,17 @@
 importScripts('validation.js');
 
 const WORKER_NAME_MATCH_AMBIGUITY_GAP = 0.03;
+const PROGRESS_MIN_INTERVAL_MS = 400;
+const progressState = {};
+
+function reportProgress(stage, processed, total) {
+    const now = Date.now();
+    const last = progressState[stage] || 0;
+    if (processed === 0 || processed === total || now - last >= PROGRESS_MIN_INTERVAL_MS) {
+        self.postMessage({ type: 'progress', stage, processed, total });
+        progressState[stage] = now;
+    }
+}
 
 function buildKeyValueMap(rows, keyField) {
     const map = new Map();
@@ -57,12 +68,16 @@ function collectTopNameCandidates(
     targetNameField,
     threshold,
     maxPerSource = 3,
-    minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP
+    minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP,
+    onProgress = null
 ) {
     const candidates = [];
     const ambiguousSources = new Set();
 
     sourceRows.forEach((sourceRow, sourceIndex) => {
+        if (onProgress) {
+            onProgress(sourceIndex + 1, sourceRows.length);
+        }
         const sourceName = sourceRow[sourceNameField];
         if (!sourceName) {
             return;
@@ -102,7 +117,15 @@ function collectTopNameCandidates(
     return { candidates, ambiguousSources };
 }
 
-function assignGlobalNameMatches(sourceRows, targetRows, sourceNameField, targetNameField, threshold, minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP) {
+function assignGlobalNameMatches(
+    sourceRows,
+    targetRows,
+    sourceNameField,
+    targetNameField,
+    threshold,
+    minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP,
+    onProgress = null
+) {
     const { candidates, ambiguousSources } = collectTopNameCandidates(
         sourceRows,
         targetRows,
@@ -110,7 +133,8 @@ function assignGlobalNameMatches(sourceRows, targetRows, sourceNameField, target
         targetNameField,
         threshold,
         4,
-        minGap
+        minGap,
+        onProgress
     );
 
     const matchesBySource = new Map();
@@ -157,18 +181,24 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
             return { cleanRows, errorRows, selectedColumns, headerLabels };
         }
 
+        reportProgress('match_candidates', 0, outcomes.length);
         const { matchesBySource, usedTargets, ambiguousSources } = assignGlobalNameMatches(
             outcomes,
             wsuOrg,
             outcomesNameField,
             wsuNameField,
             threshold,
-            ambiguityGap
+            ambiguityGap,
+            (processed, total) => reportProgress('match_candidates', processed, total)
         );
 
+        const totalRows = outcomes.length + wsuOrg.length;
+        let processedRows = 0;
         outcomes.forEach((outcomesRow, outcomesIndex) => {
             const match = matchesBySource.get(outcomesIndex);
             const wsuRow = match ? wsuOrg[match.targetIndex] : null;
+            processedRows += 1;
+            reportProgress('build_rows', processedRows, totalRows);
 
             if (wsuRow) {
                 const rowData = {};
@@ -201,6 +231,8 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
             if (usedTargets.has(wsuIndex)) {
                 return;
             }
+            processedRows += 1;
+            reportProgress('build_rows', processedRows, totalRows);
             const errorRow = {
                 normalized_key: wsuRow[wsuNameField] ?? '',
                 missing_in: 'Outcomes'
@@ -225,9 +257,10 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
     const usedOutcomes = new Set();
     const usedWsu = new Set();
 
-    Array.from(allKeys)
+    const allKeyList = Array.from(allKeys)
         .sort((a, b) => String(a).localeCompare(String(b)))
-        .forEach(key => {
+    reportProgress('build_rows', 0, allKeyList.length);
+    allKeyList.forEach((key, index) => {
             let outcomesRow = outcomesMap.get(key) || null;
             let wsuRow = wsuMap.get(key) || null;
             let handledAsAmbiguous = false;
@@ -321,6 +354,7 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
                 });
                 errorRows.push(errorRow);
             }
+            reportProgress('build_rows', index + 1, allKeyList.length);
         });
 
     return { cleanRows, errorRows, selectedColumns, headerLabels };

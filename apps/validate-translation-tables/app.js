@@ -72,7 +72,7 @@ function runWorkerTask(type, payload, onProgress) {
         worker.onmessage = (event) => {
             const message = event.data || {};
             if (message.type === 'progress') {
-                if (onProgress) onProgress(message.stage);
+                if (onProgress) onProgress(message.stage, message.processed, message.total);
                 return;
             }
             if (message.type === 'result') {
@@ -792,6 +792,16 @@ async function runValidation() {
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('results').classList.add('hidden');
         document.getElementById('loading-message').textContent = 'Analyzing mappings...';
+        const progressWrap = document.getElementById('loading-progress');
+        const progressStage = document.getElementById('loading-stage');
+        const progressPercent = document.getElementById('loading-percent');
+        const progressBar = document.getElementById('loading-bar');
+        if (progressWrap && progressStage && progressPercent && progressBar) {
+            progressWrap.classList.remove('hidden');
+            progressStage.textContent = 'Preparing...';
+            progressPercent.textContent = '0%';
+            progressBar.style.width = '0%';
+        }
 
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -839,10 +849,24 @@ async function runValidation() {
                     ambiguity_gap: resolvedGap
                 }
             },
-            (stage) => {
+            (stage, processed, total) => {
+                if (progressStage && progressPercent && progressBar) {
+                    const percent = total ? Math.round((processed / total) * 100) : 0;
+                    if (stage === 'merge') {
+                        progressStage.textContent = 'Merging data...';
+                    } else if (stage === 'validate') {
+                        progressStage.textContent = 'Validating mappings...';
+                    } else {
+                        progressStage.textContent = 'Analyzing mappings...';
+                    }
+                    progressPercent.textContent = `${percent}%`;
+                    progressBar.style.width = `${percent}%`;
+                }
                 const message = stage === 'merge'
                     ? 'Merging data...'
-                    : 'Validating mappings...';
+                    : stage === 'validate'
+                        ? 'Validating mappings...'
+                        : 'Analyzing mappings...';
                 document.getElementById('loading-message').textContent = message;
             }
         );
@@ -855,6 +879,9 @@ async function runValidation() {
         const errorSamples = getErrorSamples(validatedData, limit);
 
         document.getElementById('loading').classList.add('hidden');
+        if (progressWrap) {
+            progressWrap.classList.add('hidden');
+        }
 
         displayResults(stats, errorSamples);
 
@@ -862,6 +889,10 @@ async function runValidation() {
         console.error('Validation error:', error);
         alert(`Error running validation: ${error.message}`);
         document.getElementById('loading').classList.add('hidden');
+        const progressWrap = document.getElementById('loading-progress');
+        if (progressWrap) {
+            progressWrap.classList.add('hidden');
+        }
     }
 }
 
@@ -874,6 +905,16 @@ async function runGeneration() {
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('results').classList.add('hidden');
         document.getElementById('loading-message').textContent = 'Generating translation table...';
+        const progressWrap = document.getElementById('loading-progress');
+        const progressStage = document.getElementById('loading-stage');
+        const progressPercent = document.getElementById('loading-percent');
+        const progressBar = document.getElementById('loading-bar');
+        if (progressWrap && progressStage && progressPercent && progressBar) {
+            progressWrap.classList.remove('hidden');
+            progressStage.textContent = 'Preparing...';
+            progressPercent.textContent = '0%';
+            progressBar.style.width = '0%';
+        }
 
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -927,6 +968,25 @@ async function runGeneration() {
             },
             selectedColumns,
             keyLabels
+        }, (stage, processed, total) => {
+            if (!progressStage || !progressPercent || !progressBar) {
+                return;
+            }
+            const percent = total ? Math.round((processed / total) * 100) : 0;
+            if (stage === 'match_candidates') {
+                progressStage.textContent = 'Scoring name matches...';
+                document.getElementById('loading-message').textContent =
+                    `Scoring name matches... ${processed.toLocaleString()} / ${total.toLocaleString()} (${percent}%)`;
+            } else if (stage === 'build_rows') {
+                progressStage.textContent = 'Building output rows...';
+                document.getElementById('loading-message').textContent =
+                    `Building output rows... ${processed.toLocaleString()} / ${total.toLocaleString()} (${percent}%)`;
+            } else {
+                progressStage.textContent = 'Generating translation table...';
+                document.getElementById('loading-message').textContent = 'Generating translation table...';
+            }
+            progressPercent.textContent = `${percent}%`;
+            progressBar.style.width = `${percent}%`;
         });
 
         await createGeneratedTranslationExcel(
@@ -937,10 +997,17 @@ async function runGeneration() {
         );
 
         document.getElementById('loading').classList.add('hidden');
+        if (progressWrap) {
+            progressWrap.classList.add('hidden');
+        }
     } catch (error) {
         console.error('Generation error:', error);
         alert(`Error generating translation table: ${error.message}`);
         document.getElementById('loading').classList.add('hidden');
+        const progressWrap = document.getElementById('loading-progress');
+        if (progressWrap) {
+            progressWrap.classList.add('hidden');
+        }
     }
 }
 

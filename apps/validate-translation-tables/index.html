@@ -370,6 +370,15 @@
         <div id="loading" class="hidden text-center py-8">
             <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-wsu-crimson"></div>
             <p id="loading-message" class="mt-4 text-gray-600">Analyzing mappings...</p>
+            <div id="loading-progress" class="mt-4 max-w-xl mx-auto hidden">
+                <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
+                    <span id="loading-stage">Preparing...</span>
+                    <span id="loading-percent">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div id="loading-bar" class="h-2 bg-wsu-crimson transition-all" style="width: 0%;"></div>
+                </div>
+            </div>
         </div>
 
         <div id="results" class="hidden">
