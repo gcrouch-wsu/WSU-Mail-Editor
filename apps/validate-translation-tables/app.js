@@ -1438,7 +1438,8 @@ async function createExcelOutput(validated, missing, selectedCols) {
         outputColumns.push(`wsu_${col}`);
     });
 
-    const dataRows = validated.map(row => {
+    const errorRowsOnly = validated.filter(row => row.Error_Type !== 'Valid');
+    const dataRows = errorRowsOnly.map(row => {
         const rowData = {};
         outputColumns.forEach(col => {
             rowData[col] = row[col] !== undefined ? row[col] : '';
@@ -1681,6 +1682,19 @@ async function createExcelOutput(validated, missing, selectedCols) {
     const translateInputs = new Set();
     const translateOutputs = new Set();
 
+    const validPairs = new Map();
+    validRows.forEach(row => {
+        if (row.translate_input_norm && row.translate_output_norm) {
+            validPairs.set(
+                `${row.translate_input_norm}::${row.translate_output_norm}`,
+                { input: row.translate_input, output: row.translate_output }
+            );
+        }
+    });
+
+    const validPairsSorted = Array.from(validPairs.entries())
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+
     loadedData.translate.forEach(row => {
         const inputRaw = row[keyConfig.translateInput] ?? '';
         const outputRaw = row[keyConfig.translateOutput] ?? '';
@@ -1696,14 +1710,10 @@ async function createExcelOutput(validated, missing, selectedCols) {
             translatePairs.add(`${inputNorm}::${outputNorm}`);
         }
 
-        const inputDisplay = inputNorm && outcomesKeys.has(inputNorm) ? inputRaw : 'Not in Outcomes';
-        const outputDisplay = outputNorm && wsuKeys.has(outputNorm) ? outputRaw : '(Not in myWSU)';
-        const notes = [];
-        if (!inputNorm) notes.push('Missing input');
-        if (!outputNorm) notes.push('Missing output');
-        if (inputNorm && !outcomesKeys.has(inputNorm)) notes.push('Input not in Outcomes');
-        if (outputNorm && !wsuKeys.has(outputNorm)) notes.push('Output not in myWSU');
-        cleanSheet.addRow([inputDisplay, outputDisplay, notes.join(' | ')]);
+    });
+
+    validPairsSorted.forEach(([, pair]) => {
+        cleanSheet.addRow([pair.input, pair.output, '']);
     });
 
     const extraRows = [];
