@@ -39,6 +39,7 @@ let keyLabels = {
     wsu: ''
 };
 let matchMethodTouched = false;
+let validateNameMode = 'key';
 let debugState = {
     outcomes: null,
     translate: null,
@@ -53,6 +54,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupValidateButton();
     setupGenerateButton();
     setupMatchMethodControls();
+    setupValidateNameModeControls();
     setupDebugToggle();
     setupDownloadButton();
     setupResetButton();
@@ -121,6 +123,7 @@ function updateModeUI() {
     const columnSelection = document.getElementById('column-selection');
     const nameCompare = document.getElementById('name-compare');
     const matchMethodSection = document.getElementById('match-method');
+    const validateNameModeSection = document.getElementById('validate-name-mode');
     const toggleColumns = document.getElementById('toggle-columns');
     const columnCheckboxes = document.getElementById('column-checkboxes');
     const translateInputGroup = document.getElementById('translate-input-group');
@@ -154,6 +157,9 @@ function updateModeUI() {
     if (matchMethodSection) {
         matchMethodSection.classList.toggle('hidden', currentMode !== 'create');
     }
+    if (validateNameModeSection) {
+        validateNameModeSection.classList.toggle('hidden', currentMode !== 'validate');
+    }
     if (translateInputGroup) {
         translateInputGroup.classList.toggle('hidden', currentMode === 'create');
     }
@@ -166,6 +172,7 @@ function updateModeUI() {
         keyMatchFields.classList.remove('hidden');
     }
     updateMatchMethodUI();
+    updateValidateNameModeUI();
     renderDebugPanel();
 }
 
@@ -769,6 +776,20 @@ function setupMatchMethodControls() {
     nameRadio.addEventListener('change', syncMethod);
 }
 
+function setupValidateNameModeControls() {
+    const keyOnlyRadio = document.getElementById('validate-key-only');
+    const keyNameRadio = document.getElementById('validate-key-name');
+    if (!keyOnlyRadio || !keyNameRadio) return;
+
+    const syncMode = () => {
+        validateNameMode = keyNameRadio.checked ? 'key+name' : 'key';
+        updateValidateNameModeUI();
+    };
+
+    keyOnlyRadio.addEventListener('change', syncMode);
+    keyNameRadio.addEventListener('change', syncMode);
+}
+
 function updateMatchMethodUI() {
     if (currentMode !== 'create') {
         return;
@@ -780,6 +801,16 @@ function updateMatchMethodUI() {
     }
     if (nameCompare) {
         nameCompare.classList.toggle('hidden', matchMethod === 'key');
+    }
+}
+
+function updateValidateNameModeUI() {
+    if (currentMode !== 'validate') {
+        return;
+    }
+    const nameCompare = document.getElementById('name-compare');
+    if (nameCompare) {
+        nameCompare.classList.toggle('hidden', validateNameMode !== 'key+name');
     }
 }
 
@@ -827,9 +858,14 @@ async function runValidation() {
             ? 0.03
             : Math.max(0, Math.min(0.2, nameCompareGap));
 
-        const nameCompareEnabled = Boolean(nameCompareOutcomes && nameCompareWsu);
-        if (!nameCompareEnabled && (nameCompareOutcomes || nameCompareWsu)) {
-            alert('Select both name columns or disable name comparison.');
+        const wantsNameCompare = validateNameMode === 'key+name';
+        const nameCompareEnabled = wantsNameCompare && Boolean(nameCompareOutcomes && nameCompareWsu);
+        if (wantsNameCompare && !nameCompareEnabled) {
+            if (nameCompareOutcomes || nameCompareWsu) {
+                alert('Select both name columns or disable name comparison.');
+            } else {
+                alert('Select name columns or switch to key-only validation.');
+            }
             document.getElementById('loading').classList.add('hidden');
             return;
         }

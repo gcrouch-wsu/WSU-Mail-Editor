@@ -242,6 +242,22 @@
                         </label>
                     </div>
                 </div>
+                <div id="validate-name-mode" class="mt-4">
+                    <h3 class="font-medium text-gray-700">Validation mode</h3>
+                    <p class="text-xs text-gray-500 mb-3">
+                        Choose whether to validate by key only or by key + name comparison.
+                    </p>
+                    <div class="flex flex-wrap gap-4 text-sm text-gray-700">
+                        <label class="flex items-center">
+                            <input id="validate-key-only" type="radio" name="validate-name-mode" value="key" class="mr-2" checked>
+                            Key only
+                        </label>
+                        <label class="flex items-center">
+                            <input id="validate-key-name" type="radio" name="validate-name-mode" value="key+name" class="mr-2">
+                            Key + name comparison
+                        </label>
+                    </div>
+                </div>
 
                 <div id="key-match-fields" class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
