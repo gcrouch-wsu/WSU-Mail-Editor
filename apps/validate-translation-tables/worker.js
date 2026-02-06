@@ -1,6 +1,8 @@
 /* global mergeData, validateMappings, detectMissingMappings, generateSummaryStats, normalizeKeyValue, calculateNameSimilarity */
 importScripts('validation.js');
 
+const WORKER_NAME_MATCH_AMBIGUITY_GAP = 0.03;
+
 function buildKeyValueMap(rows, keyField) {
     const map = new Map();
     rows.forEach(row => {
@@ -16,31 +18,129 @@ function buildKeyValueMap(rows, keyField) {
     return map;
 }
 
-function findBestNameMatch(sourceName, targetEntries, nameField, threshold, usedKeys) {
+function findBestNameMatch(sourceName, targetEntries, nameField, threshold, usedKeys, minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP) {
     if (!sourceName) return null;
     let best = null;
     let bestScore = -1;
+    let secondBestScore = -1;
     targetEntries.forEach(({ key, row }) => {
         if (usedKeys.has(key)) return;
         const targetName = row[nameField];
         if (!targetName) return;
         const score = calculateNameSimilarity(sourceName, targetName);
         if (score > bestScore) {
+            secondBestScore = bestScore;
             bestScore = score;
             best = { key, row, score };
+        } else if (score > secondBestScore) {
+            secondBestScore = score;
         }
     });
     if (!best || best.score < threshold) {
         return null;
     }
+    if (secondBestScore >= 0 && bestScore - secondBestScore < minGap) {
+        return {
+            ambiguous: true,
+            bestScore,
+            secondBestScore,
+            candidate: best
+        };
+    }
     return best;
+}
+
+function collectTopNameCandidates(
+    sourceRows,
+    targetRows,
+    sourceNameField,
+    targetNameField,
+    threshold,
+    maxPerSource = 3,
+    minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP
+) {
+    const candidates = [];
+    const ambiguousSources = new Set();
+
+    sourceRows.forEach((sourceRow, sourceIndex) => {
+        const sourceName = sourceRow[sourceNameField];
+        if (!sourceName) {
+            return;
+        }
+
+        const topMatches = [];
+        targetRows.forEach((targetRow, targetIndex) => {
+            const targetName = targetRow[targetNameField];
+            if (!targetName) {
+                return;
+            }
+            const score = calculateNameSimilarity(sourceName, targetName);
+            if (score < threshold) {
+                return;
+            }
+
+            topMatches.push({ sourceIndex, targetIndex, score });
+            topMatches.sort((a, b) => b.score - a.score);
+            if (topMatches.length > maxPerSource) {
+                topMatches.pop();
+            }
+        });
+
+        if (
+            topMatches.length > 1 &&
+            (topMatches[0].score - topMatches[1].score) < minGap
+        ) {
+            ambiguousSources.add(sourceIndex);
+            return;
+        }
+        topMatches.forEach(match => candidates.push(match));
+    });
+
+    candidates.sort(
+        (a, b) => b.score - a.score || a.sourceIndex - b.sourceIndex || a.targetIndex - b.targetIndex
+    );
+    return { candidates, ambiguousSources };
+}
+
+function assignGlobalNameMatches(sourceRows, targetRows, sourceNameField, targetNameField, threshold, minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP) {
+    const { candidates, ambiguousSources } = collectTopNameCandidates(
+        sourceRows,
+        targetRows,
+        sourceNameField,
+        targetNameField,
+        threshold,
+        4,
+        minGap
+    );
+
+    const matchesBySource = new Map();
+    const usedTargets = new Set();
+
+    candidates.forEach(candidate => {
+        if (matchesBySource.has(candidate.sourceIndex)) {
+            return;
+        }
+        if (usedTargets.has(candidate.targetIndex)) {
+            return;
+        }
+        matchesBySource.set(candidate.sourceIndex, {
+            targetIndex: candidate.targetIndex,
+            score: candidate.score
+        });
+        usedTargets.add(candidate.targetIndex);
+    });
+
+    return { matchesBySource, usedTargets, ambiguousSources };
 }
 
 function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare, options, selectedColumns, keyLabels) {
     const nameCompareEnabled = Boolean(nameCompare.enabled);
     const outcomesNameField = nameCompare.outcomes_column || '';
     const wsuNameField = nameCompare.wsu_column || '';
-    const threshold = typeof nameCompare.threshold === 'number' ? nameCompare.threshold : 0.5;
+    const threshold = typeof nameCompare.threshold === 'number' ? nameCompare.threshold : 0.8;
+    const ambiguityGap = typeof nameCompare.ambiguity_gap === 'number'
+        ? nameCompare.ambiguity_gap
+        : WORKER_NAME_MATCH_AMBIGUITY_GAP;
     const canNameMatch = nameCompareEnabled && outcomesNameField && wsuNameField;
     const forceNameMatch = Boolean(options.forceNameMatch);
 
@@ -57,24 +157,24 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
             return { cleanRows, errorRows, selectedColumns, headerLabels };
         }
 
-        const wsuEntries = wsuOrg.map((row, idx) => ({ key: `w${idx}`, row }));
-        const usedWsu = new Set();
+        const { matchesBySource, usedTargets, ambiguousSources } = assignGlobalNameMatches(
+            outcomes,
+            wsuOrg,
+            outcomesNameField,
+            wsuNameField,
+            threshold,
+            ambiguityGap
+        );
 
-        outcomes.forEach(outcomesRow => {
-            const match = findBestNameMatch(
-                outcomesRow[outcomesNameField],
-                wsuEntries,
-                wsuNameField,
-                threshold,
-                usedWsu
-            );
-            const wsuRow = match ? match.row : null;
-            if (match) {
-                usedWsu.add(match.key);
-            }
+        outcomes.forEach((outcomesRow, outcomesIndex) => {
+            const match = matchesBySource.get(outcomesIndex);
+            const wsuRow = match ? wsuOrg[match.targetIndex] : null;
 
             if (wsuRow) {
                 const rowData = {};
+                rowData.match_similarity = match
+                    ? Math.round(match.score * 1000) / 10
+                    : '';
                 selectedColumns.outcomes.forEach(col => {
                     rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
                 });
@@ -85,7 +185,7 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
             } else {
                 const errorRow = {
                     normalized_key: outcomesRow[outcomesNameField] ?? '',
-                    missing_in: 'myWSU'
+                    missing_in: ambiguousSources.has(outcomesIndex) ? 'Ambiguous Match' : 'myWSU'
                 };
                 selectedColumns.outcomes.forEach(col => {
                     errorRow[`outcomes_${col}`] = outcomesRow[col] ?? '';
@@ -97,11 +197,10 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
             }
         });
 
-        wsuEntries.forEach(entry => {
-            if (usedWsu.has(entry.key)) {
+        wsuOrg.forEach((wsuRow, wsuIndex) => {
+            if (usedTargets.has(wsuIndex)) {
                 return;
             }
-            const wsuRow = entry.row;
             const errorRow = {
                 normalized_key: wsuRow[wsuNameField] ?? '',
                 missing_in: 'Outcomes'
@@ -131,6 +230,7 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
         .forEach(key => {
             let outcomesRow = outcomesMap.get(key) || null;
             let wsuRow = wsuMap.get(key) || null;
+            let handledAsAmbiguous = false;
 
             if (outcomesRow) usedOutcomes.add(key);
             if (wsuRow) usedWsu.add(key);
@@ -141,9 +241,23 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
                     outcomesEntries,
                     outcomesNameField,
                     threshold,
-                    usedOutcomes
+                    usedOutcomes,
+                    ambiguityGap
                 );
-                if (match) {
+                if (match?.ambiguous) {
+                    const errorRow = {
+                        normalized_key: wsuRow[wsuNameField] ?? '',
+                        missing_in: 'Ambiguous Match'
+                    };
+                    selectedColumns.outcomes.forEach(col => {
+                        errorRow[`outcomes_${col}`] = '';
+                    });
+                    selectedColumns.wsu_org.forEach(col => {
+                        errorRow[`wsu_${col}`] = wsuRow[col] ?? '';
+                    });
+                    errorRows.push(errorRow);
+                    handledAsAmbiguous = true;
+                } else if (match) {
                     outcomesRow = match.row;
                     usedOutcomes.add(match.key);
                 }
@@ -154,9 +268,23 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
                     wsuEntries,
                     wsuNameField,
                     threshold,
-                    usedWsu
+                    usedWsu,
+                    ambiguityGap
                 );
-                if (match) {
+                if (match?.ambiguous) {
+                    const errorRow = {
+                        normalized_key: outcomesRow[outcomesNameField] ?? '',
+                        missing_in: 'Ambiguous Match'
+                    };
+                    selectedColumns.outcomes.forEach(col => {
+                        errorRow[`outcomes_${col}`] = outcomesRow[col] ?? '';
+                    });
+                    selectedColumns.wsu_org.forEach(col => {
+                        errorRow[`wsu_${col}`] = '';
+                    });
+                    errorRows.push(errorRow);
+                    handledAsAmbiguous = true;
+                } else if (match) {
                     wsuRow = match.row;
                     usedWsu.add(match.key);
                 }
@@ -164,6 +292,15 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
 
             if (outcomesRow && wsuRow) {
                 const rowData = {};
+                if (canNameMatch) {
+                    const nameScore = calculateNameSimilarity(
+                        outcomesRow[outcomesNameField],
+                        wsuRow[wsuNameField]
+                    );
+                    rowData.match_similarity = Math.round(nameScore * 1000) / 10;
+                } else {
+                    rowData.match_similarity = '';
+                }
                 selectedColumns.outcomes.forEach(col => {
                     rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
                 });
@@ -171,7 +308,7 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
                     rowData[`wsu_${col}`] = wsuRow[col] ?? '';
                 });
                 cleanRows.push(rowData);
-            } else if (!outcomesRow || !wsuRow) {
+            } else if ((!outcomesRow || !wsuRow) && !handledAsAmbiguous) {
                 const errorRow = {
                     normalized_key: key,
                     missing_in: outcomesRow ? 'myWSU' : 'Outcomes'

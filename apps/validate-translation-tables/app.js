@@ -169,6 +169,17 @@ function updateModeUI() {
     renderDebugPanel();
 }
 
+const encodingSelectIds = {
+    outcomes: 'outcomes-encoding',
+    translate: 'translate-encoding',
+    wsu_org: 'wsu-org-encoding'
+};
+
+function getFileEncoding(fileKey) {
+    const select = document.getElementById(encodingSelectIds[fileKey]);
+    return select ? select.value : 'auto';
+}
+
 function setupFileUploads() {
     const fileInputs = [
         { id: 'outcomes-file', key: 'outcomes' },
@@ -181,6 +192,15 @@ function setupFileUploads() {
         element.addEventListener('change', async function(e) {
             await handleFileSelect(e, input.key);
         });
+
+        const encodingSelect = document.getElementById(encodingSelectIds[input.key]);
+        if (encodingSelect) {
+            encodingSelect.addEventListener('change', async function() {
+                if (fileObjects[input.key]) {
+                    await reparseFile(input.key);
+                }
+            });
+        }
     });
 }
 
@@ -248,7 +268,7 @@ async function handleFileSelect(event, fileKey) {
         filenameSpan.textContent = file.name;
         statusDiv.classList.remove('hidden');
 
-        const data = await loadFile(file);
+        const data = await loadFile(file, { encoding: getFileEncoding(fileKey) });
 
         fileObjects[fileKey] = file;
         loadedData[fileKey] = data;
@@ -262,6 +282,28 @@ async function handleFileSelect(event, fileKey) {
     } catch (error) {
         console.error(`Error loading ${fileKey}:`, error);
         alert(`Error loading file: ${error.message}`);
+        statusDiv.classList.add('hidden');
+        filesUploaded[fileKey] = false;
+    }
+}
+
+async function reparseFile(fileKey) {
+    const file = fileObjects[fileKey];
+    if (!file) return;
+
+    const statusDiv = document.getElementById(`${fileKey.replace('_', '-')}-status`);
+    const rowsSpan = document.getElementById(`${fileKey.replace('_', '-')}-rows`);
+
+    try {
+        const data = await loadFile(file, { encoding: getFileEncoding(fileKey) });
+        loadedData[fileKey] = data;
+        filesUploaded[fileKey] = true;
+        updateDebugState(fileKey, file, data);
+        rowsSpan.textContent = `${data.length} rows`;
+        processAvailableFiles();
+    } catch (error) {
+        console.error(`Error re-parsing ${fileKey}:`, error);
+        alert(`Error re-parsing file with selected encoding: ${error.message}`);
         statusDiv.classList.add('hidden');
         filesUploaded[fileKey] = false;
     }
@@ -377,11 +419,17 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
             const isChecked = defaultOutcomes.includes(col);
             const label = document.createElement('label');
             label.className = 'flex items-center';
-            label.innerHTML = `
-                <input type="checkbox" name="outcomes-col" value="${col}" ${isChecked ? 'checked' : ''}
-                       class="rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson">
-                <span class="ml-2 text-sm text-gray-700">${col}</span>
-            `;
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.name = 'outcomes-col';
+            input.value = col;
+            input.checked = isChecked;
+            input.className = 'rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson';
+            const span = document.createElement('span');
+            span.className = 'ml-2 text-sm text-gray-700';
+            span.textContent = col;
+            label.appendChild(input);
+            label.appendChild(span);
             outcomesDiv.appendChild(label);
 
             if (isChecked) {
@@ -400,11 +448,17 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
             const isChecked = defaultWsuOrg.includes(col);
             const label = document.createElement('label');
             label.className = 'flex items-center';
-            label.innerHTML = `
-                <input type="checkbox" name="wsu-org-col" value="${col}" ${isChecked ? 'checked' : ''}
-                       class="rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson">
-                <span class="ml-2 text-sm text-gray-700">${col}</span>
-            `;
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.name = 'wsu-org-col';
+            input.value = col;
+            input.checked = isChecked;
+            input.className = 'rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson';
+            const span = document.createElement('span');
+            span.className = 'ml-2 text-sm text-gray-700';
+            span.textContent = col;
+            label.appendChild(input);
+            label.appendChild(span);
             wsuOrgDiv.appendChild(label);
 
             if (isChecked) {
@@ -438,57 +492,57 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
 
     if (outcomesColumns.length) {
         outcomesColumns.forEach(col => {
-            outcomesSelect.insertAdjacentHTML(
-                'beforeend',
-                `<option value="${col}">${col}</option>`
-            );
+            const option = document.createElement('option');
+            option.value = col;
+            option.textContent = col;
+            outcomesSelect.appendChild(option);
         });
         outcomesSelect.disabled = false;
     } else {
-        outcomesSelect.insertAdjacentHTML(
-            'beforeend',
-            '<option value="">Upload Outcomes to select</option>'
-        );
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Upload Outcomes to select';
+        outcomesSelect.appendChild(option);
         outcomesSelect.disabled = true;
     }
     if (translateColumns.length) {
         translateColumns.forEach(col => {
-            translateInputSelect.insertAdjacentHTML(
-                'beforeend',
-                `<option value="${col}">${col}</option>`
-            );
-            translateOutputSelect.insertAdjacentHTML(
-                'beforeend',
-                `<option value="${col}">${col}</option>`
-            );
+            const inputOption = document.createElement('option');
+            inputOption.value = col;
+            inputOption.textContent = col;
+            translateInputSelect.appendChild(inputOption);
+            const outputOption = document.createElement('option');
+            outputOption.value = col;
+            outputOption.textContent = col;
+            translateOutputSelect.appendChild(outputOption);
         });
         translateInputSelect.disabled = false;
         translateOutputSelect.disabled = false;
     } else {
-        translateInputSelect.insertAdjacentHTML(
-            'beforeend',
-            '<option value="">Upload translation table to select</option>'
-        );
-        translateOutputSelect.insertAdjacentHTML(
-            'beforeend',
-            '<option value="">Upload translation table to select</option>'
-        );
+        const inputOption = document.createElement('option');
+        inputOption.value = '';
+        inputOption.textContent = 'Upload translation table to select';
+        translateInputSelect.appendChild(inputOption);
+        const outputOption = document.createElement('option');
+        outputOption.value = '';
+        outputOption.textContent = 'Upload translation table to select';
+        translateOutputSelect.appendChild(outputOption);
         translateInputSelect.disabled = true;
         translateOutputSelect.disabled = true;
     }
     if (wsuOrgColumns.length) {
         wsuOrgColumns.forEach(col => {
-            wsuSelect.insertAdjacentHTML(
-                'beforeend',
-                `<option value="${col}">${col}</option>`
-            );
+            const option = document.createElement('option');
+            option.value = col;
+            option.textContent = col;
+            wsuSelect.appendChild(option);
         });
         wsuSelect.disabled = false;
     } else {
-        wsuSelect.insertAdjacentHTML(
-            'beforeend',
-            '<option value="">Upload myWSU to select</option>'
-        );
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Upload myWSU to select';
+        wsuSelect.appendChild(option);
         wsuSelect.disabled = true;
     }
 
@@ -609,40 +663,41 @@ function populateNameCompareOptions(outcomesColumns, wsuOrgColumns) {
     const outcomesSelect = document.getElementById('name-compare-outcomes');
     const wsuSelect = document.getElementById('name-compare-wsu');
     const thresholdInput = document.getElementById('name-compare-threshold');
+    const ambiguityInput = document.getElementById('name-compare-ambiguity-gap');
 
-    if (!outcomesSelect || !wsuSelect || !thresholdInput) return;
+    if (!outcomesSelect || !wsuSelect || !thresholdInput || !ambiguityInput) return;
 
     outcomesSelect.innerHTML = '<option value="">Select column</option>';
     wsuSelect.innerHTML = '<option value="">Select column</option>';
 
     if (outcomesColumns.length) {
         outcomesColumns.forEach(col => {
-            outcomesSelect.insertAdjacentHTML(
-                'beforeend',
-                `<option value="${col}">${col}</option>`
-            );
+            const option = document.createElement('option');
+            option.value = col;
+            option.textContent = col;
+            outcomesSelect.appendChild(option);
         });
         outcomesSelect.disabled = false;
     } else {
-        outcomesSelect.insertAdjacentHTML(
-            'beforeend',
-            '<option value="">Upload Outcomes to select</option>'
-        );
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Upload Outcomes to select';
+        outcomesSelect.appendChild(option);
         outcomesSelect.disabled = true;
     }
     if (wsuOrgColumns.length) {
         wsuOrgColumns.forEach(col => {
-            wsuSelect.insertAdjacentHTML(
-                'beforeend',
-                `<option value="${col}">${col}</option>`
-            );
+            const option = document.createElement('option');
+            option.value = col;
+            option.textContent = col;
+            wsuSelect.appendChild(option);
         });
         wsuSelect.disabled = false;
     } else {
-        wsuSelect.insertAdjacentHTML(
-            'beforeend',
-            '<option value="">Upload myWSU to select</option>'
-        );
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Upload myWSU to select';
+        wsuSelect.appendChild(option);
         wsuSelect.disabled = true;
     }
 
@@ -651,7 +706,8 @@ function populateNameCompareOptions(outcomesColumns, wsuOrgColumns) {
     if (defaultOutcomes) outcomesSelect.value = defaultOutcomes;
     if (defaultWsu) wsuSelect.value = defaultWsu;
 
-    thresholdInput.value = '0.5';
+    thresholdInput.value = '0.8';
+    ambiguityInput.value = '0.03';
     updateNameCompareState();
 }
 
@@ -749,8 +805,17 @@ async function runValidation() {
         const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
         const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
         const nameCompareThreshold = parseFloat(
-            document.getElementById('name-compare-threshold')?.value || '0.5'
+            document.getElementById('name-compare-threshold')?.value || '0.8'
         );
+        const nameCompareGap = parseFloat(
+            document.getElementById('name-compare-ambiguity-gap')?.value || '0.03'
+        );
+        const resolvedThreshold = Number.isNaN(nameCompareThreshold)
+            ? 0.8
+            : Math.max(0, Math.min(1, nameCompareThreshold));
+        const resolvedGap = Number.isNaN(nameCompareGap)
+            ? 0.03
+            : Math.max(0, Math.min(0.2, nameCompareGap));
 
         const nameCompareEnabled = Boolean(nameCompareOutcomes && nameCompareWsu);
         if (!nameCompareEnabled && (nameCompareOutcomes || nameCompareWsu)) {
@@ -770,7 +835,8 @@ async function runValidation() {
                     enabled: Boolean(nameCompareEnabled),
                     outcomes_column: nameCompareOutcomes,
                     wsu_column: nameCompareWsu,
-                    threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
+                    threshold: resolvedThreshold,
+                    ambiguity_gap: resolvedGap
                 }
             },
             (stage) => {
@@ -816,8 +882,17 @@ async function runGeneration() {
         const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
         const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
         const nameCompareThreshold = parseFloat(
-            document.getElementById('name-compare-threshold')?.value || '0.5'
+            document.getElementById('name-compare-threshold')?.value || '0.8'
         );
+        const nameCompareGap = parseFloat(
+            document.getElementById('name-compare-ambiguity-gap')?.value || '0.03'
+        );
+        const resolvedThreshold = Number.isNaN(nameCompareThreshold)
+            ? 0.8
+            : Math.max(0, Math.min(1, nameCompareThreshold));
+        const resolvedGap = Number.isNaN(nameCompareGap)
+            ? 0.03
+            : Math.max(0, Math.min(0.2, nameCompareGap));
 
         const nameCompareEnabled = Boolean(nameCompareOutcomes && nameCompareWsu);
         const hasKeyConfig = Boolean(keyConfig.outcomes && keyConfig.wsu);
@@ -844,7 +919,8 @@ async function runGeneration() {
                 enabled: Boolean(nameCompareEnabled),
                 outcomes_column: nameCompareOutcomes,
                 wsu_column: nameCompareWsu,
-                threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
+                threshold: resolvedThreshold,
+                ambiguity_gap: resolvedGap
             },
             options: {
                 forceNameMatch
@@ -868,234 +944,8 @@ async function runGeneration() {
     }
 }
 
-function buildKeyValueMap(rows, keyField) {
-    const map = new Map();
-    rows.forEach(row => {
-        const raw = row[keyField];
-        const normalized = normalizeKeyValue(raw);
-        if (!normalized) {
-            return;
-        }
-        if (!map.has(normalized)) {
-            map.set(normalized, row);
-        }
-    });
-    return map;
-}
-
-function findBestNameMatch(sourceName, targetEntries, nameField, threshold, usedKeys) {
-    if (!sourceName) return null;
-    let best = null;
-    let bestScore = -1;
-    targetEntries.forEach(({ key, row }) => {
-        if (usedKeys.has(key)) return;
-        const targetName = row[nameField];
-        if (!targetName) return;
-        const score = calculateNameSimilarity(sourceName, targetName);
-        if (score > bestScore) {
-            bestScore = score;
-            best = { key, row, score };
-        }
-    });
-    if (!best || best.score < threshold) {
-        return null;
-    }
-    return best;
-}
-
-function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {}, options = {}) {
-    const nameCompareEnabled = Boolean(nameCompare.enabled);
-    const outcomesNameField = nameCompare.outcomes_column || '';
-    const wsuNameField = nameCompare.wsu_column || '';
-    const threshold = typeof nameCompare.threshold === 'number' ? nameCompare.threshold : 0.5;
-    const canNameMatch = nameCompareEnabled && outcomesNameField && wsuNameField;
-    const forceNameMatch = Boolean(options.forceNameMatch);
-
-    const headerLabels = {
-        input: keyLabels.outcomes || outcomesNameField || 'Outcomes Key',
-        output: keyLabels.wsu || wsuNameField || 'myWSU Key'
-    };
-
-    const cleanRows = [];
-    const errorRows = [];
-
-    if (forceNameMatch || !keyConfig.outcomes || !keyConfig.wsu) {
-        if (!canNameMatch) {
-            return { cleanRows, errorRows, selectedColumns, headerLabels };
-        }
-
-        const wsuEntries = wsuOrg.map((row, idx) => ({ key: `w${idx}`, row }));
-        const usedWsu = new Set();
-
-        outcomes.forEach((outcomesRow, idx) => {
-            const match = findBestNameMatch(
-                outcomesRow[outcomesNameField],
-                wsuEntries,
-                wsuNameField,
-                threshold,
-                usedWsu
-            );
-            const wsuRow = match ? match.row : null;
-            if (match) {
-                usedWsu.add(match.key);
-            }
-
-            const inputRaw = outcomesRow[outcomesNameField] ?? '';
-            const outputRaw = wsuRow ? wsuRow[wsuNameField] ?? '' : '';
-
-            const rowData = {};
-
-            selectedColumns.outcomes.forEach(col => {
-                rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
-            });
-            selectedColumns.wsu_org.forEach(col => {
-                rowData[`wsu_${col}`] = wsuRow ? wsuRow[col] ?? '' : '';
-            });
-
-            cleanRows.push(rowData);
-
-            if (!wsuRow) {
-            const errorRow = {
-                normalized_key: inputRaw,
-                missing_in: 'myWSU'
-            };
-                selectedColumns.outcomes.forEach(col => {
-                    errorRow[`outcomes_${col}`] = outcomesRow[col] ?? '';
-                });
-                selectedColumns.wsu_org.forEach(col => {
-                    errorRow[`wsu_${col}`] = '';
-                });
-                errorRows.push(errorRow);
-            }
-        });
-
-        wsuEntries.forEach(entry => {
-            if (usedWsu.has(entry.key)) {
-                return;
-            }
-            const wsuRow = entry.row;
-            const outputRaw = wsuRow[wsuNameField] ?? '';
-            const errorRow = {
-                normalized_key: outputRaw,
-                missing_in: 'Outcomes'
-            };
-            selectedColumns.outcomes.forEach(col => {
-                errorRow[`outcomes_${col}`] = '';
-            });
-            selectedColumns.wsu_org.forEach(col => {
-                errorRow[`wsu_${col}`] = wsuRow[col] ?? '';
-            });
-            errorRows.push(errorRow);
-        });
-
-        return { cleanRows, errorRows, selectedColumns, headerLabels };
-    }
-
-    const outcomesMap = buildKeyValueMap(outcomes, keyConfig.outcomes);
-    const wsuMap = buildKeyValueMap(wsuOrg, keyConfig.wsu);
-    const allKeys = new Set([...outcomesMap.keys(), ...wsuMap.keys()]);
-
-    const outcomesEntries = Array.from(outcomesMap.entries()).map(([key, row]) => ({ key, row }));
-    const wsuEntries = Array.from(wsuMap.entries()).map(([key, row]) => ({ key, row }));
-    const usedOutcomes = new Set();
-    const usedWsu = new Set();
-
-    Array.from(allKeys)
-        .sort((a, b) => String(a).localeCompare(String(b)))
-        .forEach(key => {
-            let outcomesRow = outcomesMap.get(key) || null;
-            let wsuRow = wsuMap.get(key) || null;
-            let matchMethod = '';
-
-            if (outcomesRow) {
-                usedOutcomes.add(key);
-            }
-            if (wsuRow) {
-                usedWsu.add(key);
-            }
-
-            if (outcomesRow && wsuRow) {
-                matchMethod = 'Key';
-            } else if (canNameMatch) {
-                if (outcomesRow && !wsuRow) {
-                    const match = findBestNameMatch(
-                        outcomesRow[outcomesNameField],
-                        wsuEntries,
-                        wsuNameField,
-                        threshold,
-                        usedWsu
-                    );
-                    if (match) {
-                        wsuRow = match.row;
-                        usedWsu.add(match.key);
-                        matchMethod = 'Name';
-                    }
-                } else if (!outcomesRow && wsuRow) {
-                    const match = findBestNameMatch(
-                        wsuRow[wsuNameField],
-                        outcomesEntries,
-                        outcomesNameField,
-                        threshold,
-                        usedOutcomes
-                    );
-                    if (match) {
-                        outcomesRow = match.row;
-                        usedOutcomes.add(match.key);
-                        matchMethod = 'Name';
-                    }
-                }
-            }
-
-            const inputRaw = outcomesRow ? outcomesRow[keyConfig.outcomes] : '';
-            const outputRaw = wsuRow ? wsuRow[keyConfig.wsu] : '';
-
-            const rowData = {};
-
-            selectedColumns.outcomes.forEach(col => {
-                rowData[`outcomes_${col}`] = outcomesRow ? outcomesRow[col] ?? '' : '';
-            });
-            selectedColumns.wsu_org.forEach(col => {
-                rowData[`wsu_${col}`] = wsuRow ? wsuRow[col] ?? '' : '';
-            });
-
-            cleanRows.push(rowData);
-
-            if (!outcomesRow) {
-                const errorRow = {
-                    normalized_key: key,
-                    missing_in: 'Outcomes'
-                };
-                selectedColumns.outcomes.forEach(col => {
-                    errorRow[`outcomes_${col}`] = '';
-                });
-                selectedColumns.wsu_org.forEach(col => {
-                    errorRow[`wsu_${col}`] = wsuRow ? wsuRow[col] ?? '' : '';
-                });
-                errorRows.push(errorRow);
-            }
-            if (!wsuRow) {
-                const errorRow = {
-                    normalized_key: key,
-                    missing_in: 'myWSU'
-                };
-                selectedColumns.outcomes.forEach(col => {
-                    errorRow[`outcomes_${col}`] = outcomesRow ? outcomesRow[col] ?? '' : '';
-                });
-                selectedColumns.wsu_org.forEach(col => {
-                    errorRow[`wsu_${col}`] = '';
-                });
-                errorRows.push(errorRow);
-            }
-        });
-
-    return { cleanRows, errorRows, selectedColumns, headerLabels };
-}
-
 async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCols, headerLabels) {
     const workbook = new ExcelJS.Workbook();
-
-    const inputHeader = headerLabels?.input || keyLabels.outcomes || 'Outcomes Key';
-    const outputHeader = headerLabels?.output || keyLabels.wsu || 'myWSU Key';
 
     const cleanSheet = workbook.addWorksheet('Clean_Translation_Table');
     const cleanHeaders = [];
@@ -1105,6 +955,7 @@ async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCol
     selectedCols.wsu_org.forEach(col => {
         cleanHeaders.push(`myWSU: ${col}`);
     });
+    cleanHeaders.push('Similarity %');
     cleanSheet.addRow(cleanHeaders);
     cleanSheet.getRow(1).eachCell((cell, colNumber) => {
         const header = cleanHeaders[colNumber - 1] || '';
@@ -1125,6 +976,7 @@ async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCol
         selectedCols.wsu_org.forEach(col => {
             rowData.push(row[`wsu_${col}`] ?? '');
         });
+        rowData.push(row.match_similarity ?? '');
         cleanSheet.addRow(rowData);
     });
     cleanSheet.views = [{ state: 'frozen', ySplit: 1 }];
@@ -1240,7 +1092,9 @@ function createErrorChart(errors) {
             'Inputs Not Found',
             'Outputs Not Found',
             'Duplicate Target Keys',
-            'Duplicate Source Keys'
+            'Duplicate Source Keys',
+            'Name Mismatches',
+            'Ambiguous Matches'
         ],
         datasets: [{
             label: 'Error Count',
@@ -1250,7 +1104,9 @@ function createErrorChart(errors) {
                 errors.input_not_found,
                 errors.output_not_found,
                 errors.duplicate_targets,
-                errors.duplicate_sources
+                errors.duplicate_sources,
+                errors.name_mismatches,
+                errors.ambiguous_matches
             ],
             backgroundColor: [
                 'rgba(239, 68, 68, 0.8)',   // Red
@@ -1258,7 +1114,9 @@ function createErrorChart(errors) {
                 'rgba(251, 191, 36, 0.8)',  // Yellow
                 'rgba(59, 130, 246, 0.8)',  // Blue
                 'rgba(14, 116, 144, 0.8)',  // Teal
-                'rgba(94, 234, 212, 0.8)'   // Cyan
+                'rgba(94, 234, 212, 0.8)',  // Cyan
+                'rgba(234, 179, 8, 0.8)',   // Amber
+                'rgba(168, 85, 247, 0.8)'   // Purple
             ],
             borderColor: [
                 'rgb(239, 68, 68)',
@@ -1266,7 +1124,9 @@ function createErrorChart(errors) {
                 'rgb(251, 191, 36)',
                 'rgb(59, 130, 246)',
                 'rgb(14, 116, 144)',
-                'rgb(94, 234, 212)'
+                'rgb(94, 234, 212)',
+                'rgb(202, 138, 4)',
+                'rgb(147, 51, 234)'
             ],
             borderWidth: 2
         }]
@@ -1314,6 +1174,7 @@ function displayErrorDetails(errorSamples) {
         { key: 'Duplicate_Target', title: 'Duplicate Target Keys (Many-to-One Errors)', color: 'yellow' },
         { key: 'Duplicate_Source', title: 'Duplicate Source Keys', color: 'yellow' },
         { key: 'Name_Mismatch', title: 'Name Mismatches (Possible Wrong Mappings)', color: 'yellow' },
+        { key: 'Ambiguous_Match', title: 'Ambiguous Matches (Check Alternatives)', color: 'yellow' },
     ];
 
     errorTypes.forEach(errorType => {
@@ -1323,6 +1184,15 @@ function displayErrorDetails(errorSamples) {
             detailsDiv.innerHTML += card;
         }
     });
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function createErrorCard(title, sample, color) {
@@ -1368,15 +1238,20 @@ function createErrorCard(title, sample, color) {
             text: 'Names do not match between Outcomes and myWSU (below similarity threshold). These may be incorrect mappings that need review.',
             impact: 'Warning - Review these mappings to ensure correct records'
         },
+        'Ambiguous Matches (Check Alternatives)': {
+            icon: '⚠️',
+            text: 'Name match is ambiguous (another candidate is within the ambiguity gap). Review alternatives before accepting.',
+            impact: 'Warning - Review ambiguous matches to confirm correctness'
+        },
     };
 
     const explanation = explanations[title] || { icon: '', text: '', impact: '' };
 
     const rowsHtml = sample.rows.map(row => `
         <tr class="border-b">
-            <td class="py-2 px-4 text-sm">${row.translate_input}</td>
-            <td class="py-2 px-4 text-sm">${row.translate_output}</td>
-            <td class="py-2 px-4 text-sm">${row.Error_Description}</td>
+            <td class="py-2 px-4 text-sm">${escapeHtml(row.translate_input)}</td>
+            <td class="py-2 px-4 text-sm">${escapeHtml(row.translate_output)}</td>
+            <td class="py-2 px-4 text-sm">${escapeHtml(row.Error_Description)}</td>
         </tr>
     `).join('');
 
@@ -1447,16 +1322,6 @@ function setupDownloadButton() {
 
 async function createExcelOutput(validated, missing, selectedCols) {
     const workbook = new ExcelJS.Workbook();
-    const normalizeKeyValue = (value) => {
-        if (value === null || value === undefined) return '';
-        const raw = String(value).trim();
-        if (raw === '') return '';
-        if (/^\d+$/.test(raw)) {
-            const cleaned = raw.replace(/^0+/, '');
-            return cleaned === '' ? '0' : cleaned;
-        }
-        return raw.toLowerCase();
-    };
 
     const sheet1 = workbook.addWorksheet('Errors_in_Translate');
 
@@ -1543,6 +1408,7 @@ async function createExcelOutput(validated, missing, selectedCols) {
         Duplicate_Target: 'FFF59E0B',
         Duplicate_Source: 'FFF59E0B',
         Name_Mismatch: 'FFF59E0B',
+        Ambiguous_Match: 'FFA855F7',
         Valid: 'FF16A34A'
     };
 

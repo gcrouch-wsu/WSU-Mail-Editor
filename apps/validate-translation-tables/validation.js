@@ -4,35 +4,55 @@ let wsuOrgData = [];
 
 async function loadFile(file, options = {}) {
     return new Promise((resolve, reject) => {
-        const reader = new FileReader();
         const fileName = file.name.toLowerCase();
         const expectedHeaders = options.expectedHeaders || [];
 
         if (fileName.endsWith('.csv')) {
-            reader.onload = (e) => {
+            const userEncoding = options.encoding || 'auto';
+
+            const parseText = (text) => {
                 try {
-                    const text = e.target.result;
-                    try {
-                        const data = parseCSV(text);
-                        resolve(data);
-                        return;
-                    } catch (parseError) {
-                        if (typeof XLSX !== 'undefined') {
-                            const workbook = XLSX.read(text, { type: 'string' });
-                            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                            const data = sheetToJsonWithHeaderDetection(firstSheet, expectedHeaders);
-                            resolve(data);
-                            return;
-                        }
-                        throw parseError;
+                    return parseCSV(text);
+                } catch (parseError) {
+                    if (typeof XLSX !== 'undefined') {
+                        const workbook = XLSX.read(text, { type: 'string' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        return sheetToJsonWithHeaderDetection(firstSheet, expectedHeaders);
                     }
-                } catch (error) {
-                    reject(new Error(`Error parsing CSV: ${error.message}`));
+                    throw parseError;
                 }
             };
-            reader.onerror = () => reject(new Error('Error reading CSV file'));
-            reader.readAsText(file, 'latin-1'); // Support special characters
+
+            const attemptRead = (encoding, allowFallback) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const text = e.target.result;
+                        const data = parseText(text);
+                        resolve(data);
+                    } catch (error) {
+                        if (allowFallback) {
+                            attemptRead('iso-8859-1', false);
+                            return;
+                        }
+                        reject(new Error(`Error parsing CSV: ${error.message}`));
+                    }
+                };
+                reader.onerror = () => reject(new Error('Error reading CSV file'));
+                if (encoding) {
+                    reader.readAsText(file, encoding);
+                } else {
+                    reader.readAsText(file);
+                }
+            };
+
+            if (userEncoding !== 'auto') {
+                attemptRead(userEncoding, false);
+            } else {
+                attemptRead(null, true);
+            }
         } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+            const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const data = new Uint8Array(e.target.result);
@@ -241,13 +261,198 @@ function parseCSVRows(text) {
     return rows;
 }
 
+const NAME_TOKEN_STOPWORDS = new Set([
+    'university', 'college', 'school', 'academy', 'institute', 'institution',
+    'faculty', 'department', 'center', 'centre', 'program', 'programs',
+    'campus', 'of', 'the', 'and', 'for', 'at', 'in', 'on', 'de', 'la', 'le',
+    'du', 'da', 'di', 'del'
+]);
+const NAME_MATCH_AMBIGUITY_GAP = 0.03;
+
+const NAME_TOKEN_ALIASES = {
+    univ: 'university',
+    uni: 'university',
+    universitat: 'university',
+    universite: 'university',
+    universita: 'university',
+    universidad: 'university',
+    universidade: 'university',
+    coll: 'college',
+    inst: 'institute',
+    intl: 'international',
+    int: 'international',
+    tech: 'technology',
+    sci: 'science',
+    st: 'saint',
+    mt: 'mount',
+    poly: 'polytechnic',
+    polytech: 'polytechnic',
+    ag: 'agricultural',
+    med: 'medical',
+    dept: 'department',
+    ctr: 'center',
+    sch: 'school'
+};
+
+function normalizeNameForCompare(value) {
+    return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/&/g, ' and ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function tokenizeName(value) {
+    const normalized = normalizeNameForCompare(value);
+    if (!normalized) {
+        return [];
+    }
+    return normalized
+        .split(' ')
+        .map(token => NAME_TOKEN_ALIASES[token] || token)
+        .filter(Boolean);
+}
+
+function getInformativeTokens(tokens) {
+    return tokens.filter(token => token.length > 1 && !NAME_TOKEN_STOPWORDS.has(token));
+}
+
+function tokensMatch(token1, token2) {
+    if (token1 === token2) return true;
+    if (token1.length < 4 || token2.length < 4) return false;
+    return token1.startsWith(token2) || token2.startsWith(token1);
+}
+
+function tokenOverlapStats(tokens1, tokens2) {
+    if (!tokens1.length || !tokens2.length) {
+        return { score: 0, matches: 0 };
+    }
+
+    const used = new Set();
+    let matches = 0;
+
+    for (const token1 of tokens1) {
+        let matchedIndex = -1;
+        for (let i = 0; i < tokens2.length; i++) {
+            if (used.has(i)) continue;
+            if (tokensMatch(token1, tokens2[i])) {
+                matchedIndex = i;
+                break;
+            }
+        }
+        if (matchedIndex >= 0) {
+            used.add(matchedIndex);
+            matches += 1;
+        }
+    }
+
+    return {
+        score: matches / Math.max(tokens1.length, tokens2.length),
+        matches
+    };
+}
+
+function getTopTwoNameScores(sourceName, targetRows, targetField, threshold = 0, scoreCache = null) {
+    if (!sourceName) {
+        return { bestScore: -1, secondBestScore: -1 };
+    }
+    const normalizedSource = normalizeNameForCompare(sourceName);
+    if (!normalizedSource) {
+        return { bestScore: -1, secondBestScore: -1 };
+    }
+    const cacheKey = scoreCache
+        ? `${targetField}|${threshold}|${normalizedSource}`
+        : '';
+    if (scoreCache && scoreCache.has(cacheKey)) {
+        return scoreCache.get(cacheKey);
+    }
+
+    let bestScore = -1;
+    let secondBestScore = -1;
+    targetRows.forEach(row => {
+        const targetName = row[targetField];
+        if (!targetName) {
+            return;
+        }
+        const score = calculateNameSimilarity(sourceName, targetName);
+        if (score < threshold) {
+            return;
+        }
+        if (score > bestScore) {
+            secondBestScore = bestScore;
+            bestScore = score;
+        } else if (score > secondBestScore) {
+            secondBestScore = score;
+        }
+    });
+    const result = { bestScore, secondBestScore };
+    if (scoreCache) {
+        scoreCache.set(cacheKey, result);
+    }
+    return result;
+}
+
+function isAmbiguousNameMatch(
+    sourceName,
+    targetName,
+    targetRows,
+    targetField,
+    threshold,
+    gap = NAME_MATCH_AMBIGUITY_GAP,
+    scoreCache = null,
+    mappedScoreValue = null
+) {
+    if (!sourceName || !targetName) {
+        return false;
+    }
+    const mappedScore = typeof mappedScoreValue === 'number'
+        ? mappedScoreValue
+        : calculateNameSimilarity(sourceName, targetName);
+    if (mappedScore < threshold) {
+        return false;
+    }
+    const { bestScore, secondBestScore } = getTopTwoNameScores(
+        sourceName,
+        targetRows,
+        targetField,
+        threshold,
+        scoreCache
+    );
+    if (bestScore < 0 || secondBestScore < 0) {
+        return false;
+    }
+    if (bestScore - secondBestScore >= gap) {
+        return false;
+    }
+    return (bestScore - mappedScore) <= gap;
+}
+
 function calculateNameSimilarity(name1, name2) {
     if (!name1 || !name2) return 0.0;
 
-    const str1 = String(name1).toLowerCase().trim();
-    const str2 = String(name2).toLowerCase().trim();
+    const normalized1 = normalizeNameForCompare(name1);
+    const normalized2 = normalizeNameForCompare(name2);
 
-    const baseSimilarity = similarityRatio(str1, str2);
+    if (!normalized1 || !normalized2) {
+        return 0.0;
+    }
+    if (normalized1 === normalized2) {
+        return 1.0;
+    }
+
+    const informative1 = getInformativeTokens(tokenizeName(normalized1));
+    const informative2 = getInformativeTokens(tokenizeName(normalized2));
+    const tokensAll1 = tokenizeName(normalized1);
+    const tokensAll2 = tokenizeName(normalized2);
+    if (!informative1.length && !informative2.length) {
+        return 0.0;
+    }
+    const overlap = tokenOverlapStats(informative1, informative2);
+    const tokenSimilarity = overlap.score;
+    const baseSimilarity = similarityRatio(normalized1, normalized2);
 
     const contradictoryPairs = [
         [['dental', 'dentistry'], ['medical', 'medicine']],
@@ -255,22 +460,45 @@ function calculateNameSimilarity(name1, name2) {
         [['law'], ['medical', 'business', 'engineering']],
         [['medical'], ['law', 'business', 'engineering']],
         [['graduate'], ['undergraduate']],
-        [['community college', ' cc '], ['university']]
+        [['community college', 'cc'], ['university']]
     ];
 
+    const hasWord = (word, normalized, tokens) => {
+        if (!word) return false;
+        if (word.includes(' ')) {
+            return normalized.includes(word);
+        }
+        if (word.length <= 3) {
+            return tokens.includes(word);
+        }
+        return normalized.includes(word);
+    };
+
     for (const [group1, group2] of contradictoryPairs) {
-        const hasGroup1 = group1.some(word => str1.includes(word));
-        const hasGroup2 = group2.some(word => str2.includes(word));
+        const hasGroup1 = group1.some(word => hasWord(word, normalized1, tokensAll1));
+        const hasGroup2 = group2.some(word => hasWord(word, normalized2, tokensAll2));
 
         if (hasGroup1 && hasGroup2) return 0.0;
 
-        const hasGroup1In2 = group1.some(word => str2.includes(word));
-        const hasGroup2In1 = group2.some(word => str1.includes(word));
+        const hasGroup1In2 = group1.some(word => hasWord(word, normalized2, tokensAll2));
+        const hasGroup2In1 = group2.some(word => hasWord(word, normalized1, tokensAll1));
 
         if (hasGroup1In2 && hasGroup2In1) return 0.0;
     }
 
-    return baseSimilarity;
+    if (informative1.length >= 2 && informative2.length >= 2 && overlap.matches === 0) {
+        return 0.0;
+    }
+    if (informative1.length && informative2.length && tokenSimilarity === 0) {
+        return Math.min(baseSimilarity * 0.6, 0.45);
+    }
+
+    let score = (baseSimilarity * 0.55) + (tokenSimilarity * 0.45);
+    if (tokenSimilarity < 0.2 && baseSimilarity < 0.85) {
+        score *= 0.85;
+    }
+
+    return Math.max(0, Math.min(1, score));
 }
 
 function similarityRatio(str1, str2) {
@@ -373,47 +601,24 @@ function mergeData(outcomes, translate, wsuOrg, keyConfig) {
     return merged;
 }
 
-function detectInvalidTargets(translate, wsuOrg, keyConfig) {
-    const wsuKeys = new Set();
-    wsuOrg.forEach(row => {
-        const normalized = normalizeKeyValue(row[keyConfig.wsu]);
-        if (normalized) {
-            wsuKeys.add(normalized);
-        }
-    });
-
-    const invalidKeys = [];
-    for (const row of translate) {
-        const targetKey = normalizeKeyValue(row[keyConfig.translateOutput]);
-        if (!targetKey) {
-            continue;
-        }
-        if (!wsuKeys.has(targetKey)) {
-            invalidKeys.push(targetKey);
-        }
-    }
-
-    console.log(`[OK] Found ${invalidKeys.length} invalid target keys`);
-    return invalidKeys;
-}
-
 function detectDuplicateTargets(translate, keyConfig) {
     const targetMap = {};
 
     for (const row of translate) {
         const targetKey = normalizeKeyValue(row[keyConfig.translateOutput]);
         const sourceKey = normalizeKeyValue(row[keyConfig.translateInput]);
-        if (!targetKey) {
+        if (!targetKey || !sourceKey) {
             continue;
         }
         if (!targetMap[targetKey]) {
-            targetMap[targetKey] = [];
+            targetMap[targetKey] = new Set();
         }
-        targetMap[targetKey].push(sourceKey);
+        targetMap[targetKey].add(sourceKey);
     }
 
     const duplicates = {};
-    for (const [target, sources] of Object.entries(targetMap)) {
+    for (const [target, sourceSet] of Object.entries(targetMap)) {
+        const sources = Array.from(sourceSet);
         if (sources.length > 1) {
             duplicates[target] = sources;
         }
@@ -435,15 +640,16 @@ function detectDuplicateSources(translate, keyConfig) {
             continue;
         }
         if (!sourceMap[sourceKey]) {
-            sourceMap[sourceKey] = [];
+            sourceMap[sourceKey] = new Set();
         }
         if (targetKey) {
-            sourceMap[sourceKey].push(targetKey);
+            sourceMap[sourceKey].add(targetKey);
         }
     }
 
     const duplicates = {};
-    for (const [source, targets] of Object.entries(sourceMap)) {
+    for (const [source, targetSet] of Object.entries(sourceMap)) {
+        const targets = Array.from(targetSet);
         if (targets.length > 1) {
             duplicates[source] = targets;
         }
@@ -510,10 +716,14 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
     const nameCompareEnabled = Boolean(nameCompare.enabled);
     const outcomesColumn = nameCompare.outcomes_column || '';
     const wsuColumn = nameCompare.wsu_column || '';
-    const threshold = typeof nameCompare.threshold === 'number' ? nameCompare.threshold : 0.5;
+    const threshold = typeof nameCompare.threshold === 'number' ? nameCompare.threshold : 0.8;
+    const ambiguityGap = typeof nameCompare.ambiguity_gap === 'number'
+        ? nameCompare.ambiguity_gap
+        : NAME_MATCH_AMBIGUITY_GAP;
     const outcomesKey = outcomesColumn ? `outcomes_${outcomesColumn}` : '';
     const wsuKey = wsuColumn ? `wsu_${wsuColumn}` : '';
     const canCompareNames = nameCompareEnabled && outcomesKey && wsuKey;
+    const ambiguityScoreCache = canCompareNames ? new Map() : null;
 
     const validated = merged.map(row => {
         const result = {
@@ -562,6 +772,20 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
             if (similarity < threshold) {
                 result.Error_Type = 'Name_Mismatch';
                 result.Error_Description = `Names do not match (similarity: ${Math.round(similarity * 100)}%). "${row[outcomesKey]}" mapped to "${row[wsuKey]}" - verify this is correct`;
+            } else if (
+                isAmbiguousNameMatch(
+                    row[outcomesKey],
+                    row[wsuKey],
+                    wsuOrg,
+                    wsuColumn,
+                    threshold,
+                    ambiguityGap,
+                    ambiguityScoreCache,
+                    similarity
+                )
+            ) {
+                result.Error_Type = 'Ambiguous_Match';
+                result.Error_Description = `Ambiguous name match (similarity: ${Math.round(similarity * 100)}%). Another candidate is within ${Math.round(ambiguityGap * 100)}% - review alternatives`;
             }
         }
 
@@ -588,6 +812,12 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
     const totalMappings = validated.length;
     const validCount = validated.filter(r => r.Error_Type === 'Valid').length;
     const errorCount = totalMappings - validCount;
+    const validPct = totalMappings > 0
+        ? Math.round((validCount / totalMappings) * 1000) / 10
+        : 0;
+    const errorPct = totalMappings > 0
+        ? Math.round((errorCount / totalMappings) * 1000) / 10
+        : 0;
 
     const errorCounts = {};
     validated.forEach(row => {
@@ -611,9 +841,9 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
         validation: {
             total_mappings: totalMappings,
             valid_count: validCount,
-            valid_percentage: Math.round(validCount / totalMappings * 1000) / 10,
+            valid_percentage: validPct,
             error_count: errorCount,
-            error_percentage: Math.round(errorCount / totalMappings * 1000) / 10
+            error_percentage: errorPct
         },
         errors: {
             missing_inputs: errorCounts.Missing_Input || 0,
@@ -621,7 +851,9 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
             input_not_found: errorCounts.Input_Not_Found || 0,
             output_not_found: errorCounts.Output_Not_Found || 0,
             duplicate_targets: errorCounts.Duplicate_Target || 0,
-            duplicate_sources: errorCounts.Duplicate_Source || 0
+            duplicate_sources: errorCounts.Duplicate_Source || 0,
+            name_mismatches: errorCounts.Name_Mismatch || 0,
+            ambiguous_matches: errorCounts.Ambiguous_Match || 0
         }
     };
 
@@ -637,7 +869,8 @@ function getErrorSamples(validated, limit = 10) {
         'Output_Not_Found',
         'Duplicate_Target',
         'Duplicate_Source',
-        'Name_Mismatch'
+        'Name_Mismatch',
+        'Ambiguous_Match'
     ];
 
     const resolvedLimit = limit && limit > 0 ? limit : null;
