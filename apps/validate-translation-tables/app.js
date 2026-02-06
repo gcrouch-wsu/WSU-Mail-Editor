@@ -1444,6 +1444,13 @@ async function createExcelOutput(validated, missing, selectedCols) {
         outputColumns.forEach(col => {
             rowData[col] = row[col] !== undefined ? row[col] : '';
         });
+        if (row.Error_Type === 'Missing_Input') {
+            rowData.Error_Type = 'Translate_Missing_Input';
+            rowData.Error_Description = 'Translate row is missing input/source key';
+        } else if (row.Error_Type === 'Missing_Output') {
+            rowData.Error_Type = 'Translate_Missing_Output';
+            rowData.Error_Description = 'Translate row is missing output/target key';
+        }
         return rowData;
     });
 
@@ -1545,57 +1552,6 @@ async function createExcelOutput(validated, missing, selectedCols) {
         let maxLength = headers[idx].length;
         dataRows.forEach(row => {
             const value = String(row[outputColumns[idx]] || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
-        });
-        column.width = Math.min(maxLength + 2, 50);
-    });
-
-    const sheet2 = workbook.addWorksheet('In_Outcomes_Not_In_Translate');
-
-    const missingColumns = [keyLabels.outcomes || 'Outcomes Key'];
-    selectedCols.outcomes.forEach(col => {
-        if (col !== keyLabels.outcomes) {
-            missingColumns.push(col);
-        }
-    });
-
-    const missingRows = missing.map(row => {
-        const rowData = {};
-        missingColumns.forEach(col => {
-            rowData[col] = row[col] !== undefined ? row[col] : '';
-        });
-        return rowData;
-    });
-
-    sheet2.addRow(missingColumns);
-
-    missingColumns.forEach((header, idx) => {
-        const cell = sheet2.getCell(1, idx + 1);
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } }; // Blue
-    });
-
-    missingRows.forEach(row => {
-        const rowData = missingColumns.map(col => row[col]);
-        const excelRow = sheet2.addRow(rowData);
-
-        excelRow.eachCell(cell => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } }; // Light blue
-        });
-    });
-
-    sheet2.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet2.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: missingColumns.length }
-    };
-
-    sheet2.columns.forEach((column, idx) => {
-        let maxLength = missingColumns[idx].length;
-        missingRows.forEach(row => {
-            const value = String(row[missingColumns[idx]] || '');
             if (value.length > maxLength) {
                 maxLength = value.length;
             }
@@ -1735,6 +1691,57 @@ async function createExcelOutput(validated, missing, selectedCols) {
         cleanSheet.eachRow((row, rowNumber) => {
             if (rowNumber === 1) return;
             const value = String(row.getCell(idx + 1).value || '');
+            if (value.length > maxLength) {
+                maxLength = value.length;
+            }
+        });
+        column.width = Math.min(maxLength + 2, 50);
+    });
+
+    const sheet2 = workbook.addWorksheet('In_Outcomes_Not_In_Translate');
+
+    const missingColumns = [keyLabels.outcomes || 'Outcomes Key'];
+    selectedCols.outcomes.forEach(col => {
+        if (col !== keyLabels.outcomes) {
+            missingColumns.push(col);
+        }
+    });
+
+    const missingRows = missing.map(row => {
+        const rowData = {};
+        missingColumns.forEach(col => {
+            rowData[col] = row[col] !== undefined ? row[col] : '';
+        });
+        return rowData;
+    });
+
+    sheet2.addRow(missingColumns);
+
+    missingColumns.forEach((header, idx) => {
+        const cell = sheet2.getCell(1, idx + 1);
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } }; // Blue
+    });
+
+    missingRows.forEach(row => {
+        const rowData = missingColumns.map(col => row[col]);
+        const excelRow = sheet2.addRow(rowData);
+
+        excelRow.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } }; // Light blue
+        });
+    });
+
+    sheet2.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet2.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: missingColumns.length }
+    };
+
+    sheet2.columns.forEach((column, idx) => {
+        let maxLength = missingColumns[idx].length;
+        missingRows.forEach(row => {
+            const value = String(row[missingColumns[idx]] || '');
             if (value.length > maxLength) {
                 maxLength = value.length;
             }
