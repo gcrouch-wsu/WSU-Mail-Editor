@@ -1768,14 +1768,33 @@ async function createExcelOutput(validated, missing, selectedCols) {
 
     const sheet4 = workbook.addWorksheet('In_myWSU_Not_In_Translate');
     const wsuMissingHeader = [keyLabels.wsu || 'myWSU Key'];
+    selectedCols.wsu_org.forEach(col => {
+        if (col !== keyLabels.wsu) {
+            wsuMissingHeader.push(col);
+        }
+    });
     sheet4.addRow(wsuMissingHeader);
     wsuMissingHeader.forEach((header, idx) => {
         const cell = sheet4.getCell(1, idx + 1);
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
     });
+    const wsuRowsByKey = new Map();
+    loadedData.wsu_org.forEach(row => {
+        const normalized = normalizeKeyValue(row[keyConfig.wsu]);
+        if (normalized && !wsuRowsByKey.has(normalized)) {
+            wsuRowsByKey.set(normalized, row);
+        }
+    });
     missingWsu.sort((a, b) => String(a).localeCompare(String(b))).forEach(key => {
-        sheet4.addRow([key]);
+        const row = wsuRowsByKey.get(key) || {};
+        const rowData = [key];
+        selectedCols.wsu_org.forEach(col => {
+            if (col !== keyLabels.wsu) {
+                rowData.push(row[col] ?? '');
+            }
+        });
+        sheet4.addRow(rowData);
     });
     sheet4.views = [{ state: 'frozen', ySplit: 1 }];
     sheet4.autoFilter = {
@@ -1784,10 +1803,11 @@ async function createExcelOutput(validated, missing, selectedCols) {
     };
     sheet4.columns.forEach((column, idx) => {
         let maxLength = wsuMissingHeader[idx].length;
-        missingWsu.forEach(value => {
-            const text = String(value || '');
-            if (text.length > maxLength) {
-                maxLength = text.length;
+        sheet4.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return;
+            const value = String(row.getCell(idx + 1).value || '');
+            if (value.length > maxLength) {
+                maxLength = value.length;
             }
         });
         column.width = Math.min(maxLength + 2, 50);
