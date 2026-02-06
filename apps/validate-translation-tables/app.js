@@ -44,6 +44,7 @@ let debugState = {
     translate: null,
     wsu_org: null
 };
+let activeWorker = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     setupModeSelector();
@@ -59,6 +60,41 @@ document.addEventListener('DOMContentLoaded', function() {
     setupShowAllErrorsToggle();
     updateModeUI();
 });
+
+function runWorkerTask(type, payload, onProgress) {
+    return new Promise((resolve, reject) => {
+        if (activeWorker) {
+            activeWorker.terminate();
+        }
+        const worker = new Worker('worker.js');
+        activeWorker = worker;
+
+        worker.onmessage = (event) => {
+            const message = event.data || {};
+            if (message.type === 'progress') {
+                if (onProgress) onProgress(message.stage);
+                return;
+            }
+            if (message.type === 'result') {
+                worker.terminate();
+                activeWorker = null;
+                resolve(message.result);
+                return;
+            }
+            if (message.type === 'error') {
+                worker.terminate();
+                activeWorker = null;
+                reject(new Error(message.message));
+            }
+        };
+        worker.onerror = (event) => {
+            worker.terminate();
+            activeWorker = null;
+            reject(new Error(event.message || 'Worker error'));
+        };
+        worker.postMessage({ type, payload });
+    });
+}
 
 function setupModeSelector() {
     const validateRadio = document.getElementById('mode-validate');
@@ -699,6 +735,7 @@ async function runValidation() {
         }
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('results').classList.add('hidden');
+        document.getElementById('loading-message').textContent = 'Analyzing mappings...';
 
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -722,37 +759,34 @@ async function runValidation() {
             return;
         }
 
-        const merged = mergeData(
-            loadedData.outcomes,
-            loadedData.translate,
-            loadedData.wsu_org,
-            keyConfig
-        );
-
-        validatedData = validateMappings(
-            merged,
-            loadedData.translate,
-            loadedData.outcomes,
-            loadedData.wsu_org,
-            keyConfig,
+        const result = await runWorkerTask(
+            'validate',
             {
-                enabled: Boolean(nameCompareEnabled),
-                outcomes_column: nameCompareOutcomes,
-                wsu_column: nameCompareWsu,
-                threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
+                outcomes: loadedData.outcomes,
+                translate: loadedData.translate,
+                wsu_org: loadedData.wsu_org,
+                keyConfig,
+                nameCompare: {
+                    enabled: Boolean(nameCompareEnabled),
+                    outcomes_column: nameCompareOutcomes,
+                    wsu_column: nameCompareWsu,
+                    threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
+                }
+            },
+            (stage) => {
+                const message = stage === 'merge'
+                    ? 'Merging data...'
+                    : 'Validating mappings...';
+                document.getElementById('loading-message').textContent = message;
             }
         );
 
-        missingData = detectMissingMappings(
-            loadedData.outcomes,
-            loadedData.translate,
-            keyConfig
-        );
+        validatedData = result.validatedData;
+        missingData = result.missingData;
+        stats = result.stats;
 
-        stats = generateSummaryStats(validatedData, loadedData.outcomes, loadedData.translate, loadedData.wsu_org);
-
-    const limit = showAllErrors ? 0 : 10;
-    const errorSamples = getErrorSamples(validatedData, limit);
+        const limit = showAllErrors ? 0 : 10;
+        const errorSamples = getErrorSamples(validatedData, limit);
 
         document.getElementById('loading').classList.add('hidden');
 
@@ -773,6 +807,7 @@ async function runGeneration() {
         }
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('results').classList.add('hidden');
+        document.getElementById('loading-message').textContent = 'Generating translation table...';
 
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -801,20 +836,22 @@ async function runGeneration() {
             return;
         }
 
-        const generated = generateTranslationTable(
-            loadedData.outcomes,
-            loadedData.wsu_org,
+        const generated = await runWorkerTask('generate', {
+            outcomes: loadedData.outcomes,
+            wsu_org: loadedData.wsu_org,
             keyConfig,
-            {
+            nameCompare: {
                 enabled: Boolean(nameCompareEnabled),
                 outcomes_column: nameCompareOutcomes,
                 wsu_column: nameCompareWsu,
                 threshold: Number.isNaN(nameCompareThreshold) ? 0.5 : nameCompareThreshold
             },
-            {
+            options: {
                 forceNameMatch
-            }
-        );
+            },
+            selectedColumns,
+            keyLabels
+        });
 
         await createGeneratedTranslationExcel(
             generated.cleanRows,
