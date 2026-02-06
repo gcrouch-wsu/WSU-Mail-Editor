@@ -906,11 +906,7 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {},
             const inputRaw = outcomesRow[outcomesNameField] ?? '';
             const outputRaw = wsuRow ? wsuRow[wsuNameField] ?? '' : '';
 
-            const rowData = {
-                input: inputRaw,
-                output: outputRaw,
-                match_method: match ? 'Name' : 'Unmatched'
-            };
+            const rowData = {};
 
             selectedColumns.outcomes.forEach(col => {
                 rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
@@ -922,12 +918,10 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {},
             cleanRows.push(rowData);
 
             if (!wsuRow) {
-                const errorRow = {
-                    normalized_key: inputRaw,
-                    missing_in: 'myWSU',
-                    input: inputRaw,
-                    output: ''
-                };
+            const errorRow = {
+                normalized_key: inputRaw,
+                missing_in: 'myWSU'
+            };
                 selectedColumns.outcomes.forEach(col => {
                     errorRow[`outcomes_${col}`] = outcomesRow[col] ?? '';
                 });
@@ -946,9 +940,7 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {},
             const outputRaw = wsuRow[wsuNameField] ?? '';
             const errorRow = {
                 normalized_key: outputRaw,
-                missing_in: 'Outcomes',
-                input: '',
-                output: outputRaw
+                missing_in: 'Outcomes'
             };
             selectedColumns.outcomes.forEach(col => {
                 errorRow[`outcomes_${col}`] = '';
@@ -1020,11 +1012,7 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {},
             const inputRaw = outcomesRow ? outcomesRow[keyConfig.outcomes] : '';
             const outputRaw = wsuRow ? wsuRow[keyConfig.wsu] : '';
 
-            const rowData = {
-                input: inputRaw,
-                output: outputRaw,
-                match_method: matchMethod || (inputRaw || outputRaw ? 'Key' : '')
-            };
+            const rowData = {};
 
             selectedColumns.outcomes.forEach(col => {
                 rowData[`outcomes_${col}`] = outcomesRow ? outcomesRow[col] ?? '' : '';
@@ -1038,9 +1026,7 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {},
             if (!outcomesRow) {
                 const errorRow = {
                     normalized_key: key,
-                    missing_in: 'Outcomes',
-                    input: '',
-                    output: outputRaw
+                    missing_in: 'Outcomes'
                 };
                 selectedColumns.outcomes.forEach(col => {
                     errorRow[`outcomes_${col}`] = '';
@@ -1053,9 +1039,7 @@ function generateTranslationTable(outcomes, wsuOrg, keyConfig, nameCompare = {},
             if (!wsuRow) {
                 const errorRow = {
                     normalized_key: key,
-                    missing_in: 'myWSU',
-                    input: inputRaw,
-                    output: ''
+                    missing_in: 'myWSU'
                 };
                 selectedColumns.outcomes.forEach(col => {
                     errorRow[`outcomes_${col}`] = outcomesRow ? outcomesRow[col] ?? '' : '';
@@ -1077,11 +1061,7 @@ async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCol
     const outputHeader = headerLabels?.output || keyLabels.wsu || 'myWSU Key';
 
     const cleanSheet = workbook.addWorksheet('Clean_Translation_Table');
-    const cleanHeaders = [
-        `${inputHeader} (Input)`,
-        `${outputHeader} (Output)`,
-        'Match Method'
-    ];
+    const cleanHeaders = [];
     selectedCols.outcomes.forEach(col => {
         cleanHeaders.push(`Outcomes: ${col}`);
     });
@@ -1089,16 +1069,19 @@ async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCol
         cleanHeaders.push(`myWSU: ${col}`);
     });
     cleanSheet.addRow(cleanHeaders);
-    cleanSheet.getRow(1).eachCell(cell => {
+    cleanSheet.getRow(1).eachCell((cell, colNumber) => {
+        const header = cleanHeaders[colNumber - 1] || '';
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+        if (header.startsWith('Outcomes:')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } }; // Green
+        } else if (header.startsWith('myWSU:')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC2410C' } }; // Orange
+        } else {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } }; // Blue
+        }
     });
     cleanRows.forEach(row => {
-        const rowData = [
-            row.input,
-            row.output,
-            row.match_method
-        ];
+        const rowData = [];
         selectedCols.outcomes.forEach(col => {
             rowData.push(row[`outcomes_${col}`] ?? '');
         });
@@ -1127,9 +1110,7 @@ async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCol
     const errorSheet = workbook.addWorksheet('Generation_Errors');
     const errorHeaders = [
         'Normalized Key',
-        'Missing In',
-        `${inputHeader} (Input)`,
-        `${outputHeader} (Output)`
+        'Missing In'
     ];
     selectedCols.outcomes.forEach(col => {
         errorHeaders.push(`Outcomes: ${col}`);
@@ -1138,16 +1119,21 @@ async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCol
         errorHeaders.push(`myWSU: ${col}`);
     });
     errorSheet.addRow(errorHeaders);
-    errorSheet.getRow(1).eachCell(cell => {
+    errorSheet.getRow(1).eachCell((cell, colNumber) => {
+        const header = errorHeaders[colNumber - 1] || '';
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } };
+        if (header.startsWith('Outcomes:')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } }; // Green
+        } else if (header.startsWith('myWSU:')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC2410C' } }; // Orange
+        } else {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } }; // Red
+        }
     });
     errorRows.forEach(row => {
         const rowData = [
             row.normalized_key,
-            row.missing_in,
-            row.input,
-            row.output
+            row.missing_in
         ];
         selectedCols.outcomes.forEach(col => {
             rowData.push(row[`outcomes_${col}`] ?? '');
