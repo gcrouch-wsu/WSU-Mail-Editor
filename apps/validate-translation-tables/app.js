@@ -1617,7 +1617,14 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     const outcomesColumns = selectedCols.outcomes.map(col => `outcomes_${col}`);
     const wsuColumns = selectedCols.wsu_org.map(col => `wsu_${col}`);
     const suggestionColumns = includeSuggestions
-        ? ['Suggested_Match', 'Suggestion_Score']
+        ? [
+            'Suggested_Key',
+            'Suggested_School',
+            'Suggested_City',
+            'Suggested_State',
+            'Suggested_Country',
+            'Suggestion_Score'
+        ]
         : [];
     const roleOrder = ['School', 'City', 'State', 'Country', 'Other'];
     const getRoleColumns = (sourceKey) => {
@@ -1631,6 +1638,41 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
             });
         });
         return ordered;
+    };
+
+    const getRoleMap = (sourceKey) => {
+        const roles = columnRoles[sourceKey] || {};
+        const roleMap = {};
+        Object.keys(roles).forEach(col => {
+            const role = roles[col];
+            if (role && !roleMap[role]) {
+                roleMap[role] = col;
+            }
+        });
+        return roleMap;
+    };
+
+    const roleMapOutcomes = getRoleMap('outcomes');
+    const roleMapWsu = getRoleMap('wsu_org');
+
+    const getFallbackRoleColumn = (columns, roleName) => {
+        const roleLower = roleName.toLowerCase();
+        return columns.find(col => String(col).toLowerCase().includes(roleLower)) || '';
+    };
+
+    const getRoleValue = (row, roleMap, fallbackColumns, roleName, prefix) => {
+        const roleColumn = roleMap[roleName] || getFallbackRoleColumn(fallbackColumns, roleName);
+        if (!roleColumn) return '';
+        const key = prefix ? `${prefix}${roleColumn}` : roleColumn;
+        return row?.[key] ?? '';
+    };
+
+    const fillSuggestedFields = (rowData, row, roleMap, fallbackColumns, keyValue, prefix) => {
+        rowData.Suggested_Key = keyValue || '';
+        rowData.Suggested_School = getRoleValue(row, roleMap, fallbackColumns, 'School', prefix);
+        rowData.Suggested_City = getRoleValue(row, roleMap, fallbackColumns, 'City', prefix);
+        rowData.Suggested_State = getRoleValue(row, roleMap, fallbackColumns, 'State', prefix);
+        rowData.Suggested_Country = getRoleValue(row, roleMap, fallbackColumns, 'Country', prefix);
     };
 
     const normalizeValue = (value) => {
@@ -1683,84 +1725,36 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null
     );
 
-    const buildSourceSummary = (row, roleColumns, fallbackColumns, keyLabel, keyValue) => {
-        if (!row) return '';
-        const parts = [];
-        if (keyValue) {
-            parts.push(`${keyLabel || 'Key'}: ${keyValue}`);
-        }
-        const columns = roleColumns.length ? roleColumns : fallbackColumns;
-        columns.forEach(col => {
-            const value = row[col];
-            if (value !== undefined && value !== null && String(value).trim() !== '') {
-                parts.push(`${col}: ${value}`);
-            }
-        });
-        return parts.join(' | ');
-    };
-
-    const buildPrefixedSummary = (row, roleColumns, fallbackColumns, prefix) => {
-        const parts = [];
-        const columns = roleColumns.length ? roleColumns : fallbackColumns;
-        columns.forEach(col => {
-            const value = row[`${prefix}${col}`];
-            if (value !== undefined && value !== null && String(value).trim() !== '') {
-                parts.push(`${col}: ${value}`);
-            }
-        });
-        return parts.join(' | ');
-    };
-
-    const roleColumnsOutcomes = getRoleColumns('outcomes');
-    const roleColumnsWsu = getRoleColumns('wsu_org');
-
-    const getBestKeySuggestion = (value, candidates, roleColumns, fallbackColumns, keyLabel) => {
+    const getBestKeySuggestion = (value, candidates) => {
         const normalized = normalizeValue(value);
         if (!normalized) return null;
         let best = null;
         candidates.forEach(candidate => {
             const score = similarityScore(normalized, candidate.norm);
             if (!best || score > best.score) {
-                best = { match: candidate.raw, score, row: candidate.row };
+                best = { key: candidate.raw, score, row: candidate.row };
             }
         });
         if (!best || best.score < MIN_KEY_SUGGESTION_SCORE) {
             return null;
         }
-        const details = buildSourceSummary(best.row, roleColumns, fallbackColumns, keyLabel, best.match);
-        return { match: details || best.match, score: best.score };
+        return best;
     };
 
-    const getTopNameSuggestions = (outcomesName, limit = 2) => {
-        if (!canSuggestNames || !outcomesName) return [];
+    const getBestNameSuggestion = (outcomesName) => {
+        if (!canSuggestNames || !outcomesName) return null;
         const candidates = [];
         wsuNameCandidates.forEach(candidate => {
             const score = typeof calculateNameSimilarity === 'function'
                 ? calculateNameSimilarity(outcomesName, candidate.name)
                 : similarityScore(normalizeValue(outcomesName), candidate.normName);
             if (score >= minNameScore) {
-                candidates.push({ match: candidate, score });
+                candidates.push({ row: candidate.row, key: candidate.key, score });
             }
         });
+        if (!candidates.length) return null;
         candidates.sort((a, b) => b.score - a.score);
-        return candidates.slice(0, limit).map(item => {
-            const label = buildSourceSummary(
-                item.match.row,
-                roleColumnsWsu,
-                selectedCols.wsu_org,
-                keyLabels.wsu || 'myWSU Key',
-                item.match.key
-            );
-            return { match: label || item.match.name || item.match.key || '', score: item.score };
-        });
-    };
-
-    const buildSuggestionList = (suggestions) => {
-        if (!suggestions.length) return { matchText: '', scoreValue: null };
-        const matchText = suggestions
-            .map((item, idx) => `${idx + 1}) ${item.match} (${Math.round(item.score * 100)}%)`)
-            .join(' | ');
-        return { matchText, scoreValue: suggestions[0]?.score ?? null };
+        return candidates[0];
     };
 
     const normalizeErrorType = (row) => {
@@ -1789,31 +1783,37 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         if (!includeSuggestions) {
             return;
         }
-        rowData.Suggested_Match = '';
+        rowData.Suggested_Key = '';
+        rowData.Suggested_School = '';
+        rowData.Suggested_City = '';
+        rowData.Suggested_State = '';
+        rowData.Suggested_Country = '';
         rowData.Suggestion_Score = '';
 
         if (errorType === 'Input_Not_Found') {
-            const suggestion = getBestKeySuggestion(
-                row.translate_input,
-                outcomesKeyCandidates,
-                roleColumnsOutcomes,
-                selectedCols.outcomes,
-                keyLabels.outcomes || 'Outcomes Key'
-            );
+            const suggestion = getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
             if (suggestion) {
-                rowData.Suggested_Match = suggestion.match;
+                fillSuggestedFields(
+                    rowData,
+                    suggestion.row,
+                    roleMapOutcomes,
+                    selectedCols.outcomes,
+                    suggestion.key,
+                    ''
+                );
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
             }
         } else if (errorType === 'Output_Not_Found') {
-            const suggestion = getBestKeySuggestion(
-                row.translate_output,
-                wsuKeyCandidates,
-                roleColumnsWsu,
-                selectedCols.wsu_org,
-                keyLabels.wsu || 'myWSU Key'
-            );
+            const suggestion = getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
             if (suggestion) {
-                rowData.Suggested_Match = suggestion.match;
+                fillSuggestedFields(
+                    rowData,
+                    suggestion.row,
+                    roleMapWsu,
+                    selectedCols.wsu_org,
+                    suggestion.key,
+                    ''
+                );
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
             }
         } else if (
@@ -1826,39 +1826,37 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
             const outcomesName = row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '';
             const wsuName = row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '';
             if (errorType === 'Duplicate_Target' || errorType === 'Duplicate_Source') {
-                const outcomesSummary = buildPrefixedSummary(
-                    row,
-                    roleColumnsOutcomes,
-                    selectedCols.outcomes,
-                    'outcomes_'
-                );
-                const wsuSummary = buildPrefixedSummary(
-                    row,
-                    roleColumnsWsu,
-                    selectedCols.wsu_org,
-                    'wsu_'
-                );
-                const summary = [];
-                if (outcomesSummary) summary.push(`Outcomes: ${outcomesSummary}`);
-                if (wsuSummary) summary.push(`myWSU: ${wsuSummary}`);
-                if (summary.length) rowData.Suggested_Match = summary.join(' | ');
+                if (errorType === 'Duplicate_Target') {
+                    const outcomesKeyValue = row[`outcomes_${keyLabels.outcomes}`] || row.translate_input;
+                    fillSuggestedFields(
+                        rowData,
+                        row,
+                        roleMapOutcomes,
+                        selectedCols.outcomes,
+                        outcomesKeyValue,
+                        'outcomes_'
+                    );
+                } else {
+                    const wsuKeyValue = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
+                    fillSuggestedFields(
+                        rowData,
+                        row,
+                        roleMapWsu,
+                        selectedCols.wsu_org,
+                        wsuKeyValue,
+                        'wsu_'
+                    );
+                }
             } else if (errorType === 'High_Confidence_Match') {
-                const outcomesSummary = buildPrefixedSummary(
+                const wsuKeyValue = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
+                fillSuggestedFields(
+                    rowData,
                     row,
-                    roleColumnsOutcomes,
-                    selectedCols.outcomes,
-                    'outcomes_'
-                );
-                const wsuSummary = buildPrefixedSummary(
-                    row,
-                    roleColumnsWsu,
+                    roleMapWsu,
                     selectedCols.wsu_org,
+                    wsuKeyValue,
                     'wsu_'
                 );
-                const summary = [];
-                if (outcomesSummary) summary.push(`Outcomes: ${outcomesSummary}`);
-                if (wsuSummary) summary.push(`myWSU: ${wsuSummary}`);
-                if (summary.length) rowData.Suggested_Match = summary.join(' | ');
                 const similarity = typeof calculateNameSimilarity === 'function'
                     ? calculateNameSimilarity(outcomesName, wsuName)
                     : null;
@@ -1866,11 +1864,17 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
                     rowData.Suggestion_Score = formatSuggestionScore(similarity);
                 }
             } else {
-                const suggestions = getTopNameSuggestions(outcomesName, 2);
-                if (suggestions.length) {
-                    const formatted = buildSuggestionList(suggestions);
-                    rowData.Suggested_Match = formatted.matchText;
-                    rowData.Suggestion_Score = formatSuggestionScore(formatted.scoreValue);
+                const suggestion = getBestNameSuggestion(outcomesName);
+                if (suggestion) {
+                    fillSuggestedFields(
+                        rowData,
+                        suggestion.row,
+                        roleMapWsu,
+                        selectedCols.wsu_org,
+                        suggestion.key,
+                        ''
+                    );
+                    rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
                 }
             }
         }
@@ -1891,7 +1895,11 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
             }
             if (col === 'wsu_Org ID') return 'myWSU Key';
             if (col === 'Error_Type') return 'Error Type';
-            if (col === 'Suggested_Match') return 'Suggested Match';
+            if (col === 'Suggested_Key') return 'Suggested Key';
+            if (col === 'Suggested_School') return 'Suggested School';
+            if (col === 'Suggested_City') return 'Suggested City';
+            if (col === 'Suggested_State') return 'Suggested State';
+            if (col === 'Suggested_Country') return 'Suggested Country';
             if (col === 'Suggestion_Score') return 'Suggestion Score';
             return col;
         })
@@ -1903,7 +1911,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         if (['translate_input', 'translate_output'].includes(col)) return style.translateHeaderColor;
         if (col.startsWith('outcomes_')) return style.outcomesHeaderColor;
         if (col.startsWith('wsu_')) return style.wsuHeaderColor;
-        if (['Suggested_Match', 'Suggestion_Score'].includes(col)) {
+        if (col.startsWith('Suggested_') || col === 'Suggestion_Score') {
             return style.suggestionHeaderColor;
         }
         return style.defaultHeaderColor;
@@ -1915,7 +1923,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         if (['translate_input', 'translate_output'].includes(col)) return style.translateBodyColor;
         if (col.startsWith('outcomes_')) return style.outcomesBodyColor;
         if (col.startsWith('wsu_')) return style.wsuBodyColor;
-        if (['Suggested_Match', 'Suggestion_Score'].includes(col)) {
+        if (col.startsWith('Suggested_') || col === 'Suggestion_Score') {
             return style.suggestionBodyColor;
         }
         return style.defaultBodyColor;
