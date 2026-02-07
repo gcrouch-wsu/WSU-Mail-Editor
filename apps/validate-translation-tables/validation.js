@@ -292,6 +292,8 @@ const NAME_TOKEN_ALIASES = {
     cc: 'community',
     comm: 'community',
     jr: 'junior',
+    u: 'university',
+    ft: 'fort',
     tech: 'technology',
     inst: 'institute',
     poly: 'polytechnic',
@@ -339,6 +341,8 @@ function normalizeNameForCompare(value) {
         .replace(/\bjunior college\b/g, 'community college')
         .replace(/\bjr college\b/g, 'community college')
         .replace(/\bcc\b/g, 'community college')
+        .replace(/\bft\b/g, 'fort')
+        .replace(/\bu of\b/g, 'university of')
         .replace(/\bla verne\b/g, 'laverne')
         .replace(/&/g, ' and ')
         .replace(/[^a-z0-9]+/g, ' ')
@@ -441,13 +445,32 @@ function extractParentheticalTokens(nameValue) {
         .filter(Boolean);
 }
 
+function extractHyphenSuffixTokens(nameValue) {
+    if (!nameValue) return [];
+    const parts = String(nameValue).split(/[-–—]/);
+    if (parts.length < 2) return [];
+    const suffix = parts[parts.length - 1].trim();
+    if (!suffix) return [];
+    return normalizeNameForCompare(suffix).split(' ').filter(Boolean);
+}
+
 function locationInNameMatches(nameValue, cityValue, stateValue) {
-    const tokens = extractParentheticalTokens(nameValue);
+    const tokens = [
+        ...extractParentheticalTokens(nameValue),
+        ...extractHyphenSuffixTokens(nameValue)
+    ];
     if (!tokens.length) return false;
     const normalizedCity = normalizeNameForCompare(cityValue);
     for (const token of tokens) {
-        if (normalizedCity && (token === normalizedCity || normalizedCity.includes(token) || token.includes(normalizedCity))) {
-            return true;
+        if (normalizedCity) {
+            if (token === normalizedCity) {
+                return true;
+            }
+            if (token.length >= 3 && (
+                normalizedCity.includes(token) || token.includes(normalizedCity)
+            )) {
+                return true;
+            }
         }
         if (stateValue && statesMatch(token, stateValue)) {
             return true;

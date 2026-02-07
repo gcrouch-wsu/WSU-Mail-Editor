@@ -67,21 +67,21 @@
                     <div class="mt-2 text-sm text-blue-700">
                         <div id="instructions-validate">
                             <p>1. Upload the Outcomes source, Translation table, and myWSU table</p>
-                            <p>2. Select the required Match Keys (Outcomes, Translate input/output, myWSU)</p>
+                            <p>2. In the column list, pick the key columns and the columns to include (include City/State to enable high-confidence matching)</p>
                             <p>3. Choose validation mode: key-only, or key + name comparison</p>
                             <p>4. If using name comparison, pick name columns and adjust threshold/ambiguity gap</p>
-                            <p>5. (Optional) Choose report columns to include in the export</p>
+                            <p>5. (Optional) Map roles (School/City/State/Country) to improve suggestions</p>
                             <p>6. Click "Validate Mappings" to identify errors</p>
-                            <p>7. Review the error dashboard and download the color-coded Excel report</p>
+                            <p>7. Review the dashboard and download the Excel report (includes One_to_Many and High_Confidence_Matches)</p>
                         </div>
                         <div id="instructions-create" class="hidden">
                             <p>1. Upload the Outcomes source and myWSU table</p>
-                            <p>2. Select the required Match Keys (Outcomes + myWSU)</p>
+                            <p>2. In the column list, pick the key columns and the columns to include (include City/State to enable high-confidence matching)</p>
                             <p>3. Choose match method: key or name</p>
                             <p>4. If matching by name, pick name columns and adjust threshold/ambiguity gap</p>
-                            <p>5. (Optional) Choose report columns to include in the export</p>
+                            <p>5. (Optional) Map roles (School/City/State/Country) to improve suggestions</p>
                             <p>6. Click "Generate Translation Table" to create a clean Input/Output table</p>
-                            <p>7. Review the missing-value report and download the color-coded Excel output</p>
+                            <p>7. Review the missing-value report and download the Excel output</p>
                         </div>
                         <p class="mt-2 font-semibold">Privacy: All files are processed locally in your browser. No data is uploaded to any server.</p>
                     </div>
@@ -287,6 +287,15 @@
                         </p>
                     </div>
                 </div>
+                <details class="mt-3 text-xs text-gray-600">
+                    <summary class="cursor-pointer text-gray-600">High-confidence match rules (click to expand)</summary>
+                    <div class="mt-2 space-y-1">
+                        <p>- Parentheses or hyphen suffix locations count (e.g., "(DC)" or " - Tuscaloosa").</p>
+                        <p>- City/state matches raise confidence (including DC/Washington DC).</p>
+                        <p>- Common aliases: U/Univ/University, CC/Community College/Junior College, St/Saint, Mt/Mount.</p>
+                        <p>- System abbreviations: Cal State, UC/UMass, A&amp;M, Tech/Institute of Technology.</p>
+                    </div>
+                </details>
                 <div id="name-compare-fields" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Outcomes name column</label>
