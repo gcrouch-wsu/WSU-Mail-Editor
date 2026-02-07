@@ -40,6 +40,12 @@ let keyLabels = {
 };
 let matchMethodTouched = false;
 let validateNameMode = 'key';
+let lastNameCompareConfig = {
+    enabled: false,
+    outcomes: '',
+    wsu: '',
+    threshold: 0.8
+};
 let debugState = {
     outcomes: null,
     translate: null,
@@ -890,6 +896,13 @@ async function runValidation() {
             return;
         }
 
+        lastNameCompareConfig = {
+            enabled: Boolean(nameCompareEnabled),
+            outcomes: nameCompareOutcomes,
+            wsu: nameCompareWsu,
+            threshold: resolvedThreshold
+        };
+
         const result = await runWorkerTask(
             'validate',
             {
@@ -1188,8 +1201,13 @@ function displayResults(stats, errorSamples) {
     document.getElementById('total-mappings').textContent = stats.validation.total_mappings.toLocaleString();
     document.getElementById('valid-count').textContent = stats.validation.valid_count.toLocaleString();
     document.getElementById('valid-percentage').textContent = stats.validation.valid_percentage + '%';
-    document.getElementById('error-count').textContent = stats.validation.error_count.toLocaleString();
-    document.getElementById('error-percentage').textContent = stats.validation.error_percentage + '%';
+    const duplicateCount = (stats.errors.duplicate_targets || 0) + (stats.errors.duplicate_sources || 0);
+    const displayErrorCount = Math.max(0, stats.validation.error_count - duplicateCount);
+    const displayErrorPercentage = stats.validation.total_mappings
+        ? Math.round((displayErrorCount / stats.validation.total_mappings) * 1000) / 10
+        : 0;
+    document.getElementById('error-count').textContent = displayErrorCount.toLocaleString();
+    document.getElementById('error-percentage').textContent = `${displayErrorPercentage}%`;
     document.getElementById('quality-score').textContent = stats.validation.valid_percentage + '%';
 
     createErrorChart(stats.errors);
@@ -1425,7 +1443,18 @@ function setupDownloadButton() {
             downloadBtn.disabled = true;
             downloadBtn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Generating...';
 
-            await createExcelOutput(validatedData, missingData, selectedColumns);
+            const includeSuggestions = Boolean(
+                document.getElementById('include-suggestions')?.checked
+            );
+            await createExcelOutput(
+                validatedData,
+                missingData,
+                selectedColumns,
+                {
+                    includeSuggestions,
+                    nameCompareConfig: lastNameCompareConfig
+                }
+            );
 
             downloadBtn.disabled = false;
             downloadBtn.innerHTML = `
@@ -1443,280 +1472,462 @@ function setupDownloadButton() {
     });
 }
 
-async function createExcelOutput(validated, missing, selectedCols) {
+async function createExcelOutput(validated, missing, selectedCols, options = {}) {
     const workbook = new ExcelJS.Workbook();
+    const includeSuggestions = Boolean(options.includeSuggestions);
+    const nameCompareConfig = options.nameCompareConfig || {};
+    const canSuggestNames = Boolean(
+        includeSuggestions &&
+        nameCompareConfig.enabled &&
+        nameCompareConfig.outcomes &&
+        nameCompareConfig.wsu
+    );
 
-    const sheet1 = workbook.addWorksheet('Errors_in_Translate');
+    const outcomesColumns = selectedCols.outcomes.map(col => `outcomes_${col}`);
+    const wsuColumns = selectedCols.wsu_org.map(col => `wsu_${col}`);
+    const baseErrorColumns = ['Error_Type', 'Error_Description'];
+    const suggestionColumns = includeSuggestions
+        ? ['Review_Status', 'Suggested_Match', 'Suggestion_Score']
+        : [];
 
-    const outputColumns = ['Error_Type', 'Error_Description', 'Duplicate_Group', 'translate_input', 'translate_output'];
+    const normalizeValue = (value) => {
+        if (typeof normalizeKeyValue === 'function') {
+            return normalizeKeyValue(value);
+        }
+        return String(value || '').trim().toLowerCase();
+    };
 
-    selectedCols.outcomes.forEach(col => {
-        outputColumns.push(`outcomes_${col}`);
-    });
+    const similarityScore = (valueA, valueB) => {
+        if (typeof similarityRatio === 'function') {
+            return similarityRatio(valueA, valueB);
+        }
+        return valueA && valueB && valueA === valueB ? 1 : 0;
+    };
 
-    selectedCols.wsu_org.forEach(col => {
-        outputColumns.push(`wsu_${col}`);
-    });
+    const MIN_KEY_SUGGESTION_SCORE = 0.6;
+    const minNameScore = Number.isFinite(nameCompareConfig.threshold)
+        ? nameCompareConfig.threshold
+        : 0.8;
 
-    const errorRowsOnly = validated.filter(row => row.Error_Type !== 'Valid');
-    const dataRows = errorRowsOnly.map(row => {
-        const rowData = {};
-        outputColumns.forEach(col => {
-            rowData[col] = row[col] !== undefined ? row[col] : '';
+    const outcomesKeyCandidates = loadedData.outcomes
+        .map(row => ({
+            raw: row[keyConfig.outcomes],
+            norm: normalizeValue(row[keyConfig.outcomes])
+        }))
+        .filter(entry => entry.norm);
+
+    const wsuKeyCandidates = loadedData.wsu_org
+        .map(row => ({
+            raw: row[keyConfig.wsu],
+            norm: normalizeValue(row[keyConfig.wsu])
+        }))
+        .filter(entry => entry.norm);
+
+    const wsuNameCandidates = canSuggestNames
+        ? loadedData.wsu_org
+            .map(row => ({
+                key: row[keyConfig.wsu],
+                name: row[nameCompareConfig.wsu],
+                normName: normalizeValue(row[nameCompareConfig.wsu])
+            }))
+            .filter(entry => entry.normName)
+        : [];
+
+    const formatSuggestionScore = (score) => (
+        Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null
+    );
+
+    const getBestKeySuggestion = (value, candidates) => {
+        const normalized = normalizeValue(value);
+        if (!normalized) return null;
+        let best = null;
+        candidates.forEach(candidate => {
+            const score = similarityScore(normalized, candidate.norm);
+            if (!best || score > best.score) {
+                best = { match: candidate.raw, score };
+            }
         });
+        if (!best || best.score < MIN_KEY_SUGGESTION_SCORE) {
+            return null;
+        }
+        return best;
+    };
+
+    const getTopNameSuggestions = (outcomesName, limit = 2) => {
+        if (!canSuggestNames || !outcomesName) return [];
+        const candidates = [];
+        wsuNameCandidates.forEach(candidate => {
+            const score = typeof calculateNameSimilarity === 'function'
+                ? calculateNameSimilarity(outcomesName, candidate.name)
+                : similarityScore(normalizeValue(outcomesName), candidate.normName);
+            if (score >= minNameScore) {
+                candidates.push({ match: candidate, score });
+            }
+        });
+        candidates.sort((a, b) => b.score - a.score);
+        return candidates.slice(0, limit).map(item => {
+            const label = item.match.name && item.match.key
+                ? `${item.match.key} - ${item.match.name}`
+                : item.match.name || item.match.key || '';
+            return { match: label, score: item.score };
+        });
+    };
+
+    const buildSuggestionList = (suggestions) => {
+        if (!suggestions.length) return { matchText: '', scoreValue: null };
+        const matchText = suggestions
+            .map((item, idx) => `${idx + 1}) ${item.match} (${Math.round(item.score * 100)}%)`)
+            .join(' | ');
+        return { matchText, scoreValue: suggestions[0]?.score ?? null };
+    };
+
+    const normalizeErrorDetails = (row) => {
+        let errorType = row.Error_Type;
+        let description = row.Error_Description || '';
         if (row.Error_Type === 'Missing_Input') {
-            rowData.Error_Type = 'Translate_Missing_Input';
-            rowData.Error_Description = 'Translate row is missing input/source key';
+            errorType = 'Translate_Missing_Input';
+            description = 'Translate row is missing input/source key';
         } else if (row.Error_Type === 'Missing_Output') {
-            rowData.Error_Type = 'Translate_Missing_Output';
-            rowData.Error_Description = 'Translate row is missing output/target key';
+            errorType = 'Translate_Missing_Output';
+            description = 'Translate row is missing output/target key';
+        } else if (row.Error_Type === 'Duplicate_Target') {
+            errorType = 'Many_to_One';
+            description = 'Multiple Outcomes keys map to the same myWSU key';
+        } else if (row.Error_Type === 'Duplicate_Source') {
+            errorType = 'One_to_Many';
+            description = 'Single Outcomes key maps to multiple myWSU keys';
         }
-        return rowData;
-    });
+        return { errorType, description };
+    };
 
-    const headers = outputColumns.map(col => {
-        if (col === 'translate_input') return `${keyLabels.translateInput || 'Source key'} (Translate Input)`;
-        if (col === 'translate_output') return `${keyLabels.translateOutput || 'Target key'} (Translate Output)`;
-        if (col === 'outcomes_name') return 'School Name (Outcomes)';
-        if (col === `outcomes_${keyLabels.outcomes}` && keyLabels.outcomes) {
-            return `${keyLabels.outcomes} (Outcomes Key)`;
+    const applySuggestionColumns = (row, rowData, errorType) => {
+        if (!includeSuggestions) {
+            return;
         }
-        if (col === 'outcomes_mdb_code') return 'Outcomes Key';
-        if (col === 'wsu_Descr') return 'Organization Name (myWSU)';
-        if (col === `wsu_${keyLabels.wsu}` && keyLabels.wsu) {
-            return `${keyLabels.wsu} (myWSU Key)`;
-        }
-        if (col === 'wsu_Org ID') return 'myWSU Key';
-        return col;
-    });
+        rowData.Review_Status = '';
+        rowData.Suggested_Match = '';
+        rowData.Suggestion_Score = '';
 
-    sheet1.addRow(headers);
+        if (errorType === 'Input_Not_Found') {
+            const suggestion = getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
+            if (suggestion) {
+                rowData.Suggested_Match = suggestion.match;
+                rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
+            }
+        } else if (errorType === 'Output_Not_Found') {
+            const suggestion = getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+            if (suggestion) {
+                rowData.Suggested_Match = suggestion.match;
+                rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
+            }
+        } else if (
+            errorType === 'Name_Mismatch' ||
+            errorType === 'Ambiguous_Match' ||
+            errorType === 'Many_to_One' ||
+            errorType === 'One_to_Many'
+        ) {
+            const outcomesName = row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '';
+            const wsuName = row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '';
+            if (errorType === 'Many_to_One' || errorType === 'One_to_Many') {
+                if (outcomesName || wsuName) {
+                    rowData.Suggested_Match = outcomesName && wsuName
+                        ? `${outcomesName} ↔ ${wsuName}`
+                        : outcomesName || wsuName;
+                }
+            } else {
+                const suggestions = getTopNameSuggestions(outcomesName, 2);
+                if (suggestions.length) {
+                    const formatted = buildSuggestionList(suggestions);
+                    rowData.Suggested_Match = formatted.matchText;
+                    rowData.Suggestion_Score = formatSuggestionScore(formatted.scoreValue);
+                }
+            }
+        }
+    };
 
-    headers.forEach((header, idx) => {
-        const cell = sheet1.getCell(1, idx + 1);
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    const buildHeaders = (outputColumns) => (
+        outputColumns.map(col => {
+            if (col === 'translate_input') return `${keyLabels.translateInput || 'Source key'} (Translate Input)`;
+            if (col === 'translate_output') return `${keyLabels.translateOutput || 'Target key'} (Translate Output)`;
+            if (col === 'outcomes_name') return 'School Name (Outcomes)';
+            if (col === `outcomes_${keyLabels.outcomes}` && keyLabels.outcomes) {
+                return `${keyLabels.outcomes} (Outcomes Key)`;
+            }
+            if (col === 'outcomes_mdb_code') return 'Outcomes Key';
+            if (col === 'wsu_Descr') return 'Organization Name (myWSU)';
+            if (col === `wsu_${keyLabels.wsu}` && keyLabels.wsu) {
+                return `${keyLabels.wsu} (myWSU Key)`;
+            }
+            if (col === 'wsu_Org ID') return 'myWSU Key';
+            if (col === 'Review_Status') return 'Review Status';
+            if (col === 'Suggested_Match') return 'Suggested Match';
+            if (col === 'Suggestion_Score') return 'Suggestion Score';
+            return col;
+        })
+    );
 
-        const errorCols = ['Error_Type', 'Error_Description', 'Duplicate_Group'];
-        const translateCols = [
-            `${keyLabels.translateInput || 'Source key'} (Translate Input)`,
-            `${keyLabels.translateOutput || 'Target key'} (Translate Output)`
-        ];
+    const getHeaderFill = (col, style) => {
+        if (['Error_Type', 'Error_Description'].includes(col)) return style.errorHeaderColor;
+        if (col === 'Duplicate_Group') return style.groupHeaderColor;
+        if (['translate_input', 'translate_output'].includes(col)) return style.translateHeaderColor;
+        if (col.startsWith('outcomes_')) return style.outcomesHeaderColor;
+        if (col.startsWith('wsu_')) return style.wsuHeaderColor;
+        if (['Review_Status', 'Suggested_Match', 'Suggestion_Score'].includes(col)) {
+            return style.suggestionHeaderColor;
+        }
+        return style.defaultHeaderColor;
+    };
 
-        if (errorCols.includes(header)) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } }; // Red
-        } else if (translateCols.includes(header)) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } }; // Blue
-        } else if (outputColumns[idx].startsWith('outcomes_')) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } }; // Green
-        } else if (outputColumns[idx].startsWith('wsu_')) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC2410C' } }; // Orange
-        } else {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF981e32' } }; // WSU Crimson
+    const getBodyFill = (col, style) => {
+        if (['Error_Type', 'Error_Description'].includes(col)) return style.errorBodyColor;
+        if (col === 'Duplicate_Group') return style.groupBodyColor;
+        if (['translate_input', 'translate_output'].includes(col)) return style.translateBodyColor;
+        if (col.startsWith('outcomes_')) return style.outcomesBodyColor;
+        if (col.startsWith('wsu_')) return style.wsuBodyColor;
+        if (['Review_Status', 'Suggested_Match', 'Suggestion_Score'].includes(col)) {
+            return style.suggestionBodyColor;
         }
-    });
+        return style.defaultBodyColor;
+    };
 
-    const sourceFillByColumn = outputColumns.map(col => {
-        if (['Error_Type', 'Error_Description', 'Duplicate_Group'].includes(col)) {
-            return { argb: 'FFFEE2E2' };
+    const columnIndexToLetter = (index) => {
+        let result = '';
+        let current = index;
+        while (current > 0) {
+            const remainder = (current - 1) % 26;
+            result = String.fromCharCode(65 + remainder) + result;
+            current = Math.floor((current - 1) / 26);
         }
-        if (['translate_input', 'translate_output'].includes(col)) {
-            return { argb: 'FFDBEAFE' };
+        return result;
+    };
+
+    const addSheetWithRows = (sheetName, outputColumns, rows, style, rowBorderByError, groupColumn) => {
+        const sheet = workbook.addWorksheet(sheetName);
+        const headers = buildHeaders(outputColumns);
+        sheet.addRow(headers);
+        headers.forEach((header, idx) => {
+            const cell = sheet.getCell(1, idx + 1);
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: getHeaderFill(outputColumns[idx], style) } };
+        });
+
+        const sourceFillByColumn = outputColumns.map(col => ({
+            argb: getBodyFill(col, style)
+        }));
+
+        let prevGroup = null;
+        const groupBorderColor = 'FF9CA3AF';
+
+        rows.forEach(row => {
+            let isNewGroup = false;
+            if (groupColumn) {
+                const currentGroup = row[groupColumn] || '';
+                if (prevGroup !== null && currentGroup !== prevGroup) {
+                    isNewGroup = true;
+                }
+                prevGroup = currentGroup;
+            }
+
+            const rowData = outputColumns.map(col => row[col] ?? '');
+            const excelRow = sheet.addRow(rowData);
+            excelRow.eachCell((cell, colNumber) => {
+                const fill = sourceFillByColumn[colNumber - 1];
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fill };
+                if (isNewGroup) {
+                    const existingBorder = cell.border || {};
+                    cell.border = {
+                        ...existingBorder,
+                        top: { style: 'medium', color: { argb: groupBorderColor } }
+                    };
+                }
+                if (outputColumns[colNumber - 1] === 'Suggestion_Score') {
+                    cell.numFmt = '0%';
+                }
+            });
+
+            if (rowBorderByError && row.Error_Type) {
+                const borderColor = rowBorderByError[row.Error_Type];
+                if (borderColor) {
+                    const indicatorCell = excelRow.getCell(1);
+                    const existingBorder = indicatorCell.border || {};
+                    indicatorCell.border = {
+                        ...existingBorder,
+                        left: { style: 'medium', color: { argb: borderColor } }
+                    };
+                }
+            }
+        });
+
+        sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        sheet.autoFilter = {
+            from: { row: 1, column: 1 },
+            to: { row: 1, column: headers.length }
+        };
+        sheet.columns.forEach((column, idx) => {
+            let maxLength = headers[idx].length;
+            rows.forEach(row => {
+                const value = String(row[outputColumns[idx]] || '');
+                if (value.length > maxLength) {
+                    maxLength = value.length;
+                }
+            });
+            column.width = Math.min(maxLength + 2, 50);
+        });
+
+        const suggestionIndex = outputColumns.indexOf('Suggestion_Score');
+        if (suggestionIndex >= 0 && rows.length > 0) {
+            const columnLetter = columnIndexToLetter(suggestionIndex + 1);
+            const ref = `${columnLetter}2:${columnLetter}${sheet.rowCount}`;
+            sheet.addConditionalFormatting({
+                ref,
+                rules: [
+                    {
+                        type: 'colorScale',
+                        cfvo: [
+                            { type: 'min' },
+                            { type: 'percentile', value: 50 },
+                            { type: 'max' }
+                        ],
+                        color: [
+                            { argb: 'FFF87171' },
+                            { argb: 'FFFACC15' },
+                            { argb: 'FF4ADE80' }
+                        ]
+                    }
+                ]
+            });
         }
-        if (col.startsWith('outcomes_')) {
-            return { argb: 'FFDCFCE7' };
-        }
-        if (col.startsWith('wsu_')) {
-            return { argb: 'FFFFEDD5' };
-        }
-        return { argb: 'FFFFFFFF' };
-    });
+        return sheet;
+    };
 
     const rowBorderByError = {
-        Missing_Input: 'FFEF4444',
-        Missing_Output: 'FFEF4444',
+        Translate_Missing_Input: 'FFEF4444',
+        Translate_Missing_Output: 'FFEF4444',
         Input_Not_Found: 'FFEF4444',
         Output_Not_Found: 'FFEF4444',
-        Duplicate_Target: 'FFF59E0B',
-        Duplicate_Source: 'FFF59E0B',
         Name_Mismatch: 'FFF59E0B',
         Ambiguous_Match: 'FFA855F7',
+        Many_to_One: 'FFF59E0B',
+        One_to_Many: 'FFF59E0B',
         Valid: 'FF16A34A'
     };
 
-    dataRows.forEach(row => {
-        const rowData = outputColumns.map(col => row[col]);
-        const excelRow = sheet1.addRow(rowData);
-
-        excelRow.eachCell((cell, colNumber) => {
-            const fill = sourceFillByColumn[colNumber - 1];
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fill };
-        });
-
-        const errorType = row.Error_Type;
-        const borderColor = rowBorderByError[errorType];
-        if (borderColor) {
-            const indicatorCell = excelRow.getCell(1);
-            indicatorCell.border = {
-                left: { style: 'medium', color: { argb: borderColor } }
-            };
-        }
-    });
-
-    sheet1.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet1.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: headers.length }
-    };
-
-    sheet1.columns.forEach((column, idx) => {
-        let maxLength = headers[idx].length;
-        dataRows.forEach(row => {
-            const value = String(row[outputColumns[idx]] || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
-        });
-        column.width = Math.min(maxLength + 2, 50);
-    });
-
+    const errorRows = validated.filter(row => row.Error_Type !== 'Valid');
+    const translateErrorRows = errorRows.filter(row => !['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
+    const oneToManyRows = errorRows.filter(row => ['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
     const validRows = validated.filter(row => row.Error_Type === 'Valid');
-    const sheet3 = workbook.addWorksheet('Valid_Mappings');
-    sheet3.addRow(headers);
-    headers.forEach((header, idx) => {
-        const cell = sheet3.getCell(1, idx + 1);
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
-        const errorCols = ['Error_Type', 'Error_Description', 'Duplicate_Group'];
-        const translateCols = [
-            `${keyLabels.translateInput || 'Source key'} (Translate Input)`,
-            `${keyLabels.translateOutput || 'Target key'} (Translate Output)`
-        ];
-
-        if (errorCols.includes(header)) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16A34A' } };
-        } else if (translateCols.includes(header)) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
-        } else if (outputColumns[idx].startsWith('outcomes_')) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } };
-        } else if (outputColumns[idx].startsWith('wsu_')) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC2410C' } };
-        } else {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF981e32' } };
-        }
-    });
-
-    validRows.forEach(row => {
-        const rowData = outputColumns.map(col => row[col]);
-        const excelRow = sheet3.addRow(rowData);
-        excelRow.eachCell((cell, colNumber) => {
-            const fill = sourceFillByColumn[colNumber - 1];
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fill };
-        });
-    });
-
-    sheet3.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet3.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: headers.length }
-    };
-    sheet3.columns.forEach((column, idx) => {
-        let maxLength = headers[idx].length;
-        validRows.forEach(row => {
-            const value = String(row[outputColumns[idx]] || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
-        });
-        column.width = Math.min(maxLength + 2, 50);
-    });
-
-    const cleanSheet = workbook.addWorksheet('Clean_Translate_Table');
-    const cleanHeaders = [
-        keyLabels.translateInput || 'Translate Input',
-        keyLabels.translateOutput || 'Translate Output',
-        'Notes'
+    const errorColumns = [
+        ...baseErrorColumns,
+        ...suggestionColumns,
+        ...outcomesColumns,
+        'translate_input',
+        'translate_output',
+        ...wsuColumns
     ];
-    cleanSheet.addRow(cleanHeaders);
-    cleanHeaders.forEach((header, idx) => {
-        const cell = cleanSheet.getCell(1, idx + 1);
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
-    });
 
-    const outcomesKeys = new Set(
-        loadedData.outcomes
-            .map(row => normalizeKeyValue(row[keyConfig.outcomes]))
-            .filter(Boolean)
-    );
-    const wsuKeys = new Set(
-        loadedData.wsu_org
-            .map(row => normalizeKeyValue(row[keyConfig.wsu]))
-            .filter(Boolean)
-    );
+    const oneToManyColumns = [
+        ...baseErrorColumns,
+        'Duplicate_Group',
+        ...suggestionColumns,
+        ...wsuColumns,
+        'translate_input',
+        'translate_output',
+        ...outcomesColumns
+    ];
 
-    const translatePairs = new Set();
-    const translateInputs = new Set();
-    const translateOutputs = new Set();
+    const validColumns = [
+        ...baseErrorColumns,
+        ...outcomesColumns,
+        'translate_input',
+        'translate_output',
+        ...wsuColumns
+    ];
 
-    const validPairs = new Map();
-    validRows.forEach(row => {
-        if (row.translate_input_norm && row.translate_output_norm) {
-            validPairs.set(
-                `${row.translate_input_norm}::${row.translate_output_norm}`,
-                { input: row.translate_input, output: row.translate_output }
-            );
-        }
-    });
-
-    const validPairsSorted = Array.from(validPairs.entries())
-        .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-
-    loadedData.translate.forEach(row => {
-        const inputRaw = row[keyConfig.translateInput] ?? '';
-        const outputRaw = row[keyConfig.translateOutput] ?? '';
-        const inputNorm = normalizeKeyValue(inputRaw);
-        const outputNorm = normalizeKeyValue(outputRaw);
-        if (inputNorm) {
-            translateInputs.add(inputNorm);
-        }
-        if (outputNorm) {
-            translateOutputs.add(outputNorm);
-        }
-        if (inputNorm && outputNorm) {
-            translatePairs.add(`${inputNorm}::${outputNorm}`);
-        }
-
-    });
-
-    validPairsSorted.forEach(([, pair]) => {
-        cleanSheet.addRow([pair.input, pair.output, '']);
-    });
-
-    const extraRows = [];
-    outcomesKeys.forEach(key => {
-        if (wsuKeys.has(key) && !translateInputs.has(key) && !translateOutputs.has(key)) {
-            extraRows.push([key, key, 'Present in Outcomes + myWSU; missing from translate']);
-        }
-    });
-    extraRows.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-    extraRows.forEach(row => cleanSheet.addRow(row));
-
-    cleanSheet.views = [{ state: 'frozen', ySplit: 1 }];
-    cleanSheet.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: cleanHeaders.length }
-    };
-    cleanSheet.columns.forEach((column, idx) => {
-        let maxLength = cleanHeaders[idx].length;
-        cleanSheet.eachRow((row, rowNumber) => {
-            if (rowNumber === 1) return;
-            const value = String(row.getCell(idx + 1).value || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
+    const errorDataRows = translateErrorRows.map(row => {
+        const rowData = {};
+        errorColumns.forEach(col => {
+            rowData[col] = row[col] !== undefined ? row[col] : '';
         });
-        column.width = Math.min(maxLength + 2, 50);
+        const normalized = normalizeErrorDetails(row);
+        rowData.Error_Type = normalized.errorType;
+        rowData.Error_Description = normalized.description;
+        applySuggestionColumns(row, rowData, rowData.Error_Type);
+        return rowData;
     });
+
+    const oneToManyDataRows = oneToManyRows.map(row => {
+        const rowData = {};
+        oneToManyColumns.forEach(col => {
+            rowData[col] = row[col] !== undefined ? row[col] : '';
+        });
+        const normalized = normalizeErrorDetails(row);
+        rowData.Error_Type = normalized.errorType;
+        rowData.Error_Description = normalized.description;
+        applySuggestionColumns(row, rowData, rowData.Error_Type);
+        return rowData;
+    });
+
+    oneToManyDataRows.sort((a, b) => {
+        const groupA = a.Duplicate_Group || '';
+        const groupB = b.Duplicate_Group || '';
+        if (groupA !== groupB) return groupA.localeCompare(groupB);
+        const typeA = a.Error_Type || '';
+        const typeB = b.Error_Type || '';
+        return typeA.localeCompare(typeB);
+    });
+
+    const validDataRows = validRows.map(row => {
+        const rowData = {};
+        validColumns.forEach(col => {
+            rowData[col] = row[col] !== undefined ? row[col] : '';
+        });
+        rowData.Error_Description = rowData.Error_Description || '';
+        return rowData;
+    });
+
+    const baseStyle = {
+        errorHeaderColor: 'FF991B1B',
+        errorBodyColor: 'FFFEE2E2',
+        groupHeaderColor: 'FFF59E0B',
+        groupBodyColor: 'FFFEF3C7',
+        translateHeaderColor: 'FF1E40AF',
+        translateBodyColor: 'FFDBEAFE',
+        outcomesHeaderColor: 'FF166534',
+        outcomesBodyColor: 'FFDCFCE7',
+        wsuHeaderColor: 'FFC2410C',
+        wsuBodyColor: 'FFFFEDD5',
+        suggestionHeaderColor: 'FF6D28D9',
+        suggestionBodyColor: 'FFEDE9FE',
+        defaultHeaderColor: 'FF981e32',
+        defaultBodyColor: 'FFFFFFFF'
+    };
+
+    addSheetWithRows(
+        'Errors_in_Translate',
+        errorColumns,
+        errorDataRows,
+        baseStyle,
+        rowBorderByError
+    );
+    addSheetWithRows(
+        'Errors_One_to_Many',
+        oneToManyColumns,
+        oneToManyDataRows,
+        baseStyle,
+        rowBorderByError,
+        'Duplicate_Group'
+    );
+    addSheetWithRows(
+        'Valid_Mappings',
+        validColumns,
+        validDataRows,
+        {
+            ...baseStyle,
+            errorHeaderColor: 'FF16A34A',
+            errorBodyColor: 'FFDCFCE7'
+        }
+    );
 
     const sheet2 = workbook.addWorksheet('In_Outcomes_Not_In_Translate');
 

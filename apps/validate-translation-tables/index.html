@@ -347,6 +347,12 @@
             </button>
 
             <div id="column-checkboxes" class="mt-4">
+                <div class="mb-4">
+                    <label class="flex items-center text-sm text-gray-700">
+                        <input id="include-suggestions" type="checkbox" class="mr-2" checked>
+                        Include name-match suggestions in validation error sheets (optional)
+                    </label>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     
                     <div>
@@ -436,6 +442,7 @@
                             <p class="text-sm text-gray-600 uppercase">Errors Found</p>
                             <p id="error-count" class="text-3xl font-bold text-red-600">0</p>
                             <p id="error-percentage" class="text-sm text-gray-600">0%</p>
+                            <p class="text-xs text-gray-500">Errors exclude one-to-many groupings</p>
                         </div>
                         <svg class="h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>

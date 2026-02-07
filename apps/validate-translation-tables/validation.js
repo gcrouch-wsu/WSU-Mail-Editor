@@ -703,14 +703,20 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
     );
 
     const duplicateGroups = {};
-    const sortedDuplicates = Object.entries(duplicateTargetsDict)
+    const sortedTargetDups = Object.entries(duplicateTargetsDict)
         .sort((a, b) => b[1].length - a[1].length);
 
-    sortedDuplicates.forEach(([orgId, codes], idx) => {
-        const groupName = idx < 26 ? `Group_${String.fromCharCode(65 + idx)}` : `Group_${idx + 1}`;
-        codes.forEach(code => {
-            duplicateGroups[code] = groupName;
-        });
+    sortedTargetDups.forEach(([targetKey, sourceCodes], idx) => {
+        const groupName = idx < 26 ? `Tgt_Group_${String.fromCharCode(65 + idx)}` : `Tgt_Group_${idx + 1}`;
+        duplicateGroups[`tgt:${targetKey}`] = groupName;
+    });
+
+    const sortedSourceDups = Object.entries(duplicateSourcesDict)
+        .sort((a, b) => b[1].length - a[1].length);
+
+    sortedSourceDups.forEach(([sourceKey, targetCodes], idx) => {
+        const groupName = idx < 26 ? `Src_Group_${String.fromCharCode(65 + idx)}` : `Src_Group_${idx + 1}`;
+        duplicateGroups[`src:${sourceKey}`] = groupName;
     });
 
     const nameCompareEnabled = Boolean(nameCompare.enabled);
@@ -756,14 +762,15 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
         const duplicateSourceCount = duplicateSourcesDict[row.translate_input_norm]?.length || 0;
         if (result.Error_Type === 'Valid' && row.translate_input_norm && duplicateSourceCount > 1) {
             result.Error_Type = 'Duplicate_Source';
-            result.Error_Description = `Source key maps to ${duplicateSourceCount} different target keys`;
+            result.Error_Description = `Source key maps to ${duplicateSourceCount} different target keys (one-to-many)`;
+            result.Duplicate_Group = duplicateGroups[`src:${row.translate_input_norm}`] || '';
         }
 
         const duplicateTargetCount = duplicateTargetsDict[row.translate_output_norm]?.length || 0;
         if (result.Error_Type === 'Valid' && row.translate_output_norm && duplicateTargetCount > 1) {
             result.Error_Type = 'Duplicate_Target';
-            result.Error_Description = `Target key maps to ${duplicateTargetCount} different source keys (one-to-many error)`;
-            result.Duplicate_Group = duplicateGroups[row.translate_input_norm] || '';
+            result.Error_Description = `Target key maps to ${duplicateTargetCount} different source keys (many-to-one)`;
+            result.Duplicate_Group = duplicateGroups[`tgt:${row.translate_output_norm}`] || '';
         }
 
         if (result.Error_Type === 'Valid' && canCompareNames && row[outcomesKey] && row[wsuKey]) {
