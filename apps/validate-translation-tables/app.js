@@ -930,6 +930,12 @@ async function runValidation() {
 
         const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
         const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
+        const outcomesStateRole = Object.keys(columnRoles.outcomes || {}).find(
+            col => columnRoles.outcomes[col] === 'State'
+        ) || '';
+        const wsuStateRole = Object.keys(columnRoles.wsu_org || {}).find(
+            col => columnRoles.wsu_org[col] === 'State'
+        ) || '';
         const nameCompareThreshold = parseFloat(
             document.getElementById('name-compare-threshold')?.value || '0.8'
         );
@@ -974,7 +980,9 @@ async function runValidation() {
                     outcomes_column: nameCompareOutcomes,
                     wsu_column: nameCompareWsu,
                     threshold: resolvedThreshold,
-                    ambiguity_gap: resolvedGap
+                    ambiguity_gap: resolvedGap,
+                    state_outcomes: outcomesStateRole,
+                    state_wsu: wsuStateRole
                 }
             },
             (stage, processed, total) => {
@@ -1492,6 +1500,9 @@ function createErrorCard(title, sample, color) {
 
 function setupDownloadButton() {
     const downloadBtn = document.getElementById('download-btn');
+    const progressWrap = document.getElementById('download-progress');
+    const progressText = document.getElementById('download-progress-text');
+    const progressBar = document.getElementById('download-progress-bar');
     downloadBtn.addEventListener('click', async function() {
         if (validatedData.length === 0) {
             alert('Please run validation first.');
@@ -1501,6 +1512,11 @@ function setupDownloadButton() {
         try {
             downloadBtn.disabled = true;
             downloadBtn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Generating...';
+            if (progressWrap && progressText && progressBar) {
+                progressWrap.classList.remove('hidden');
+                progressText.textContent = 'Preparing export...';
+                progressBar.style.width = '0%';
+            }
 
             const includeSuggestions = Boolean(
                 document.getElementById('include-suggestions')?.checked
@@ -1511,7 +1527,13 @@ function setupDownloadButton() {
                 selectedColumns,
                 {
                     includeSuggestions,
-                    nameCompareConfig: lastNameCompareConfig
+                    nameCompareConfig: lastNameCompareConfig,
+                    onProgress: (stage, percent) => {
+                        if (progressText && progressBar) {
+                            progressText.textContent = stage;
+                            progressBar.style.width = `${percent}%`;
+                        }
+                    }
                 }
             );
 
@@ -1522,11 +1544,21 @@ function setupDownloadButton() {
                 </svg>
                 Download Full Report
             `;
+            if (progressWrap && progressText && progressBar) {
+                progressText.textContent = 'Download ready.';
+                progressBar.style.width = '100%';
+                setTimeout(() => {
+                    progressWrap.classList.add('hidden');
+                }, 1500);
+            }
 
         } catch (error) {
             console.error('Download error:', error);
             alert(`Error generating Excel: ${error.message}`);
             downloadBtn.disabled = false;
+            if (progressWrap) {
+                progressWrap.classList.add('hidden');
+            }
         }
     });
 }
@@ -1535,12 +1567,19 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     const workbook = new ExcelJS.Workbook();
     const includeSuggestions = Boolean(options.includeSuggestions);
     const nameCompareConfig = options.nameCompareConfig || {};
+    const onProgress = typeof options.onProgress === 'function'
+        ? options.onProgress
+        : null;
+    const reportProgress = (stage, percent) => {
+        if (onProgress) onProgress(stage, percent);
+    };
     const canSuggestNames = Boolean(
         includeSuggestions &&
         nameCompareConfig.enabled &&
         nameCompareConfig.outcomes &&
         nameCompareConfig.wsu
     );
+    reportProgress('Building export...', 5);
 
     const outcomesColumns = selectedCols.outcomes.map(col => `outcomes_${col}`);
     const wsuColumns = selectedCols.wsu_org.map(col => `wsu_${col}`);
@@ -1943,6 +1982,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     const errorRows = validated.filter(row => row.Error_Type !== 'Valid');
     const translateErrorRows = errorRows.filter(row => !['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
     const oneToManyRows = errorRows.filter(row => ['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
+    const highConfidenceRows = validated.filter(row => row.Error_Type === 'High_Confidence_Match');
     const validRows = validated.filter(row => row.Error_Type === 'Valid');
 
     const errorColumns = [
@@ -1967,6 +2007,13 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         'translate_input',
         'translate_output',
         ...wsuColumns
+    ];
+    const highConfidenceColumns = [
+        ...outcomesColumns,
+        'translate_input',
+        'translate_output',
+        ...wsuColumns,
+        ...suggestionColumns
     ];
 
     const errorDataRows = translateErrorRows.map(row => {
@@ -2007,6 +2054,15 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         return rowData;
     });
 
+    const highConfidenceDataRows = highConfidenceRows.map(row => {
+        const rowData = {};
+        highConfidenceColumns.forEach(col => {
+            rowData[col] = row[col] !== undefined ? row[col] : '';
+        });
+        applySuggestionColumns(row, rowData, row.Error_Type);
+        return rowData;
+    });
+
     const baseStyle = {
         errorHeaderColor: 'FF991B1B',
         errorBodyColor: 'FFFEE2E2',
@@ -2031,14 +2087,23 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         baseStyle,
         rowBorderByError
     );
+    reportProgress('Building One to Many sheet...', 30);
     addSheetWithRows(
-        'Errors_One_to_Many',
+        'One_to_Many',
         oneToManyColumns,
         oneToManyDataRows,
         baseStyle,
         rowBorderByError,
         'Duplicate_Group'
     );
+    reportProgress('Building high confidence matches...', 45);
+    addSheetWithRows(
+        'High_Confidence_Matches',
+        highConfidenceColumns,
+        highConfidenceDataRows,
+        baseStyle
+    );
+    reportProgress('Building valid mappings...', 60);
     addSheetWithRows(
         'Valid_Mappings',
         validColumns,
@@ -2049,6 +2114,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
             errorBodyColor: 'FFDCFCE7'
         }
     );
+    reportProgress('Building missing mappings...', 75);
 
     const outcomesRowsByKey = new Map();
     loadedData.outcomes.forEach(row => {
@@ -2135,8 +2201,10 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         missingWsuRows,
         baseStyle
     );
+    reportProgress('Finalizing Excel file...', 90);
 
     const buffer = await workbook.xlsx.writeBuffer();
+    reportProgress('Saving file...', 98);
     const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });

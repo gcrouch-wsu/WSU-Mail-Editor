@@ -291,7 +291,10 @@ const NAME_TOKEN_ALIASES = {
     med: 'medical',
     dept: 'department',
     ctr: 'center',
-    sch: 'school'
+    sch: 'school',
+    cc: 'community',
+    comm: 'community',
+    jr: 'junior'
 };
 
 function normalizeNameForCompare(value) {
@@ -299,6 +302,12 @@ function normalizeNameForCompare(value) {
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\bcal state university\b/g, 'california state')
+        .replace(/\bcalifornia state university\b/g, 'california state')
+        .replace(/\bcal state\b/g, 'california state')
+        .replace(/\bjunior college\b/g, 'community college')
+        .replace(/\bjr college\b/g, 'community college')
+        .replace(/\bcc\b/g, 'community college')
         .replace(/&/g, ' and ')
         .replace(/[^a-z0-9]+/g, ' ')
         .replace(/\s+/g, ' ')
@@ -353,6 +362,55 @@ function tokenOverlapStats(tokens1, tokens2) {
         score: matches / Math.max(tokens1.length, tokens2.length),
         matches
     };
+}
+
+const US_STATE_MAP = {
+    al: 'alabama', ak: 'alaska', az: 'arizona', ar: 'arkansas', ca: 'california',
+    co: 'colorado', ct: 'connecticut', de: 'delaware', fl: 'florida', ga: 'georgia',
+    hi: 'hawaii', id: 'idaho', il: 'illinois', in: 'indiana', ia: 'iowa',
+    ks: 'kansas', ky: 'kentucky', la: 'louisiana', ma: 'massachusetts', md: 'maryland',
+    me: 'maine', mi: 'michigan', mn: 'minnesota', mo: 'missouri', ms: 'mississippi',
+    mt: 'montana', nc: 'north carolina', nd: 'north dakota', ne: 'nebraska', nh: 'new hampshire',
+    nj: 'new jersey', nm: 'new mexico', nv: 'nevada', ny: 'new york', oh: 'ohio',
+    ok: 'oklahoma', or: 'oregon', pa: 'pennsylvania', ri: 'rhode island', sc: 'south carolina',
+    sd: 'south dakota', tn: 'tennessee', tx: 'texas', ut: 'utah', va: 'virginia',
+    vt: 'vermont', wa: 'washington', wi: 'wisconsin', wv: 'west virginia', wy: 'wyoming',
+    dc: 'district of columbia'
+};
+
+function normalizeStateValue(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function statesMatch(value1, value2) {
+    const state1 = normalizeStateValue(value1);
+    const state2 = normalizeStateValue(value2);
+    if (!state1 || !state2) return false;
+    if (state1 === state2) return true;
+    const mapped1 = US_STATE_MAP[state1] || state1;
+    const mapped2 = US_STATE_MAP[state2] || state2;
+    return mapped1 === mapped2;
+}
+
+function isHighConfidenceNameMatch(
+    name1,
+    name2,
+    state1,
+    state2,
+    similarity,
+    threshold
+) {
+    if (!name1 || !name2) return false;
+    if (!statesMatch(state1, state2)) return false;
+
+    if (typeof similarity === 'number' && similarity >= Math.max(0, threshold - 0.05)) {
+        return true;
+    }
+
+    const tokens1 = getInformativeTokens(tokenizeName(name1));
+    const tokens2 = getInformativeTokens(tokenizeName(name2));
+    const overlap = tokenOverlapStats(tokens1, tokens2);
+    return overlap.matches >= 2;
 }
 
 function getTopTwoNameScores(sourceName, targetRows, targetField, threshold = 0, scoreCache = null) {
@@ -728,6 +786,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
         : NAME_MATCH_AMBIGUITY_GAP;
     const outcomesKey = outcomesColumn ? `outcomes_${outcomesColumn}` : '';
     const wsuKey = wsuColumn ? `wsu_${wsuColumn}` : '';
+    const outcomesStateKey = nameCompare.state_outcomes ? `outcomes_${nameCompare.state_outcomes}` : '';
+    const wsuStateKey = nameCompare.state_wsu ? `wsu_${nameCompare.state_wsu}` : '';
     const canCompareNames = nameCompareEnabled && outcomesKey && wsuKey;
     const ambiguityScoreCache = canCompareNames ? new Map() : null;
 
@@ -777,8 +837,22 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
             const similarity = calculateNameSimilarity(row[outcomesKey], row[wsuKey]);
 
             if (similarity < threshold) {
-                result.Error_Type = 'Name_Mismatch';
-                result.Error_Description = `Names do not match (similarity: ${Math.round(similarity * 100)}%). "${row[outcomesKey]}" mapped to "${row[wsuKey]}" - verify this is correct`;
+                const stateValue1 = outcomesStateKey ? row[outcomesStateKey] : '';
+                const stateValue2 = wsuStateKey ? row[wsuStateKey] : '';
+                if (isHighConfidenceNameMatch(
+                    row[outcomesKey],
+                    row[wsuKey],
+                    stateValue1,
+                    stateValue2,
+                    similarity,
+                    threshold
+                )) {
+                    result.Error_Type = 'High_Confidence_Match';
+                    result.Error_Description = 'High confidence match based on name + state';
+                } else {
+                    result.Error_Type = 'Name_Mismatch';
+                    result.Error_Description = `Names do not match (similarity: ${Math.round(similarity * 100)}%). "${row[outcomesKey]}" mapped to "${row[wsuKey]}" - verify this is correct`;
+                }
             } else if (
                 isAmbiguousNameMatch(
                     row[outcomesKey],
@@ -817,7 +891,9 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
 
 function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
     const totalMappings = validated.length;
-    const validCount = validated.filter(r => r.Error_Type === 'Valid').length;
+    const validCount = validated.filter(r => (
+        r.Error_Type === 'Valid' || r.Error_Type === 'High_Confidence_Match'
+    )).length;
     const errorCount = totalMappings - validCount;
     const validPct = totalMappings > 0
         ? Math.round((validCount / totalMappings) * 1000) / 10
@@ -860,7 +936,8 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
             duplicate_targets: errorCounts.Duplicate_Target || 0,
             duplicate_sources: errorCounts.Duplicate_Source || 0,
             name_mismatches: errorCounts.Name_Mismatch || 0,
-            ambiguous_matches: errorCounts.Ambiguous_Match || 0
+            ambiguous_matches: errorCounts.Ambiguous_Match || 0,
+            high_confidence_matches: errorCounts.High_Confidence_Match || 0
         }
     };
 
