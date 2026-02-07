@@ -227,7 +227,7 @@
             <div class="mb-6 border-b pb-5">
                 <h2 class="text-xl font-semibold text-gray-800 mb-2">Match Options</h2>
                 <p class="text-sm text-gray-500">
-                    Choose how to match Outcomes to myWSU. If matching by key, select key columns below.
+                    Choose how to match Outcomes to myWSU. If matching by key, select the key columns in the column list below.
                 </p>
 
                 <div id="match-method" class="mt-4">
@@ -263,13 +263,7 @@
                     </div>
                 </div>
 
-                <div id="key-match-fields" class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Outcomes key column</label>
-                        <select id="key-outcomes" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                            <option value="">Select column</option>
-                        </select>
-                    </div>
+                <div id="key-match-fields" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div id="translate-input-group">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Translation input column</label>
                         <select id="key-translate-input" class="w-full border border-gray-300 rounded-md p-2 text-sm">
@@ -279,12 +273,6 @@
                     <div id="translate-output-group">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Translation output column</label>
                         <select id="key-translate-output" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                            <option value="">Select column</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">myWSU key column</label>
-                        <select id="key-wsu" class="w-full border border-gray-300 rounded-md p-2 text-sm">
                             <option value="">Select column</option>
                         </select>
                     </div>
@@ -340,7 +328,7 @@
             </div>
 
             <button id="toggle-columns" class="flex items-center justify-between w-full text-left mt-6 border-t pt-4">
-                <h2 class="text-xl font-semibold text-gray-800">Select Source Data Columns to Include in Export</h2>
+                <h2 class="text-xl font-semibold text-gray-800">Select Columns, Keys, and Roles</h2>
                 <svg class="h-6 w-6 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
@@ -352,11 +340,20 @@
                         <input id="include-suggestions" type="checkbox" class="mr-2" checked>
                         Include name-match suggestions in validation error sheets (optional)
                     </label>
+                    <p class="text-xs text-gray-500 mt-2">
+                        Mark which columns to include in exports, pick the key column, and map roles (school, city, state, country) for suggestions.
+                    </p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     
                     <div>
                         <h3 class="font-medium text-gray-700 mb-3">From Outcomes Source:</h3>
+                        <div class="grid grid-cols-4 gap-2 text-xs text-gray-500 mb-2">
+                            <span>Column</span>
+                            <span>Include</span>
+                            <span>Key</span>
+                            <span>Role</span>
+                        </div>
                         <div id="outcomes-columns" class="space-y-2">
                             
                         </div>
@@ -364,6 +361,12 @@
 
                     <div>
                         <h3 class="font-medium text-gray-700 mb-3">From myWSU Tables:</h3>
+                        <div class="grid grid-cols-4 gap-2 text-xs text-gray-500 mb-2">
+                            <span>Column</span>
+                            <span>Include</span>
+                            <span>Key</span>
+                            <span>Role</span>
+                        </div>
                         <div id="wsu-org-columns" class="space-y-2">
                             
                         </div>
@@ -382,7 +385,7 @@
         <div id="generate-action" class="bg-white rounded-lg shadow-md p-6 mb-8">
             <h2 class="text-lg font-semibold text-gray-800 mb-2">Generate Translation Table</h2>
             <p class="text-sm text-gray-600 mb-4">
-                Use Outcomes + myWSU only. Select the key columns above, then generate a clean Input/Output table and
+                Use Outcomes + myWSU only. Select the key columns in the column list below, then generate a clean Input/Output table and
                 a separate error analysis that flags missing values.
             </p>
             <div class="text-center">

@@ -23,6 +23,10 @@ let selectedColumns = {
     outcomes: [],
     wsu_org: []
 };
+let columnRoles = {
+    outcomes: {},
+    wsu_org: {}
+};
 let showAllErrors = false;
 let keyConfig = {
     outcomes: '',
@@ -438,32 +442,101 @@ function applyCreateDefaults(outcomesColumns, wsuOrgColumns) {
     }
 }
 
+function findColumn(columns, candidates) {
+    const lowerMap = new Map(columns.map(col => [col.toLowerCase(), col]));
+    for (const candidate of candidates) {
+        const match = lowerMap.get(candidate.toLowerCase());
+        if (match) return match;
+    }
+    return '';
+}
+
 function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
     const defaultOutcomes = ['name', 'mdb_code', 'state', 'country'];
     const defaultWsuOrg = ['Org ID', 'Descr', 'City', 'State', 'Country'];
+    const roleOptions = [
+        { value: '', label: 'None' },
+        { value: 'School', label: 'School' },
+        { value: 'City', label: 'City' },
+        { value: 'State', label: 'State' },
+        { value: 'Country', label: 'Country' },
+        { value: 'Other', label: 'Other' }
+    ];
+
+    const guessRole = (col) => {
+        const normalized = String(col || '').toLowerCase();
+        if (normalized.includes('name') || normalized.includes('school')) return 'School';
+        if (normalized.includes('city')) return 'City';
+        if (normalized.includes('state')) return 'State';
+        if (normalized.includes('country')) return 'Country';
+        return '';
+    };
+
+    const defaultOutcomesKey = keyConfig.outcomes || findColumn(outcomesColumns, [
+        'mdb_code',
+        'mdb code',
+        'outcomes_state',
+        'outcomes state',
+        'state'
+    ]) || (outcomesColumns[0] || '');
+
+    const defaultWsuKey = keyConfig.wsu || findColumn(wsuOrgColumns, [
+        'org id',
+        'state',
+        'mywsu_state',
+        'mywsu state'
+    ]) || (wsuOrgColumns[0] || '');
 
     const outcomesDiv = document.getElementById('outcomes-columns');
     outcomesDiv.innerHTML = '';
     selectedColumns.outcomes = [];
+    columnRoles.outcomes = {};
     if (!outcomesColumns.length) {
         outcomesDiv.innerHTML = '<p class="text-xs text-gray-500">Upload Outcomes to see columns.</p>';
     } else {
         outcomesColumns.forEach(col => {
             const isChecked = defaultOutcomes.includes(col);
-            const label = document.createElement('label');
-            label.className = 'flex items-center';
-            const input = document.createElement('input');
-            input.type = 'checkbox';
-            input.name = 'outcomes-col';
-            input.value = col;
-            input.checked = isChecked;
-            input.className = 'rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson';
-            const span = document.createElement('span');
-            span.className = 'ml-2 text-sm text-gray-700';
-            span.textContent = col;
-            label.appendChild(input);
-            label.appendChild(span);
-            outcomesDiv.appendChild(label);
+            const row = document.createElement('div');
+            row.className = 'grid grid-cols-4 gap-2 items-center';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'text-sm text-gray-700 truncate';
+            nameSpan.title = col;
+            nameSpan.textContent = col;
+
+            const includeInput = document.createElement('input');
+            includeInput.type = 'checkbox';
+            includeInput.name = 'outcomes-include';
+            includeInput.value = col;
+            includeInput.checked = isChecked;
+            includeInput.className = 'rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson';
+
+            const keyInput = document.createElement('input');
+            keyInput.type = 'radio';
+            keyInput.name = 'outcomes-key';
+            keyInput.value = col;
+            keyInput.checked = col === defaultOutcomesKey;
+            keyInput.className = 'text-wsu-crimson focus:ring-wsu-crimson';
+
+            const roleSelect = document.createElement('select');
+            roleSelect.name = 'outcomes-role';
+            roleSelect.dataset.col = col;
+            roleSelect.className = 'w-full border border-gray-300 rounded-md p-1 text-xs';
+            roleOptions.forEach(optionData => {
+                const option = document.createElement('option');
+                option.value = optionData.value;
+                option.textContent = optionData.label;
+                roleSelect.appendChild(option);
+            });
+            const guessedRole = guessRole(col);
+            roleSelect.value = guessedRole;
+            columnRoles.outcomes[col] = guessedRole;
+
+            row.appendChild(nameSpan);
+            row.appendChild(includeInput);
+            row.appendChild(keyInput);
+            row.appendChild(roleSelect);
+            outcomesDiv.appendChild(row);
 
             if (isChecked) {
                 selectedColumns.outcomes.push(col);
@@ -474,25 +547,53 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
     const wsuOrgDiv = document.getElementById('wsu-org-columns');
     wsuOrgDiv.innerHTML = '';
     selectedColumns.wsu_org = [];
+    columnRoles.wsu_org = {};
     if (!wsuOrgColumns.length) {
         wsuOrgDiv.innerHTML = '<p class="text-xs text-gray-500">Upload myWSU to see columns.</p>';
     } else {
         wsuOrgColumns.forEach(col => {
             const isChecked = defaultWsuOrg.includes(col);
-            const label = document.createElement('label');
-            label.className = 'flex items-center';
-            const input = document.createElement('input');
-            input.type = 'checkbox';
-            input.name = 'wsu-org-col';
-            input.value = col;
-            input.checked = isChecked;
-            input.className = 'rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson';
-            const span = document.createElement('span');
-            span.className = 'ml-2 text-sm text-gray-700';
-            span.textContent = col;
-            label.appendChild(input);
-            label.appendChild(span);
-            wsuOrgDiv.appendChild(label);
+            const row = document.createElement('div');
+            row.className = 'grid grid-cols-4 gap-2 items-center';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'text-sm text-gray-700 truncate';
+            nameSpan.title = col;
+            nameSpan.textContent = col;
+
+            const includeInput = document.createElement('input');
+            includeInput.type = 'checkbox';
+            includeInput.name = 'wsu-include';
+            includeInput.value = col;
+            includeInput.checked = isChecked;
+            includeInput.className = 'rounded border-gray-300 text-wsu-crimson focus:ring-wsu-crimson';
+
+            const keyInput = document.createElement('input');
+            keyInput.type = 'radio';
+            keyInput.name = 'wsu-key';
+            keyInput.value = col;
+            keyInput.checked = col === defaultWsuKey;
+            keyInput.className = 'text-wsu-crimson focus:ring-wsu-crimson';
+
+            const roleSelect = document.createElement('select');
+            roleSelect.name = 'wsu-role';
+            roleSelect.dataset.col = col;
+            roleSelect.className = 'w-full border border-gray-300 rounded-md p-1 text-xs';
+            roleOptions.forEach(optionData => {
+                const option = document.createElement('option');
+                option.value = optionData.value;
+                option.textContent = optionData.label;
+                roleSelect.appendChild(option);
+            });
+            const guessedRole = guessRole(col);
+            roleSelect.value = guessedRole;
+            columnRoles.wsu_org[col] = guessedRole;
+
+            row.appendChild(nameSpan);
+            row.appendChild(includeInput);
+            row.appendChild(keyInput);
+            row.appendChild(roleSelect);
+            wsuOrgDiv.appendChild(row);
 
             if (isChecked) {
                 selectedColumns.wsu_org.push(col);
@@ -500,44 +601,26 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
         });
     }
 
-    document.querySelectorAll('input[name="outcomes-col"]').forEach(cb => {
-        cb.addEventListener('change', updateSelectedColumns);
+    document.querySelectorAll('input[name="outcomes-include"], input[name="wsu-include"], input[name="outcomes-key"], input[name="wsu-key"]').forEach(input => {
+        input.addEventListener('change', updateSelectedColumns);
     });
-    document.querySelectorAll('input[name="wsu-org-col"]').forEach(cb => {
-        cb.addEventListener('change', updateSelectedColumns);
+    document.querySelectorAll('select[name="outcomes-role"], select[name="wsu-role"]').forEach(select => {
+        select.addEventListener('change', updateSelectedColumns);
     });
+
+    updateSelectedColumns();
 }
 
 function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) {
-    const outcomesSelect = document.getElementById('key-outcomes');
     const translateInputSelect = document.getElementById('key-translate-input');
     const translateOutputSelect = document.getElementById('key-translate-output');
-    const wsuSelect = document.getElementById('key-wsu');
 
-    if (!outcomesSelect || !translateInputSelect || !translateOutputSelect || !wsuSelect) {
+    if (!translateInputSelect || !translateOutputSelect) {
         return;
     }
 
-    outcomesSelect.innerHTML = '<option value="">Select column</option>';
     translateInputSelect.innerHTML = '<option value="">Select column</option>';
     translateOutputSelect.innerHTML = '<option value="">Select column</option>';
-    wsuSelect.innerHTML = '<option value="">Select column</option>';
-
-    if (outcomesColumns.length) {
-        outcomesColumns.forEach(col => {
-            const option = document.createElement('option');
-            option.value = col;
-            option.textContent = col;
-            outcomesSelect.appendChild(option);
-        });
-        outcomesSelect.disabled = false;
-    } else {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'Upload Outcomes to select';
-        outcomesSelect.appendChild(option);
-        outcomesSelect.disabled = true;
-    }
     if (translateColumns.length) {
         translateColumns.forEach(col => {
             const inputOption = document.createElement('option');
@@ -563,39 +646,6 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
         translateInputSelect.disabled = true;
         translateOutputSelect.disabled = true;
     }
-    if (wsuOrgColumns.length) {
-        wsuOrgColumns.forEach(col => {
-            const option = document.createElement('option');
-            option.value = col;
-            option.textContent = col;
-            wsuSelect.appendChild(option);
-        });
-        wsuSelect.disabled = false;
-    } else {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'Upload myWSU to select';
-        wsuSelect.appendChild(option);
-        wsuSelect.disabled = true;
-    }
-
-    const findColumn = (columns, candidates) => {
-        const lowerMap = new Map(columns.map(col => [col.toLowerCase(), col]));
-        for (const candidate of candidates) {
-            const match = lowerMap.get(candidate.toLowerCase());
-            if (match) return match;
-        }
-        return '';
-    };
-
-    const defaultOutcomes = findColumn(outcomesColumns, [
-        'mdb_code',
-        'state',
-        'outcomes_state',
-        'outcomes state',
-        'input'
-    ]) || (outcomesColumns[0] || '');
-
     const defaultTranslateInput = translateColumns.length
         ? (findColumn(translateColumns, [
             'input',
@@ -616,48 +666,39 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
         ]) || (translateColumns[1] || translateColumns[0] || ''))
         : '';
 
-    const defaultWsu = findColumn(wsuOrgColumns, [
-        'org id',
-        'state',
-        'mywsu_state',
-        'mywsu state'
-    ]) || (wsuOrgColumns[0] || '');
-
-    outcomesSelect.value = defaultOutcomes;
     translateInputSelect.value = defaultTranslateInput;
     translateOutputSelect.value = defaultTranslateOutput;
-    wsuSelect.value = defaultWsu;
 
     keyConfig = {
-        outcomes: defaultOutcomes,
+        outcomes: keyConfig.outcomes || '',
         translateInput: defaultTranslateInput,
         translateOutput: defaultTranslateOutput,
-        wsu: defaultWsu
+        wsu: keyConfig.wsu || ''
     };
 
     keyLabels = {
-        outcomes: defaultOutcomes,
+        outcomes: keyConfig.outcomes,
         translateInput: defaultTranslateInput,
         translateOutput: defaultTranslateOutput,
-        wsu: defaultWsu
+        wsu: keyConfig.wsu
     };
 
-    [outcomesSelect, translateInputSelect, translateOutputSelect, wsuSelect].forEach(select => {
+    [translateInputSelect, translateOutputSelect].forEach(select => {
         select.addEventListener('change', updateKeyConfig);
     });
 }
 
 function updateKeyConfig() {
-    const outcomesSelect = document.getElementById('key-outcomes');
     const translateInputSelect = document.getElementById('key-translate-input');
     const translateOutputSelect = document.getElementById('key-translate-output');
-    const wsuSelect = document.getElementById('key-wsu');
+    const outcomesKey = document.querySelector('input[name="outcomes-key"]:checked')?.value || '';
+    const wsuKey = document.querySelector('input[name="wsu-key"]:checked')?.value || '';
 
     keyConfig = {
-        outcomes: outcomesSelect?.value || '',
+        outcomes: outcomesKey,
         translateInput: translateInputSelect?.value || '',
         translateOutput: translateOutputSelect?.value || '',
-        wsu: wsuSelect?.value || ''
+        wsu: wsuKey
     };
 
     keyLabels = {
@@ -669,10 +710,28 @@ function updateKeyConfig() {
 }
 
 function updateSelectedColumns() {
-    selectedColumns.outcomes = Array.from(document.querySelectorAll('input[name="outcomes-col"]:checked'))
+    selectedColumns.outcomes = Array.from(document.querySelectorAll('input[name="outcomes-include"]:checked'))
         .map(cb => cb.value);
-    selectedColumns.wsu_org = Array.from(document.querySelectorAll('input[name="wsu-org-col"]:checked'))
+    selectedColumns.wsu_org = Array.from(document.querySelectorAll('input[name="wsu-include"]:checked'))
         .map(cb => cb.value);
+
+    columnRoles.outcomes = {};
+    columnRoles.wsu_org = {};
+
+    document.querySelectorAll('select[name="outcomes-role"]').forEach(select => {
+        const col = select.dataset.col;
+        if (col) {
+            columnRoles.outcomes[col] = select.value || '';
+        }
+    });
+    document.querySelectorAll('select[name="wsu-role"]').forEach(select => {
+        const col = select.dataset.col;
+        if (col) {
+            columnRoles.wsu_org[col] = select.value || '';
+        }
+    });
+
+    updateKeyConfig();
 }
 
 function setupNameCompareControls() {
@@ -1485,10 +1544,22 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
 
     const outcomesColumns = selectedCols.outcomes.map(col => `outcomes_${col}`);
     const wsuColumns = selectedCols.wsu_org.map(col => `wsu_${col}`);
-    const baseErrorColumns = ['Error_Type', 'Error_Description'];
     const suggestionColumns = includeSuggestions
-        ? ['Review_Status', 'Suggested_Match', 'Suggestion_Score']
+        ? ['Suggested_Match', 'Suggestion_Score']
         : [];
+    const roleOrder = ['School', 'City', 'State', 'Country', 'Other'];
+    const getRoleColumns = (sourceKey) => {
+        const roles = columnRoles[sourceKey] || {};
+        const ordered = [];
+        roleOrder.forEach(role => {
+            Object.keys(roles).forEach(col => {
+                if (roles[col] === role && !ordered.includes(col)) {
+                    ordered.push(col);
+                }
+            });
+        });
+        return ordered;
+    };
 
     const normalizeValue = (value) => {
         if (typeof normalizeKeyValue === 'function') {
@@ -1512,14 +1583,16 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     const outcomesKeyCandidates = loadedData.outcomes
         .map(row => ({
             raw: row[keyConfig.outcomes],
-            norm: normalizeValue(row[keyConfig.outcomes])
+            norm: normalizeValue(row[keyConfig.outcomes]),
+            row
         }))
         .filter(entry => entry.norm);
 
     const wsuKeyCandidates = loadedData.wsu_org
         .map(row => ({
             raw: row[keyConfig.wsu],
-            norm: normalizeValue(row[keyConfig.wsu])
+            norm: normalizeValue(row[keyConfig.wsu]),
+            row
         }))
         .filter(entry => entry.norm);
 
@@ -1528,7 +1601,8 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
             .map(row => ({
                 key: row[keyConfig.wsu],
                 name: row[nameCompareConfig.wsu],
-                normName: normalizeValue(row[nameCompareConfig.wsu])
+                normName: normalizeValue(row[nameCompareConfig.wsu]),
+                row
             }))
             .filter(entry => entry.normName)
         : [];
@@ -1537,20 +1611,52 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null
     );
 
-    const getBestKeySuggestion = (value, candidates) => {
+    const buildSourceSummary = (row, roleColumns, fallbackColumns, keyLabel, keyValue) => {
+        if (!row) return '';
+        const parts = [];
+        if (keyValue) {
+            parts.push(`${keyLabel || 'Key'}: ${keyValue}`);
+        }
+        const columns = roleColumns.length ? roleColumns : fallbackColumns;
+        columns.forEach(col => {
+            const value = row[col];
+            if (value !== undefined && value !== null && String(value).trim() !== '') {
+                parts.push(`${col}: ${value}`);
+            }
+        });
+        return parts.join(' | ');
+    };
+
+    const buildPrefixedSummary = (row, roleColumns, fallbackColumns, prefix) => {
+        const parts = [];
+        const columns = roleColumns.length ? roleColumns : fallbackColumns;
+        columns.forEach(col => {
+            const value = row[`${prefix}${col}`];
+            if (value !== undefined && value !== null && String(value).trim() !== '') {
+                parts.push(`${col}: ${value}`);
+            }
+        });
+        return parts.join(' | ');
+    };
+
+    const roleColumnsOutcomes = getRoleColumns('outcomes');
+    const roleColumnsWsu = getRoleColumns('wsu_org');
+
+    const getBestKeySuggestion = (value, candidates, roleColumns, fallbackColumns, keyLabel) => {
         const normalized = normalizeValue(value);
         if (!normalized) return null;
         let best = null;
         candidates.forEach(candidate => {
             const score = similarityScore(normalized, candidate.norm);
             if (!best || score > best.score) {
-                best = { match: candidate.raw, score };
+                best = { match: candidate.raw, score, row: candidate.row };
             }
         });
         if (!best || best.score < MIN_KEY_SUGGESTION_SCORE) {
             return null;
         }
-        return best;
+        const details = buildSourceSummary(best.row, roleColumns, fallbackColumns, keyLabel, best.match);
+        return { match: details || best.match, score: best.score };
     };
 
     const getTopNameSuggestions = (outcomesName, limit = 2) => {
@@ -1566,10 +1672,14 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         });
         candidates.sort((a, b) => b.score - a.score);
         return candidates.slice(0, limit).map(item => {
-            const label = item.match.name && item.match.key
-                ? `${item.match.key} - ${item.match.name}`
-                : item.match.name || item.match.key || '';
-            return { match: label, score: item.score };
+            const label = buildSourceSummary(
+                item.match.row,
+                roleColumnsWsu,
+                selectedCols.wsu_org,
+                keyLabels.wsu || 'myWSU Key',
+                item.match.key
+            );
+            return { match: label || item.match.name || item.match.key || '', score: item.score };
         });
     };
 
@@ -1581,41 +1691,55 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         return { matchText, scoreValue: suggestions[0]?.score ?? null };
     };
 
-    const normalizeErrorDetails = (row) => {
-        let errorType = row.Error_Type;
-        let description = row.Error_Description || '';
-        if (row.Error_Type === 'Missing_Input') {
-            errorType = 'Translate_Missing_Input';
-            description = 'Translate row is missing input/source key';
-        } else if (row.Error_Type === 'Missing_Output') {
-            errorType = 'Translate_Missing_Output';
-            description = 'Translate row is missing output/target key';
-        } else if (row.Error_Type === 'Duplicate_Target') {
-            errorType = 'Many_to_One';
-            description = 'Multiple Outcomes keys map to the same myWSU key';
-        } else if (row.Error_Type === 'Duplicate_Source') {
-            errorType = 'One_to_Many';
-            description = 'Single Outcomes key maps to multiple myWSU keys';
+    const normalizeErrorType = (row) => {
+        if (row.Error_Type === 'Input_Not_Found') {
+            return 'Input does not exist in Outcomes';
         }
-        return { errorType, description };
+        if (row.Error_Type === 'Output_Not_Found') {
+            return 'Output does not exist in myWSU';
+        }
+        if (row.Error_Type === 'Missing_Input') {
+            return 'Input is missing in Translate';
+        }
+        if (row.Error_Type === 'Missing_Output') {
+            return 'Output is missing in Translate';
+        }
+        if (row.Error_Type === 'Name_Mismatch') {
+            return 'Name mismatch';
+        }
+        if (row.Error_Type === 'Ambiguous_Match') {
+            return 'Ambiguous name match';
+        }
+        return row.Error_Type || '';
     };
 
     const applySuggestionColumns = (row, rowData, errorType) => {
         if (!includeSuggestions) {
             return;
         }
-        rowData.Review_Status = '';
         rowData.Suggested_Match = '';
         rowData.Suggestion_Score = '';
 
         if (errorType === 'Input_Not_Found') {
-            const suggestion = getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
+            const suggestion = getBestKeySuggestion(
+                row.translate_input,
+                outcomesKeyCandidates,
+                roleColumnsOutcomes,
+                selectedCols.outcomes,
+                keyLabels.outcomes || 'Outcomes Key'
+            );
             if (suggestion) {
                 rowData.Suggested_Match = suggestion.match;
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
             }
         } else if (errorType === 'Output_Not_Found') {
-            const suggestion = getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+            const suggestion = getBestKeySuggestion(
+                row.translate_output,
+                wsuKeyCandidates,
+                roleColumnsWsu,
+                selectedCols.wsu_org,
+                keyLabels.wsu || 'myWSU Key'
+            );
             if (suggestion) {
                 rowData.Suggested_Match = suggestion.match;
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
@@ -1623,17 +1747,28 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         } else if (
             errorType === 'Name_Mismatch' ||
             errorType === 'Ambiguous_Match' ||
-            errorType === 'Many_to_One' ||
-            errorType === 'One_to_Many'
+            errorType === 'Duplicate_Target' ||
+            errorType === 'Duplicate_Source'
         ) {
             const outcomesName = row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '';
             const wsuName = row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '';
-            if (errorType === 'Many_to_One' || errorType === 'One_to_Many') {
-                if (outcomesName || wsuName) {
-                    rowData.Suggested_Match = outcomesName && wsuName
-                        ? `${outcomesName} ↔ ${wsuName}`
-                        : outcomesName || wsuName;
-                }
+            if (errorType === 'Duplicate_Target' || errorType === 'Duplicate_Source') {
+                const outcomesSummary = buildPrefixedSummary(
+                    row,
+                    roleColumnsOutcomes,
+                    selectedCols.outcomes,
+                    'outcomes_'
+                );
+                const wsuSummary = buildPrefixedSummary(
+                    row,
+                    roleColumnsWsu,
+                    selectedCols.wsu_org,
+                    'wsu_'
+                );
+                const summary = [];
+                if (outcomesSummary) summary.push(`Outcomes: ${outcomesSummary}`);
+                if (wsuSummary) summary.push(`myWSU: ${wsuSummary}`);
+                if (summary.length) rowData.Suggested_Match = summary.join(' | ');
             } else {
                 const suggestions = getTopNameSuggestions(outcomesName, 2);
                 if (suggestions.length) {
@@ -1659,7 +1794,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
                 return `${keyLabels.wsu} (myWSU Key)`;
             }
             if (col === 'wsu_Org ID') return 'myWSU Key';
-            if (col === 'Review_Status') return 'Review Status';
+            if (col === 'Error_Type') return 'Error Type';
             if (col === 'Suggested_Match') return 'Suggested Match';
             if (col === 'Suggestion_Score') return 'Suggestion Score';
             return col;
@@ -1667,24 +1802,24 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     );
 
     const getHeaderFill = (col, style) => {
-        if (['Error_Type', 'Error_Description'].includes(col)) return style.errorHeaderColor;
+        if (col === 'Error_Type') return style.errorHeaderColor;
         if (col === 'Duplicate_Group') return style.groupHeaderColor;
         if (['translate_input', 'translate_output'].includes(col)) return style.translateHeaderColor;
         if (col.startsWith('outcomes_')) return style.outcomesHeaderColor;
         if (col.startsWith('wsu_')) return style.wsuHeaderColor;
-        if (['Review_Status', 'Suggested_Match', 'Suggestion_Score'].includes(col)) {
+        if (['Suggested_Match', 'Suggestion_Score'].includes(col)) {
             return style.suggestionHeaderColor;
         }
         return style.defaultHeaderColor;
     };
 
     const getBodyFill = (col, style) => {
-        if (['Error_Type', 'Error_Description'].includes(col)) return style.errorBodyColor;
+        if (col === 'Error_Type') return style.errorBodyColor;
         if (col === 'Duplicate_Group') return style.groupBodyColor;
         if (['translate_input', 'translate_output'].includes(col)) return style.translateBodyColor;
         if (col.startsWith('outcomes_')) return style.outcomesBodyColor;
         if (col.startsWith('wsu_')) return style.wsuBodyColor;
-        if (['Review_Status', 'Suggested_Match', 'Suggestion_Score'].includes(col)) {
+        if (['Suggested_Match', 'Suggestion_Score'].includes(col)) {
             return style.suggestionBodyColor;
         }
         return style.defaultBodyColor;
@@ -1801,15 +1936,8 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     };
 
     const rowBorderByError = {
-        Translate_Missing_Input: 'FFEF4444',
-        Translate_Missing_Output: 'FFEF4444',
-        Input_Not_Found: 'FFEF4444',
-        Output_Not_Found: 'FFEF4444',
-        Name_Mismatch: 'FFF59E0B',
-        Ambiguous_Match: 'FFA855F7',
-        Many_to_One: 'FFF59E0B',
-        One_to_Many: 'FFF59E0B',
-        Valid: 'FF16A34A'
+        'Input does not exist in Outcomes': 'FFEF4444',
+        'Output does not exist in myWSU': 'FFEF4444'
     };
 
     const errorRows = validated.filter(row => row.Error_Type !== 'Valid');
@@ -1818,26 +1946,23 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     const validRows = validated.filter(row => row.Error_Type === 'Valid');
 
     const errorColumns = [
-        ...baseErrorColumns,
-        ...suggestionColumns,
+        'Error_Type',
         ...outcomesColumns,
         'translate_input',
         'translate_output',
-        ...wsuColumns
+        ...wsuColumns,
+        ...suggestionColumns
     ];
 
     const oneToManyColumns = [
-        ...baseErrorColumns,
-        'Duplicate_Group',
-        ...suggestionColumns,
-        ...wsuColumns,
+        ...outcomesColumns,
         'translate_input',
         'translate_output',
-        ...outcomesColumns
+        ...wsuColumns,
+        ...suggestionColumns
     ];
 
     const validColumns = [
-        ...baseErrorColumns,
         ...outcomesColumns,
         'translate_input',
         'translate_output',
@@ -1849,10 +1974,8 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         errorColumns.forEach(col => {
             rowData[col] = row[col] !== undefined ? row[col] : '';
         });
-        const normalized = normalizeErrorDetails(row);
-        rowData.Error_Type = normalized.errorType;
-        rowData.Error_Description = normalized.description;
-        applySuggestionColumns(row, rowData, rowData.Error_Type);
+        rowData.Error_Type = normalizeErrorType(row) || row.Error_Type;
+        applySuggestionColumns(row, rowData, row.Error_Type);
         return rowData;
     });
 
@@ -1861,10 +1984,9 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         oneToManyColumns.forEach(col => {
             rowData[col] = row[col] !== undefined ? row[col] : '';
         });
-        const normalized = normalizeErrorDetails(row);
-        rowData.Error_Type = normalized.errorType;
-        rowData.Error_Description = normalized.description;
-        applySuggestionColumns(row, rowData, rowData.Error_Type);
+        rowData.Error_Type = row.Error_Type;
+        rowData.Duplicate_Group = row.Duplicate_Group || '';
+        applySuggestionColumns(row, rowData, row.Error_Type);
         return rowData;
     });
 
@@ -1882,7 +2004,6 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         validColumns.forEach(col => {
             rowData[col] = row[col] !== undefined ? row[col] : '';
         });
-        rowData.Error_Description = rowData.Error_Description || '';
         return rowData;
     });
 
@@ -1929,87 +2050,14 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         }
     );
 
-    const sheet2 = workbook.addWorksheet('In_Outcomes_Not_In_Translate');
-
-    const missingColumns = [keyLabels.outcomes || 'Outcomes Key'];
-    selectedCols.outcomes.forEach(col => {
-        if (col !== keyLabels.outcomes) {
-            missingColumns.push(col);
+    const outcomesRowsByKey = new Map();
+    loadedData.outcomes.forEach(row => {
+        const normalized = normalizeKeyValue(row[keyConfig.outcomes]);
+        if (normalized && !outcomesRowsByKey.has(normalized)) {
+            outcomesRowsByKey.set(normalized, row);
         }
     });
 
-    const missingRows = missing.map(row => {
-        const rowData = {};
-        missingColumns.forEach(col => {
-            rowData[col] = row[col] !== undefined ? row[col] : '';
-        });
-        return rowData;
-    });
-
-    sheet2.addRow(missingColumns);
-
-    missingColumns.forEach((header, idx) => {
-        const cell = sheet2.getCell(1, idx + 1);
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } }; // Blue
-    });
-
-    missingRows.forEach(row => {
-        const rowData = missingColumns.map(col => row[col]);
-        const excelRow = sheet2.addRow(rowData);
-
-        excelRow.eachCell(cell => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } }; // Light blue
-        });
-    });
-
-    sheet2.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet2.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: missingColumns.length }
-    };
-
-    sheet2.columns.forEach((column, idx) => {
-        let maxLength = missingColumns[idx].length;
-        missingRows.forEach(row => {
-            const value = String(row[missingColumns[idx]] || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
-        });
-        column.width = Math.min(maxLength + 2, 50);
-    });
-
-    const missingWsu = [];
-    const wsuAllKeys = new Set(
-        loadedData.wsu_org
-            .map(row => normalizeKeyValue(row[keyConfig.wsu]))
-            .filter(Boolean)
-    );
-    const translateOutputsForMissing = new Set(
-        loadedData.translate
-            .map(row => normalizeKeyValue(row[keyConfig.translateOutput]))
-            .filter(Boolean)
-    );
-    wsuAllKeys.forEach(key => {
-        if (!translateOutputsForMissing.has(key)) {
-            missingWsu.push(key);
-        }
-    });
-
-    const sheet4 = workbook.addWorksheet('In_myWSU_Not_In_Translate');
-    const wsuMissingHeader = [keyLabels.wsu || 'myWSU Key'];
-    selectedCols.wsu_org.forEach(col => {
-        if (col !== keyLabels.wsu) {
-            wsuMissingHeader.push(col);
-        }
-    });
-    sheet4.addRow(wsuMissingHeader);
-    wsuMissingHeader.forEach((header, idx) => {
-        const cell = sheet4.getCell(1, idx + 1);
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
-    });
     const wsuRowsByKey = new Map();
     loadedData.wsu_org.forEach(row => {
         const normalized = normalizeKeyValue(row[keyConfig.wsu]);
@@ -2017,32 +2065,76 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
             wsuRowsByKey.set(normalized, row);
         }
     });
-    missingWsu.sort((a, b) => String(a).localeCompare(String(b))).forEach(key => {
-        const row = wsuRowsByKey.get(key) || {};
-        const rowData = [key];
+
+    const translateInputs = new Set(
+        loadedData.translate
+            .map(row => normalizeKeyValue(row[keyConfig.translateInput]))
+            .filter(Boolean)
+    );
+    const translateOutputs = new Set(
+        loadedData.translate
+            .map(row => normalizeKeyValue(row[keyConfig.translateOutput]))
+            .filter(Boolean)
+    );
+
+    const sharedOutcomesKeys = Array.from(outcomesRowsByKey.keys())
+        .filter(key => wsuRowsByKey.has(key) && !translateInputs.has(key))
+        .sort((a, b) => String(a).localeCompare(String(b)));
+
+    const sharedWsuKeys = Array.from(wsuRowsByKey.keys())
+        .filter(key => outcomesRowsByKey.has(key) && !translateOutputs.has(key))
+        .sort((a, b) => String(a).localeCompare(String(b)));
+
+    const missingPairColumns = [
+        ...outcomesColumns,
+        'translate_input',
+        'translate_output',
+        ...wsuColumns
+    ];
+
+    const missingOutcomesRows = sharedOutcomesKeys.map(key => {
+        const outcomesRow = outcomesRowsByKey.get(key) || {};
+        const wsuRow = wsuRowsByKey.get(key) || {};
+        const rowData = {};
+        selectedCols.outcomes.forEach(col => {
+            rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
+        });
+        rowData.translate_input = outcomesRow[keyConfig.outcomes] ?? key;
+        rowData.translate_output = wsuRow[keyConfig.wsu] ?? key;
         selectedCols.wsu_org.forEach(col => {
-            if (col !== keyLabels.wsu) {
-                rowData.push(row[col] ?? '');
-            }
+            rowData[`wsu_${col}`] = wsuRow[col] ?? '';
         });
-        sheet4.addRow(rowData);
+        return rowData;
     });
-    sheet4.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet4.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: wsuMissingHeader.length }
-    };
-    sheet4.columns.forEach((column, idx) => {
-        let maxLength = wsuMissingHeader[idx].length;
-        sheet4.eachRow((row, rowNumber) => {
-            if (rowNumber === 1) return;
-            const value = String(row.getCell(idx + 1).value || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
+
+    addSheetWithRows(
+        'In_Outcomes_Not_In_Translate',
+        missingPairColumns,
+        missingOutcomesRows,
+        baseStyle
+    );
+
+    const missingWsuRows = sharedWsuKeys.map(key => {
+        const outcomesRow = outcomesRowsByKey.get(key) || {};
+        const wsuRow = wsuRowsByKey.get(key) || {};
+        const rowData = {};
+        selectedCols.outcomes.forEach(col => {
+            rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
         });
-        column.width = Math.min(maxLength + 2, 50);
+        rowData.translate_input = outcomesRow[keyConfig.outcomes] ?? key;
+        rowData.translate_output = wsuRow[keyConfig.wsu] ?? key;
+        selectedCols.wsu_org.forEach(col => {
+            rowData[`wsu_${col}`] = wsuRow[col] ?? '';
+        });
+        return rowData;
     });
+
+    addSheetWithRows(
+        'In_myWSU_Not_In_Translate',
+        missingPairColumns,
+        missingWsuRows,
+        baseStyle
+    );
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
