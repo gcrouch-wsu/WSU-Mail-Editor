@@ -1791,7 +1791,12 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         rowData.Suggestion_Score = '';
 
         if (errorType === 'Input_Not_Found') {
-            const suggestion = getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
+            const nameSuggestion = canSuggestNames
+                ? getBestNameSuggestion(row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '')
+                : null;
+            const suggestion = canSuggestNames
+                ? nameSuggestion
+                : getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
             if (suggestion) {
                 fillSuggestedFields(
                     rowData,
@@ -1804,7 +1809,12 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
             }
         } else if (errorType === 'Output_Not_Found') {
-            const suggestion = getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+            const nameSuggestion = canSuggestNames
+                ? getBestNameSuggestion(row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '')
+                : null;
+            const suggestion = canSuggestNames
+                ? nameSuggestion
+                : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
             if (suggestion) {
                 fillSuggestedFields(
                     rowData,
