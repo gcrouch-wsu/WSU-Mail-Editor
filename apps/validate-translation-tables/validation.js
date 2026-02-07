@@ -743,7 +743,7 @@ function detectMissingMappings(outcomes, translate, keyConfig) {
     return missing;
 }
 
-function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCompare = {}) {
+function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCompare = {}, onProgress = null) {
     console.log('\n=== Running Validation ===');
 
     const duplicateTargetsDict = detectDuplicateTargets(translate, keyConfig);
@@ -791,7 +791,12 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
     const canCompareNames = nameCompareEnabled && outcomesKey && wsuKey;
     const ambiguityScoreCache = canCompareNames ? new Map() : null;
 
-    const validated = merged.map(row => {
+    const validated = [];
+    const totalRows = merged.length;
+    let processed = 0;
+    const reportEvery = 200;
+
+    for (const row of merged) {
         const result = {
             ...row,
             Error_Type: 'Valid',
@@ -870,8 +875,13 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
             }
         }
 
-        return result;
-    });
+        validated.push(result);
+
+        processed += 1;
+        if (onProgress && (processed % reportEvery === 0 || processed === totalRows)) {
+            onProgress(processed, totalRows);
+        }
+    }
 
     console.log('\n=== Validation Complete ===');
     console.log(`Total rows validated: ${validated.length}`);

@@ -56,6 +56,24 @@ let debugState = {
     wsu_org: null
 };
 let activeWorker = null;
+let pageBusy = false;
+
+function beforeUnloadHandler(event) {
+    event.preventDefault();
+    event.returnValue = '';
+}
+
+function setPageBusy(isBusy) {
+    if (isBusy && !pageBusy) {
+        window.addEventListener('beforeunload', beforeUnloadHandler);
+        pageBusy = true;
+        return;
+    }
+    if (!isBusy && pageBusy) {
+        window.removeEventListener('beforeunload', beforeUnloadHandler);
+        pageBusy = false;
+    }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     setupModeSelector();
@@ -968,6 +986,7 @@ async function runValidation() {
             threshold: resolvedThreshold
         };
 
+        setPageBusy(true);
         const result = await runWorkerTask(
             'validate',
             {
@@ -1018,6 +1037,7 @@ async function runValidation() {
         if (progressWrap) {
             progressWrap.classList.add('hidden');
         }
+        setPageBusy(false);
 
         displayResults(stats, errorSamples);
 
@@ -1029,6 +1049,7 @@ async function runValidation() {
         if (progressWrap) {
             progressWrap.classList.add('hidden');
         }
+        setPageBusy(false);
     }
 }
 
@@ -1088,6 +1109,7 @@ async function runGeneration() {
             return;
         }
 
+        setPageBusy(true);
         const generated = await runWorkerTask('generate', {
             outcomes: loadedData.outcomes,
             wsu_org: loadedData.wsu_org,
@@ -1136,6 +1158,7 @@ async function runGeneration() {
         if (progressWrap) {
             progressWrap.classList.add('hidden');
         }
+        setPageBusy(false);
     } catch (error) {
         console.error('Generation error:', error);
         alert(`Error generating translation table: ${error.message}`);
@@ -1144,6 +1167,7 @@ async function runGeneration() {
         if (progressWrap) {
             progressWrap.classList.add('hidden');
         }
+        setPageBusy(false);
     }
 }
 
@@ -1302,7 +1326,8 @@ function createErrorChart(errors) {
             'Duplicate Target Keys',
             'Duplicate Source Keys',
             'Name Mismatches',
-            'Ambiguous Matches'
+            'Ambiguous Matches',
+            'High Confidence Matches'
         ],
         datasets: [{
             label: 'Error Count',
@@ -1314,7 +1339,8 @@ function createErrorChart(errors) {
                 errors.duplicate_targets,
                 errors.duplicate_sources,
                 errors.name_mismatches,
-                errors.ambiguous_matches
+                errors.ambiguous_matches,
+                errors.high_confidence_matches || 0
             ],
             backgroundColor: [
                 'rgba(239, 68, 68, 0.8)',   // Red
@@ -1324,7 +1350,8 @@ function createErrorChart(errors) {
                 'rgba(14, 116, 144, 0.8)',  // Teal
                 'rgba(94, 234, 212, 0.8)',  // Cyan
                 'rgba(234, 179, 8, 0.8)',   // Amber
-                'rgba(168, 85, 247, 0.8)'   // Purple
+                'rgba(168, 85, 247, 0.8)',  // Purple
+                'rgba(74, 222, 128, 0.8)'   // Green
             ],
             borderColor: [
                 'rgb(239, 68, 68)',
@@ -1334,7 +1361,8 @@ function createErrorChart(errors) {
                 'rgb(14, 116, 144)',
                 'rgb(94, 234, 212)',
                 'rgb(202, 138, 4)',
-                'rgb(147, 51, 234)'
+                'rgb(147, 51, 234)',
+                'rgb(22, 163, 74)'
             ],
             borderWidth: 2
         }]
@@ -1517,6 +1545,7 @@ function setupDownloadButton() {
                 progressText.textContent = 'Preparing export...';
                 progressBar.style.width = '0%';
             }
+            setPageBusy(true);
 
             const includeSuggestions = Boolean(
                 document.getElementById('include-suggestions')?.checked
@@ -1559,6 +1588,8 @@ function setupDownloadButton() {
             if (progressWrap) {
                 progressWrap.classList.add('hidden');
             }
+        } finally {
+            setPageBusy(false);
         }
     });
 }
@@ -1573,6 +1604,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     const reportProgress = (stage, percent) => {
         if (onProgress) onProgress(stage, percent);
     };
+    const yieldToUi = () => new Promise(resolve => setTimeout(resolve, 0));
     const canSuggestNames = Boolean(
         includeSuggestions &&
         nameCompareConfig.enabled &&
@@ -1580,6 +1612,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         nameCompareConfig.wsu
     );
     reportProgress('Building export...', 5);
+    await yieldToUi();
 
     const outcomesColumns = selectedCols.outcomes.map(col => `outcomes_${col}`);
     const wsuColumns = selectedCols.wsu_org.map(col => `wsu_${col}`);
@@ -1787,7 +1820,8 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
             errorType === 'Name_Mismatch' ||
             errorType === 'Ambiguous_Match' ||
             errorType === 'Duplicate_Target' ||
-            errorType === 'Duplicate_Source'
+            errorType === 'Duplicate_Source' ||
+            errorType === 'High_Confidence_Match'
         ) {
             const outcomesName = row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '';
             const wsuName = row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '';
@@ -1808,6 +1842,29 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
                 if (outcomesSummary) summary.push(`Outcomes: ${outcomesSummary}`);
                 if (wsuSummary) summary.push(`myWSU: ${wsuSummary}`);
                 if (summary.length) rowData.Suggested_Match = summary.join(' | ');
+            } else if (errorType === 'High_Confidence_Match') {
+                const outcomesSummary = buildPrefixedSummary(
+                    row,
+                    roleColumnsOutcomes,
+                    selectedCols.outcomes,
+                    'outcomes_'
+                );
+                const wsuSummary = buildPrefixedSummary(
+                    row,
+                    roleColumnsWsu,
+                    selectedCols.wsu_org,
+                    'wsu_'
+                );
+                const summary = [];
+                if (outcomesSummary) summary.push(`Outcomes: ${outcomesSummary}`);
+                if (wsuSummary) summary.push(`myWSU: ${wsuSummary}`);
+                if (summary.length) rowData.Suggested_Match = summary.join(' | ');
+                const similarity = typeof calculateNameSimilarity === 'function'
+                    ? calculateNameSimilarity(outcomesName, wsuName)
+                    : null;
+                if (typeof similarity === 'number') {
+                    rowData.Suggestion_Score = formatSuggestionScore(similarity);
+                }
             } else {
                 const suggestions = getTopNameSuggestions(outcomesName, 2);
                 if (suggestions.length) {
@@ -1979,7 +2036,9 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         'Output does not exist in myWSU': 'FFEF4444'
     };
 
-    const errorRows = validated.filter(row => row.Error_Type !== 'Valid');
+    const errorRows = validated.filter(row => (
+        row.Error_Type !== 'Valid' && row.Error_Type !== 'High_Confidence_Match'
+    ));
     const translateErrorRows = errorRows.filter(row => !['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
     const oneToManyRows = errorRows.filter(row => ['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
     const highConfidenceRows = validated.filter(row => row.Error_Type === 'High_Confidence_Match');
@@ -2088,6 +2147,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         rowBorderByError
     );
     reportProgress('Building One to Many sheet...', 30);
+    await yieldToUi();
     addSheetWithRows(
         'One_to_Many',
         oneToManyColumns,
@@ -2097,6 +2157,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         'Duplicate_Group'
     );
     reportProgress('Building high confidence matches...', 45);
+    await yieldToUi();
     addSheetWithRows(
         'High_Confidence_Matches',
         highConfidenceColumns,
@@ -2104,6 +2165,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         baseStyle
     );
     reportProgress('Building valid mappings...', 60);
+    await yieldToUi();
     addSheetWithRows(
         'Valid_Mappings',
         validColumns,
@@ -2115,6 +2177,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         }
     );
     reportProgress('Building missing mappings...', 75);
+    await yieldToUi();
 
     const outcomesRowsByKey = new Map();
     loadedData.outcomes.forEach(row => {
@@ -2202,6 +2265,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         baseStyle
     );
     reportProgress('Finalizing Excel file...', 90);
+    await yieldToUi();
 
     const buffer = await workbook.xlsx.writeBuffer();
     reportProgress('Saving file...', 98);

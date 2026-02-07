@@ -374,7 +374,15 @@ self.onmessage = (event) => {
                 outcomes,
                 wsu_org,
                 keyConfig,
-                nameCompare
+                nameCompare,
+                (processed, total) => {
+                    self.postMessage({
+                        type: 'progress',
+                        stage: 'validate',
+                        processed,
+                        total
+                    });
+                }
             );
             const missingData = detectMissingMappings(outcomes, translate, keyConfig);
             const stats = generateSummaryStats(validatedData, outcomes, translate, wsu_org);
