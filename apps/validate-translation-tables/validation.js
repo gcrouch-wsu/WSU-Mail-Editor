@@ -431,6 +431,31 @@ function statesMatch(value1, value2) {
     return mapped1 === mapped2;
 }
 
+function extractParentheticalTokens(nameValue) {
+    if (!nameValue) return [];
+    const matches = String(nameValue).match(/\(([^)]+)\)/g);
+    if (!matches) return [];
+    return matches
+        .map(match => match.replace(/[()]/g, ''))
+        .flatMap(chunk => normalizeNameForCompare(chunk).split(' '))
+        .filter(Boolean);
+}
+
+function locationInNameMatches(nameValue, cityValue, stateValue) {
+    const tokens = extractParentheticalTokens(nameValue);
+    if (!tokens.length) return false;
+    const normalizedCity = normalizeNameForCompare(cityValue);
+    for (const token of tokens) {
+        if (normalizedCity && (token === normalizedCity || normalizedCity.includes(token) || token.includes(normalizedCity))) {
+            return true;
+        }
+        if (stateValue && statesMatch(token, stateValue)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function isHighConfidenceNameMatch(
     name1,
     name2,
@@ -444,7 +469,8 @@ function isHighConfidenceNameMatch(
     if (!name1 || !name2) return false;
     const stateOkay = statesMatch(state1, state2);
     const cityOkay = cityInName(name1, city2) || cityInName(name2, city1);
-    if (!stateOkay && !cityOkay) return false;
+    const parenOkay = locationInNameMatches(name1, city2, state2) || locationInNameMatches(name2, city1, state1);
+    if (!stateOkay && !cityOkay && !parenOkay) return false;
 
     if (typeof similarity === 'number' && similarity >= Math.max(0, threshold - 0.05)) {
         return true;
