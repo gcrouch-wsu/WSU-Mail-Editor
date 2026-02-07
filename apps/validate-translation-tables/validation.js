@@ -278,15 +278,12 @@ const NAME_TOKEN_ALIASES = {
     universidad: 'university',
     universidade: 'university',
     coll: 'college',
-    inst: 'institute',
     intl: 'international',
     int: 'international',
     tech: 'technology',
     sci: 'science',
     st: 'saint',
     mt: 'mount',
-    poly: 'polytechnic',
-    polytech: 'polytechnic',
     ag: 'agricultural',
     med: 'medical',
     dept: 'department',
@@ -294,7 +291,32 @@ const NAME_TOKEN_ALIASES = {
     sch: 'school',
     cc: 'community',
     comm: 'community',
-    jr: 'junior'
+    jr: 'junior',
+    tech: 'technology',
+    inst: 'institute',
+    poly: 'polytechnic',
+    polytech: 'polytechnic',
+    umass: 'massachusetts',
+    ucla: 'california',
+    usc: 'southern',
+    ucsd: 'california',
+    ucd: 'california',
+    ucsb: 'california',
+    uci: 'california',
+    ucr: 'california',
+    ucm: 'california',
+    ucb: 'california',
+    asu: 'state',
+    fsu: 'state',
+    osu: 'state',
+    isu: 'state',
+    wsu: 'state',
+    sjsu: 'state',
+    sdsu: 'state',
+    sfsu: 'state',
+    unc: 'north',
+    uab: 'alabama',
+    uofl: 'louisville'
 };
 
 function normalizeNameForCompare(value) {
@@ -305,9 +327,19 @@ function normalizeNameForCompare(value) {
         .replace(/\bcal state university\b/g, 'california state')
         .replace(/\bcalifornia state university\b/g, 'california state')
         .replace(/\bcal state\b/g, 'california state')
+        .replace(/\buniversity of california\b/g, 'california')
+        .replace(/\buc\b/g, 'california')
+        .replace(/\bstate u\b/g, 'state university')
+        .replace(/\bstate univ\b/g, 'state university')
+        .replace(/\bumass\b/g, 'university of massachusetts')
+        .replace(/\btexas a&m\b/g, 'texas agricultural and mechanical')
+        .replace(/\ba&m\b/g, 'agricultural and mechanical')
+        .replace(/\bgeorgia tech\b/g, 'georgia institute of technology')
+        .replace(/\bga tech\b/g, 'georgia institute of technology')
         .replace(/\bjunior college\b/g, 'community college')
         .replace(/\bjr college\b/g, 'community college')
         .replace(/\bcc\b/g, 'community college')
+        .replace(/\bla verne\b/g, 'laverne')
         .replace(/&/g, ' and ')
         .replace(/[^a-z0-9]+/g, ' ')
         .replace(/\s+/g, ' ')
@@ -386,9 +418,16 @@ function statesMatch(value1, value2) {
     const state1 = normalizeStateValue(value1);
     const state2 = normalizeStateValue(value2);
     if (!state1 || !state2) return false;
-    if (state1 === state2) return true;
-    const mapped1 = US_STATE_MAP[state1] || state1;
-    const mapped2 = US_STATE_MAP[state2] || state2;
+    const normalized1 = state1.replace(/\./g, '');
+    const normalized2 = state2.replace(/\./g, '');
+    if (normalized1 === normalized2) return true;
+    if (['dc', 'washington dc', 'washington d c', 'district of columbia'].includes(normalized1) &&
+        ['dc', 'washington dc', 'washington d c', 'district of columbia'].includes(normalized2)
+    ) {
+        return true;
+    }
+    const mapped1 = US_STATE_MAP[normalized1] || normalized1;
+    const mapped2 = US_STATE_MAP[normalized2] || normalized2;
     return mapped1 === mapped2;
 }
 
@@ -397,11 +436,15 @@ function isHighConfidenceNameMatch(
     name2,
     state1,
     state2,
+    city1,
+    city2,
     similarity,
     threshold
 ) {
     if (!name1 || !name2) return false;
-    if (!statesMatch(state1, state2)) return false;
+    const stateOkay = statesMatch(state1, state2);
+    const cityOkay = cityInName(name1, city2) || cityInName(name2, city1);
+    if (!stateOkay && !cityOkay) return false;
 
     if (typeof similarity === 'number' && similarity >= Math.max(0, threshold - 0.05)) {
         return true;
@@ -411,6 +454,17 @@ function isHighConfidenceNameMatch(
     const tokens2 = getInformativeTokens(tokenizeName(name2));
     const overlap = tokenOverlapStats(tokens1, tokens2);
     return overlap.matches >= 2;
+}
+
+function cityInName(nameValue, cityValue) {
+    if (!nameValue || !cityValue) return false;
+    const normalizedName = normalizeNameForCompare(nameValue);
+    const normalizedCity = normalizeNameForCompare(cityValue);
+    if (!normalizedName || !normalizedCity) return false;
+    if (normalizedName.includes(normalizedCity)) return true;
+    const tokens = normalizedCity.split(' ').filter(Boolean);
+    if (!tokens.length) return false;
+    return tokens.every(token => normalizedName.includes(token));
 }
 
 function getTopTwoNameScores(sourceName, targetRows, targetField, threshold = 0, scoreCache = null) {
@@ -788,6 +842,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
     const wsuKey = wsuColumn ? `wsu_${wsuColumn}` : '';
     const outcomesStateKey = nameCompare.state_outcomes ? `outcomes_${nameCompare.state_outcomes}` : '';
     const wsuStateKey = nameCompare.state_wsu ? `wsu_${nameCompare.state_wsu}` : '';
+    const outcomesCityKey = nameCompare.city_outcomes ? `outcomes_${nameCompare.city_outcomes}` : '';
+    const wsuCityKey = nameCompare.city_wsu ? `wsu_${nameCompare.city_wsu}` : '';
     const canCompareNames = nameCompareEnabled && outcomesKey && wsuKey;
     const ambiguityScoreCache = canCompareNames ? new Map() : null;
 
@@ -844,11 +900,15 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
             if (similarity < threshold) {
                 const stateValue1 = outcomesStateKey ? row[outcomesStateKey] : '';
                 const stateValue2 = wsuStateKey ? row[wsuStateKey] : '';
+                const cityValue1 = outcomesCityKey ? row[outcomesCityKey] : '';
+                const cityValue2 = wsuCityKey ? row[wsuCityKey] : '';
                 if (isHighConfidenceNameMatch(
                     row[outcomesKey],
                     row[wsuKey],
                     stateValue1,
                     stateValue2,
+                    cityValue1,
+                    cityValue2,
                     similarity,
                     threshold
                 )) {

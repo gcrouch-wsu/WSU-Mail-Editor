@@ -548,7 +548,14 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
             });
             const guessedRole = guessRole(col);
             roleSelect.value = guessedRole;
+            if (guessedRole) {
+                roleSelect.dataset.prevRole = guessedRole;
+            }
             columnRoles.outcomes[col] = guessedRole;
+            if (col === defaultOutcomesKey) {
+                roleSelect.value = '';
+                roleSelect.disabled = true;
+            }
 
             row.appendChild(nameSpan);
             row.appendChild(includeInput);
@@ -605,7 +612,14 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
             });
             const guessedRole = guessRole(col);
             roleSelect.value = guessedRole;
+            if (guessedRole) {
+                roleSelect.dataset.prevRole = guessedRole;
+            }
             columnRoles.wsu_org[col] = guessedRole;
+            if (col === defaultWsuKey) {
+                roleSelect.value = '';
+                roleSelect.disabled = true;
+            }
 
             row.appendChild(nameSpan);
             row.appendChild(includeInput);
@@ -736,14 +750,41 @@ function updateSelectedColumns() {
     columnRoles.outcomes = {};
     columnRoles.wsu_org = {};
 
+    const outcomesKey = document.querySelector('input[name="outcomes-key"]:checked')?.value || '';
+    const wsuKey = document.querySelector('input[name="wsu-key"]:checked')?.value || '';
+
     document.querySelectorAll('select[name="outcomes-role"]').forEach(select => {
         const col = select.dataset.col;
+        if (col === outcomesKey) {
+            if (select.value && select.value !== '') {
+                select.dataset.prevRole = select.value;
+            }
+            select.value = '';
+            select.disabled = true;
+        } else {
+            select.disabled = false;
+            if (!select.value && select.dataset.prevRole) {
+                select.value = select.dataset.prevRole;
+            }
+        }
         if (col) {
             columnRoles.outcomes[col] = select.value || '';
         }
     });
     document.querySelectorAll('select[name="wsu-role"]').forEach(select => {
         const col = select.dataset.col;
+        if (col === wsuKey) {
+            if (select.value && select.value !== '') {
+                select.dataset.prevRole = select.value;
+            }
+            select.value = '';
+            select.disabled = true;
+        } else {
+            select.disabled = false;
+            if (!select.value && select.dataset.prevRole) {
+                select.value = select.dataset.prevRole;
+            }
+        }
         if (col) {
             columnRoles.wsu_org[col] = select.value || '';
         }
@@ -954,6 +995,12 @@ async function runValidation() {
         const wsuStateRole = Object.keys(columnRoles.wsu_org || {}).find(
             col => columnRoles.wsu_org[col] === 'State'
         ) || '';
+        const outcomesCityRole = Object.keys(columnRoles.outcomes || {}).find(
+            col => columnRoles.outcomes[col] === 'City'
+        ) || '';
+        const wsuCityRole = Object.keys(columnRoles.wsu_org || {}).find(
+            col => columnRoles.wsu_org[col] === 'City'
+        ) || '';
         const nameCompareThreshold = parseFloat(
             document.getElementById('name-compare-threshold')?.value || '0.8'
         );
@@ -1001,7 +1048,9 @@ async function runValidation() {
                     threshold: resolvedThreshold,
                     ambiguity_gap: resolvedGap,
                     state_outcomes: outcomesStateRole,
-                    state_wsu: wsuStateRole
+                    state_wsu: wsuStateRole,
+                    city_outcomes: outcomesCityRole,
+                    city_wsu: wsuCityRole
                 }
             },
             (stage, processed, total) => {
