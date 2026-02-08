@@ -71,8 +71,10 @@
                             <p>3. Choose validation mode: key-only, or key + name comparison</p>
                             <p>4. If using name comparison, pick name columns and adjust threshold/ambiguity gap</p>
                             <p>5. (Optional) Map roles (School/City/State/Country) to improve suggestions</p>
-                            <p>6. Click "Validate Mappings" to identify errors</p>
-                            <p>7. Review the dashboard and download the Excel report (includes One_to_Many, High_Confidence_Matches, and Missing_Mappings)</p>
+                            <p>6. System check confirms Translate is loaded, shows row count, and verifies there are no blank input/output key cells</p>
+                            <p>7. Click "Validate Mappings" to run key lookups and matching checks</p>
+                            <p>8. Review errors: "blank key" means empty Translate cell; "not found" means key value exists but is absent in Outcomes/myWSU</p>
+                            <p>9. Download the Excel report (includes One_to_Many, High_Confidence_Matches, and Missing_Mappings)</p>
                         </div>
                         <div id="instructions-create" class="hidden">
                             <p>1. Upload the Outcomes source and myWSU table</p>
@@ -503,23 +505,23 @@
 
                 <div class="space-y-4 text-sm text-blue-800">
                     <div>
-                        <strong class="text-red-700">Missing Inputs:</strong>
-                        <p class="mt-1">Translation rows where the input/source key is blank.</p>
+                        <strong class="text-blue-700">Definition:</strong>
+                        <p class="mt-1"><strong>Blank key</strong> = Translate key cell is empty. <strong>Not found</strong> = Translate key value exists, but is not present in the source key list.</p>
                     </div>
 
                     <div>
-                        <strong class="text-red-700">Missing Outputs:</strong>
-                        <p class="mt-1">Translation rows where the output/target key is blank.</p>
+                        <strong class="text-red-700">Blank Input/Output Keys in Translate:</strong>
+                        <p class="mt-1">Structural issue in Translate (empty key cell). System check blocks validation until fixed.</p>
                     </div>
 
                     <div>
-                        <strong class="text-red-700">Inputs Not Found in Outcomes:</strong>
-                        <p class="mt-1">Translation inputs that do not exist in the Outcomes source data.</p>
+                        <strong class="text-red-700">Input Keys Not Found in Outcomes:</strong>
+                        <p class="mt-1">Translate input key value exists but is not a valid Outcomes key (data entry error, stale key, or wrong key column selection).</p>
                     </div>
 
                     <div>
-                        <strong class="text-red-700">Outputs Not Found in myWSU:</strong>
-                        <p class="mt-1">Translation outputs that do not exist in the myWSU data.</p>
+                        <strong class="text-red-700">Output Keys Not Found in myWSU:</strong>
+                        <p class="mt-1">Translate output key value exists but is not a valid myWSU key (data entry error, stale key, or wrong key column selection).</p>
                     </div>
 
                     <div>
@@ -550,7 +552,7 @@
                 <div class="mt-4 p-4 bg-white rounded border border-blue-200">
                     <p class="text-sm text-gray-700">
                         <strong>Key Point:</strong> The app validates <strong>your Translation Table</strong> as the integration map.
-                        It flags errors that will cause integration failures or data integrity issues.
+                        System check catches blank keys first; validation then flags key lookup and mapping-quality errors.
                         Fix these errors in your source system to ensure reliable data sync between Outcomes and myWSU.
                     </p>
                 </div>

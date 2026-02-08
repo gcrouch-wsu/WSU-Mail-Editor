@@ -1109,6 +1109,48 @@ async function runValidation() {
             threshold: resolvedThreshold
         };
 
+        const translateRows = loadedData.translate || [];
+        const translateRowCount = translateRows.length;
+        if (!translateRowCount) {
+            alert('System check failed: Translate table has 0 rows. Re-upload and try again.');
+            document.getElementById('loading').classList.add('hidden');
+            if (progressWrap) {
+                progressWrap.classList.add('hidden');
+            }
+            return;
+        }
+
+        const getValueText = (value) => String(value ?? '').trim();
+        let missingInputs = 0;
+        let missingOutputs = 0;
+        translateRows.forEach(row => {
+            if (!getValueText(row[keyConfig.translateInput])) {
+                missingInputs += 1;
+            }
+            if (!getValueText(row[keyConfig.translateOutput])) {
+                missingOutputs += 1;
+            }
+        });
+        if (missingInputs > 0 || missingOutputs > 0) {
+            alert(
+                `System check failed: Translate table has ${missingInputs} blank input key cells and ` +
+                `${missingOutputs} blank output key cells. Fix the file or key selection and try again.`
+            );
+            document.getElementById('loading').classList.add('hidden');
+            if (progressWrap) {
+                progressWrap.classList.add('hidden');
+            }
+            return;
+        }
+
+        if (progressStage && progressPercent && progressBar) {
+            progressStage.textContent = `System check passed: ${translateRowCount.toLocaleString()} rows, no blank key cells`;
+            progressPercent.textContent = '5%';
+            progressBar.style.width = '5%';
+        }
+        document.getElementById('loading-message').textContent =
+            `System check passed: ${translateRowCount.toLocaleString()} rows, no blank key cells`;
+
         setPageBusy(true);
         const result = await runWorkerTask(
             'validate',
@@ -1402,10 +1444,10 @@ function createErrorChart(errors) {
 
     const data = {
         labels: [
-            'Missing Inputs',
-            'Missing Outputs',
-            'Inputs Not Found',
-            'Outputs Not Found',
+            'Blank Input Keys (Translate)',
+            'Blank Output Keys (Translate)',
+            'Input Keys Not Found in Outcomes',
+            'Output Keys Not Found in myWSU',
             'Duplicate Target Keys',
             'Duplicate Source Keys',
             'Name Mismatches',
@@ -1486,10 +1528,10 @@ function displayErrorDetails(errorSamples) {
     detailsDiv.innerHTML = '';
 
     const errorTypes = [
-        { key: 'Missing_Input', title: 'Missing Inputs', color: 'red' },
-        { key: 'Missing_Output', title: 'Missing Outputs', color: 'red' },
-        { key: 'Input_Not_Found', title: 'Inputs Not Found in Outcomes', color: 'orange' },
-        { key: 'Output_Not_Found', title: 'Outputs Not Found in myWSU', color: 'orange' },
+        { key: 'Missing_Input', title: 'Blank Input Keys in Translate', color: 'red' },
+        { key: 'Missing_Output', title: 'Blank Output Keys in Translate', color: 'red' },
+        { key: 'Input_Not_Found', title: 'Input Keys Not Found in Outcomes', color: 'orange' },
+        { key: 'Output_Not_Found', title: 'Output Keys Not Found in myWSU', color: 'orange' },
         { key: 'Output_Not_Found_Likely_Stale_Key', title: 'Likely Stale Output Keys (Suggested Replacements)', color: 'orange' },
         { key: 'Duplicate_Target', title: 'Duplicate Target Keys (Many-to-One Errors)', color: 'yellow' },
         { key: 'Duplicate_Source', title: 'Duplicate Source Keys', color: 'yellow' },
@@ -1523,29 +1565,29 @@ function createErrorCard(title, sample, color) {
     };
 
     const explanations = {
-        'Missing Inputs': {
+        'Blank Input Keys in Translate': {
             icon: '🔴',
-            text: 'The translation table row is missing the input/source key.',
-            impact: 'Critical - Mapping cannot be used'
+            text: 'Translate input key cell is blank (no value provided).',
+            impact: 'Critical - Structural table issue; validation stops at system check'
         },
-        'Missing Outputs': {
+        'Blank Output Keys in Translate': {
             icon: '🔴',
-            text: 'The translation table row is missing the output/target key.',
-            impact: 'Critical - Mapping cannot be used'
+            text: 'Translate output key cell is blank (no value provided).',
+            impact: 'Critical - Structural table issue; validation stops at system check'
         },
-        'Inputs Not Found in Outcomes': {
+        'Input Keys Not Found in Outcomes': {
             icon: '🔴',
-            text: 'Translation inputs do not exist in the Outcomes source data.',
-            impact: 'Critical - Must be fixed to enable data sync'
+            text: 'Translate input key value is present, but it does not exist in Outcomes keys.',
+            impact: 'Critical - Data entry/config issue; mapping will fail'
         },
-        'Outputs Not Found in myWSU': {
+        'Output Keys Not Found in myWSU': {
             icon: '🔴',
-            text: 'Translation outputs do not exist in the myWSU data.',
-            impact: 'Critical - Must be fixed to enable data sync'
+            text: 'Translate output key value is present, but it does not exist in myWSU keys.',
+            impact: 'Critical - Data entry/config issue; mapping will fail'
         },
         'Likely Stale Output Keys (Suggested Replacements)': {
             icon: '[!]',
-            text: 'Output key is missing in myWSU, but one high-confidence replacement key was found using name and location evidence.',
+            text: 'Output key value is not found in myWSU, but one high-confidence replacement key was found using name and location evidence.',
             impact: 'Critical - Likely stale key; verify then update translate output key'
         },
         'Duplicate Target Keys (Many-to-One Errors)': {

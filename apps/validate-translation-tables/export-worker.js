@@ -187,10 +187,10 @@ function formatScore(score) {
 }
 
 function normalizeErrorType(row) {
-    if (row.Error_Type === 'Input_Not_Found') return 'Input does not exist in Outcomes';
-    if (row.Error_Type === 'Output_Not_Found') return 'Output does not exist in myWSU';
-    if (row.Error_Type === 'Missing_Input') return 'Input is missing in Translate';
-    if (row.Error_Type === 'Missing_Output') return 'Output is missing in Translate';
+    if (row.Error_Type === 'Input_Not_Found') return 'Input key not found in Outcomes';
+    if (row.Error_Type === 'Output_Not_Found') return 'Output key not found in myWSU';
+    if (row.Error_Type === 'Missing_Input') return 'Input key is blank in Translate';
+    if (row.Error_Type === 'Missing_Output') return 'Output key is blank in Translate';
     if (row.Error_Type === 'Name_Mismatch') return 'Name mismatch';
     if (row.Error_Type === 'Ambiguous_Match') return 'Ambiguous name match';
     return row.Error_Type || '';
@@ -267,7 +267,7 @@ function buildMappingLogicRow(row, normalizedErrorType, nameCompareConfig) {
     case 'Duplicate_Source':
         return 'One-to-many duplicate: one source key maps to multiple target keys.';
     case 'Input_Not_Found':
-        return 'Key lookup failed: translate input key was not found in Outcomes keys.';
+        return 'Key lookup failed: translate input key value is present but was not found in Outcomes keys.';
     case 'Output_Not_Found':
         if (row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY) {
             const suggested = row.Suggested_Key
@@ -281,11 +281,11 @@ function buildMappingLogicRow(row, normalizedErrorType, nameCompareConfig) {
         if (row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT) {
             return 'Key lookup failed: translate output key was not found in myWSU keys. No high-confidence replacement candidate was found.';
         }
-        return 'Key lookup failed: translate output key was not found in myWSU keys.';
+        return 'Key lookup failed: translate output key value is present but was not found in myWSU keys.';
     case 'Missing_Input':
-        return 'Translate row has a blank/missing input key.';
+        return 'Translate row has a blank input key cell.';
     case 'Missing_Output':
-        return 'Translate row has a blank/missing output key.';
+        return 'Translate row has a blank output key cell.';
     case 'Name_Mismatch':
         return similarityText
             ? `Name comparison failed: similarity ${similarityText} is below threshold ${thresholdText}.`
