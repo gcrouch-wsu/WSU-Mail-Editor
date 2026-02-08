@@ -1485,6 +1485,7 @@ function displayErrorDetails(errorSamples) {
         { key: 'Missing_Output', title: 'Missing Outputs', color: 'red' },
         { key: 'Input_Not_Found', title: 'Inputs Not Found in Outcomes', color: 'orange' },
         { key: 'Output_Not_Found', title: 'Outputs Not Found in myWSU', color: 'orange' },
+        { key: 'Output_Not_Found_Likely_Stale_Key', title: 'Likely Stale Output Keys (Suggested Replacements)', color: 'orange' },
         { key: 'Duplicate_Target', title: 'Duplicate Target Keys (Many-to-One Errors)', color: 'yellow' },
         { key: 'Duplicate_Source', title: 'Duplicate Source Keys', color: 'yellow' },
         { key: 'Name_Mismatch', title: 'Name Mismatches (Possible Wrong Mappings)', color: 'yellow' },
@@ -1536,6 +1537,11 @@ function createErrorCard(title, sample, color) {
             icon: '🔴',
             text: 'Translation outputs do not exist in the myWSU data.',
             impact: 'Critical - Must be fixed to enable data sync'
+        },
+        'Likely Stale Output Keys (Suggested Replacements)': {
+            icon: '[!]',
+            text: 'Output key is missing in myWSU, but one high-confidence replacement key was found using name and location evidence.',
+            impact: 'Critical - Likely stale key; verify then update translate output key'
         },
         'Duplicate Target Keys (Many-to-One Errors)': {
             icon: '🟠',

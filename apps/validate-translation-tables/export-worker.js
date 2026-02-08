@@ -3,6 +3,11 @@ importScripts('validation.js');
 importScripts('https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js');
 
 const EXPORT_TOTAL = 100;
+const EXPORT_OUTPUT_NOT_FOUND_SUBTYPE = {
+    LIKELY_STALE_KEY: 'Output_Not_Found_Likely_Stale_Key',
+    AMBIGUOUS_REPLACEMENT: 'Output_Not_Found_Ambiguous_Replacement',
+    NO_REPLACEMENT: 'Output_Not_Found_No_Replacement'
+};
 
 function reportProgress(stage, processed) {
     self.postMessage({
@@ -32,6 +37,7 @@ function downloadSafeFileName(name, fallback) {
 
 function getHeaderFill(col, style) {
     if (col === 'Error_Type') return style.errorHeaderColor;
+    if (col === 'Error_Subtype') return style.errorHeaderColor;
     if (col === 'Duplicate_Group') return style.groupHeaderColor;
     if (col === 'Mapping_Logic') return style.logicHeaderColor;
     if (['translate_input', 'translate_output'].includes(col)) return style.translateHeaderColor;
@@ -45,6 +51,7 @@ function getHeaderFill(col, style) {
 
 function getBodyFill(col, style) {
     if (col === 'Error_Type') return style.errorBodyColor;
+    if (col === 'Error_Subtype') return style.errorBodyColor;
     if (col === 'Duplicate_Group') return style.groupBodyColor;
     if (col === 'Mapping_Logic') return style.logicBodyColor;
     if (['translate_input', 'translate_output'].includes(col)) return style.translateBodyColor;
@@ -189,6 +196,19 @@ function normalizeErrorType(row) {
     return row.Error_Type || '';
 }
 
+function normalizeErrorSubtype(subtype) {
+    if (subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY) {
+        return 'Likely stale key (high-confidence replacement found)';
+    }
+    if (subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT) {
+        return 'Ambiguous replacement (multiple high-confidence candidates)';
+    }
+    if (subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT) {
+        return 'No high-confidence replacement found';
+    }
+    return subtype || '';
+}
+
 function buildHeaders(outputColumns, keyLabels) {
     return outputColumns.map(col => {
         if (col === 'translate_input') return `${keyLabels.translateInput || 'Source key'} (Translate Input)`;
@@ -204,6 +224,7 @@ function buildHeaders(outputColumns, keyLabels) {
         }
         if (col === 'wsu_Org ID') return 'myWSU Key';
         if (col === 'Error_Type') return 'Error Type';
+        if (col === 'Error_Subtype') return 'Error Subtype';
         if (col === 'Missing_In') return 'Missing In';
         if (col === 'Similarity') return 'Similarity';
         if (col === 'Mapping_Logic') return 'Mapping Logic';
@@ -248,6 +269,18 @@ function buildMappingLogicRow(row, normalizedErrorType, nameCompareConfig) {
     case 'Input_Not_Found':
         return 'Key lookup failed: translate input key was not found in Outcomes keys.';
     case 'Output_Not_Found':
+        if (row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY) {
+            const suggested = row.Suggested_Key
+                ? ` Suggested replacement key: ${row.Suggested_Key}.`
+                : '';
+            return `Key lookup failed: translate output key was not found in myWSU keys. Likely stale key.${suggested}`;
+        }
+        if (row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT) {
+            return 'Key lookup failed: translate output key was not found in myWSU keys. Multiple high-confidence replacement candidates were found.';
+        }
+        if (row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT) {
+            return 'Key lookup failed: translate output key was not found in myWSU keys. No high-confidence replacement candidate was found.';
+        }
         return 'Key lookup failed: translate output key was not found in myWSU keys.';
     case 'Missing_Input':
         return 'Translate row has a blank/missing input key.';
@@ -515,12 +548,21 @@ async function buildValidationExport(payload) {
 
     const applySuggestionColumns = (row, rowData, errorType) => {
         if (!includeSuggestions) return;
-        rowData.Suggested_Key = '';
-        rowData.Suggested_School = '';
-        rowData.Suggested_City = '';
-        rowData.Suggested_State = '';
-        rowData.Suggested_Country = '';
-        rowData.Suggestion_Score = '';
+        rowData.Suggested_Key = row.Suggested_Key ?? '';
+        rowData.Suggested_School = row.Suggested_School ?? '';
+        rowData.Suggested_City = row.Suggested_City ?? '';
+        rowData.Suggested_State = row.Suggested_State ?? '';
+        rowData.Suggested_Country = row.Suggested_Country ?? '';
+        rowData.Suggestion_Score = row.Suggestion_Score ?? '';
+
+        const hasPresetSuggestion = Boolean(
+            rowData.Suggested_Key ||
+            rowData.Suggested_School ||
+            rowData.Suggested_City ||
+            rowData.Suggested_State ||
+            rowData.Suggested_Country ||
+            rowData.Suggestion_Score !== ''
+        );
 
         if (errorType === 'Input_Not_Found') {
             const nameSuggestion = canSuggestNames
@@ -541,6 +583,12 @@ async function buildValidationExport(payload) {
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
             }
         } else if (errorType === 'Output_Not_Found') {
+            if (
+                row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY &&
+                hasPresetSuggestion
+            ) {
+                return;
+            }
             const nameSuggestion = canSuggestNames
                 ? getBestNameSuggestion(row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '')
                 : null;
@@ -709,6 +757,7 @@ async function buildValidationExport(payload) {
 
     const errorColumns = [
         'Error_Type',
+        'Error_Subtype',
         ...outcomesColumns,
         'translate_input',
         'translate_output',
@@ -746,6 +795,7 @@ async function buildValidationExport(payload) {
             rowData[col] = row[col] !== undefined ? row[col] : '';
         });
         rowData.Error_Type = normalizeErrorType(row) || row.Error_Type;
+        rowData.Error_Subtype = normalizeErrorSubtype(row.Error_Subtype);
         if (showMappingLogic) {
             rowData.Mapping_Logic = buildMappingLogicRow(row, rowData.Error_Type, nameCompareConfig);
         }

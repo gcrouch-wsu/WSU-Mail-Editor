@@ -268,6 +268,12 @@ const NAME_TOKEN_STOPWORDS = new Set([
     'du', 'da', 'di', 'del'
 ]);
 const NAME_MATCH_AMBIGUITY_GAP = 0.03;
+const OUTPUT_NOT_FOUND_SUBTYPE = {
+    LIKELY_STALE_KEY: 'Output_Not_Found_Likely_Stale_Key',
+    AMBIGUOUS_REPLACEMENT: 'Output_Not_Found_Ambiguous_Replacement',
+    NO_REPLACEMENT: 'Output_Not_Found_No_Replacement'
+};
+const STALE_KEY_REPLACEMENT_GAP = 0.04;
 
 const NAME_TOKEN_ALIASES = {
     univ: 'university',
@@ -606,6 +612,12 @@ function hasInternationalStateGap(state1, state2) {
     return !normalized1 || !normalized2 || normalized1 === 'ot' || normalized2 === 'ot';
 }
 
+function hasComparableStateValues(state1, state2) {
+    const normalized1 = normalizeStateValue(state1);
+    const normalized2 = normalizeStateValue(state2);
+    return Boolean(normalized1 && normalized2 && normalized1 !== 'ot' && normalized2 !== 'ot');
+}
+
 function locationInNameMatches(nameValue, cityValue, stateValue) {
     const tokens = [
         ...extractParentheticalTokens(nameValue),
@@ -762,6 +774,101 @@ function isAmbiguousNameMatch(
         return false;
     }
     return (bestScore - mappedScore) <= gap;
+}
+
+function classifyMissingOutputReplacement(
+    sourceName,
+    sourceState,
+    sourceCity,
+    sourceCountry,
+    wsuRows,
+    options = {}
+) {
+    const nameField = options.nameField || '';
+    const keyField = options.keyField || '';
+    const stateField = options.stateField || '';
+    const cityField = options.cityField || '';
+    const countryField = options.countryField || '';
+    const threshold = typeof options.threshold === 'number' ? options.threshold : 0.8;
+    const gap = typeof options.ambiguityGap === 'number'
+        ? Math.max(0.01, options.ambiguityGap)
+        : STALE_KEY_REPLACEMENT_GAP;
+
+    if (!sourceName || !nameField || !keyField || !Array.isArray(wsuRows) || !wsuRows.length) {
+        return { subtype: OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT, bestCandidate: null };
+    }
+
+    const candidates = [];
+    wsuRows.forEach(targetRow => {
+        const targetName = targetRow[nameField];
+        if (!targetName) {
+            return;
+        }
+        const targetState = stateField ? (targetRow[stateField] ?? '') : '';
+        const targetCity = cityField ? (targetRow[cityField] ?? '') : '';
+        const targetCountry = countryField ? (targetRow[countryField] ?? '') : '';
+
+        if (sourceCountry && targetCountry && !countriesMatch(sourceCountry, targetCountry)) {
+            return;
+        }
+
+        if (
+            hasComparableStateValues(sourceState, targetState) &&
+            sourceCountry &&
+            targetCountry &&
+            countriesMatch(sourceCountry, targetCountry) &&
+            !statesMatch(sourceState, targetState)
+        ) {
+            return;
+        }
+
+        const similarity = calculateNameSimilarity(sourceName, targetName);
+        if (!isHighConfidenceNameMatch(
+            sourceName,
+            targetName,
+            sourceState,
+            targetState,
+            sourceCity,
+            targetCity,
+            sourceCountry,
+            targetCountry,
+            similarity,
+            threshold
+        )) {
+            return;
+        }
+
+        candidates.push({
+            key: targetRow[keyField] ?? '',
+            name: targetName,
+            city: targetCity,
+            state: targetState,
+            country: targetCountry,
+            score: similarity
+        });
+    });
+
+    if (!candidates.length) {
+        return { subtype: OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT, bestCandidate: null };
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    const bestCandidate = candidates[0];
+    const secondCandidate = candidates.length > 1 ? candidates[1] : null;
+
+    if (secondCandidate && (bestCandidate.score - secondCandidate.score) < gap) {
+        return {
+            subtype: OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT,
+            bestCandidate,
+            secondCandidate
+        };
+    }
+
+    return {
+        subtype: OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY,
+        bestCandidate,
+        secondCandidate
+    };
 }
 
 function calculateNameSimilarity(name1, name2) {
@@ -1070,6 +1177,7 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
     const wsuCountryKey = nameCompare.country_wsu ? `wsu_${nameCompare.country_wsu}` : '';
     const canCompareNames = nameCompareEnabled && outcomesKey && wsuKey;
     const ambiguityScoreCache = canCompareNames ? new Map() : null;
+    const missingOutputReplacementCache = canCompareNames ? new Map() : null;
 
     const validated = [];
     const totalRows = merged.length;
@@ -1081,7 +1189,14 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
             ...row,
             Error_Type: 'Valid',
             Error_Description: 'Mapping is valid',
-            Duplicate_Group: ''
+            Duplicate_Group: '',
+            Error_Subtype: '',
+            Suggested_Key: '',
+            Suggested_School: '',
+            Suggested_City: '',
+            Suggested_State: '',
+            Suggested_Country: '',
+            Suggestion_Score: ''
         };
 
         if (!row.translate_input_norm) {
@@ -1102,6 +1217,66 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
         if (result.Error_Type === 'Valid' && row.translate_output_norm && !wsuKeys.has(row.translate_output_norm)) {
             result.Error_Type = 'Output_Not_Found';
             result.Error_Description = 'Translation output does not exist in myWSU data';
+            result.Error_Subtype = OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT;
+
+            if (canCompareNames && row[outcomesKey]) {
+                const sourceName = row[outcomesKey];
+                const sourceState = outcomesStateKey ? row[outcomesStateKey] : '';
+                const sourceCity = outcomesCityKey ? row[outcomesCityKey] : '';
+                const sourceCountry = outcomesCountryKey ? row[outcomesCountryKey] : '';
+                const cacheKey = [
+                    normalizeNameForCompare(sourceName),
+                    normalizeStateValue(sourceState),
+                    normalizeNameForCompare(sourceCity),
+                    normalizeCountryValue(sourceCountry)
+                ].join('|');
+
+                let replacement = missingOutputReplacementCache.get(cacheKey);
+                if (!replacement) {
+                    replacement = classifyMissingOutputReplacement(
+                        sourceName,
+                        sourceState,
+                        sourceCity,
+                        sourceCountry,
+                        wsuOrg,
+                        {
+                            nameField: wsuColumn,
+                            keyField: keyConfig.wsu,
+                            stateField: nameCompare.state_wsu || '',
+                            cityField: nameCompare.city_wsu || '',
+                            countryField: nameCompare.country_wsu || '',
+                            threshold,
+                            ambiguityGap: Math.max(STALE_KEY_REPLACEMENT_GAP, ambiguityGap)
+                        }
+                    );
+                    missingOutputReplacementCache.set(cacheKey, replacement);
+                }
+
+                result.Error_Subtype = replacement.subtype || OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT;
+                if (
+                    replacement.subtype === OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY &&
+                    replacement.bestCandidate
+                ) {
+                    result.Suggested_Key = replacement.bestCandidate.key || '';
+                    result.Suggested_School = replacement.bestCandidate.name || '';
+                    result.Suggested_City = replacement.bestCandidate.city || '';
+                    result.Suggested_State = replacement.bestCandidate.state || '';
+                    result.Suggested_Country = replacement.bestCandidate.country || '';
+                    result.Suggestion_Score = replacement.bestCandidate.score;
+                    const scorePct = Math.round((replacement.bestCandidate.score || 0) * 100);
+                    const locationParts = [
+                        replacement.bestCandidate.city,
+                        replacement.bestCandidate.state,
+                        replacement.bestCandidate.country
+                    ].filter(Boolean).join(', ');
+                    const locationSuffix = locationParts ? ` (${locationParts})` : '';
+                    result.Error_Description = `Translation output does not exist in myWSU data. Likely stale key; suggested replacement ${result.Suggested_Key}: "${result.Suggested_School}"${locationSuffix} (score: ${scorePct}%).`;
+                } else if (replacement.subtype === OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT) {
+                    result.Error_Description = 'Translation output does not exist in myWSU data. Multiple high-confidence replacement candidates were found; review manually.';
+                } else {
+                    result.Error_Description = 'Translation output does not exist in myWSU data. No high-confidence replacement candidate was found.';
+                }
+            }
         }
 
         const duplicateSourceCount = duplicateSourcesDict[row.translate_input_norm]?.length || 0;
@@ -1223,6 +1398,16 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
     validated.forEach(row => {
         errorCounts[row.Error_Type] = (errorCounts[row.Error_Type] || 0) + 1;
     });
+    const outputNotFoundRows = validated.filter(row => row.Error_Type === 'Output_Not_Found');
+    const outputNotFoundLikelyStale = outputNotFoundRows.filter(
+        row => row.Error_Subtype === OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY
+    ).length;
+    const outputNotFoundAmbiguous = outputNotFoundRows.filter(
+        row => row.Error_Subtype === OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT
+    ).length;
+    const outputNotFoundNoReplacement = outputNotFoundRows.filter(
+        row => row.Error_Subtype === OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT
+    ).length;
 
     const stats = {
         timestamp: new Date().toLocaleString('en-US', {
@@ -1250,6 +1435,9 @@ function generateSummaryStats(validated, outcomes, translate, wsuOrg) {
             missing_outputs: errorCounts.Missing_Output || 0,
             input_not_found: errorCounts.Input_Not_Found || 0,
             output_not_found: errorCounts.Output_Not_Found || 0,
+            output_not_found_likely_stale_key: outputNotFoundLikelyStale,
+            output_not_found_ambiguous_replacement: outputNotFoundAmbiguous,
+            output_not_found_no_replacement: outputNotFoundNoReplacement,
             duplicate_targets: errorCounts.Duplicate_Target || 0,
             duplicate_sources: errorCounts.Duplicate_Source || 0,
             name_mismatches: errorCounts.Name_Mismatch || 0,
@@ -1289,6 +1477,21 @@ function getErrorSamples(validated, limit = 10) {
             }))
         };
     });
+
+    const staleKeyRows = validated.filter(r => (
+        r.Error_Type === 'Output_Not_Found' &&
+        r.Error_Subtype === OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY
+    ));
+    const staleShowing = resolvedLimit ? Math.min(staleKeyRows.length, resolvedLimit) : staleKeyRows.length;
+    samples.Output_Not_Found_Likely_Stale_Key = {
+        count: staleKeyRows.length,
+        showing: staleShowing,
+        rows: staleKeyRows.slice(0, staleShowing).map(r => ({
+            translate_input: r.translate_input,
+            translate_output: r.translate_output,
+            Error_Description: r.Error_Description
+        }))
+    };
 
     return samples;
 }
