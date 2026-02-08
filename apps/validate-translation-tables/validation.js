@@ -979,8 +979,23 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     similarity
                 )
             ) {
-                result.Error_Type = 'Ambiguous_Match';
-                result.Error_Description = `Ambiguous name match (similarity: ${Math.round(similarity * 100)}%). Another candidate is within ${Math.round(ambiguityGap * 100)}% - review alternatives`;
+                const stateValue1 = outcomesStateKey ? row[outcomesStateKey] : '';
+                const stateValue2 = wsuStateKey ? row[wsuStateKey] : '';
+                const cityValue1 = outcomesCityKey ? row[outcomesCityKey] : '';
+                const cityValue2 = wsuCityKey ? row[wsuCityKey] : '';
+                if (!isHighConfidenceNameMatch(
+                    row[outcomesKey],
+                    row[wsuKey],
+                    stateValue1,
+                    stateValue2,
+                    cityValue1,
+                    cityValue2,
+                    similarity,
+                    threshold
+                )) {
+                    result.Error_Type = 'Ambiguous_Match';
+                    result.Error_Description = `Ambiguous name match (similarity: ${Math.round(similarity * 100)}%). Another candidate is within ${Math.round(ambiguityGap * 100)}% - review alternatives`;
+                }
             }
         }
 
