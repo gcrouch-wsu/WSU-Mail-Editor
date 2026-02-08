@@ -502,7 +502,7 @@ function isHighConfidenceNameMatch(
     const tokens1 = getInformativeTokens(tokenizeName(name1));
     const tokens2 = getInformativeTokens(tokenizeName(name2));
     const overlap = tokenOverlapStats(tokens1, tokens2);
-    return overlap.matches >= 2;
+    return overlap.matches >= (parenOkay ? 1 : 2);
 }
 
 function cityInName(nameValue, cityValue) {
