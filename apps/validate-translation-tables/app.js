@@ -1001,6 +1001,12 @@ async function runValidation() {
         const wsuCityRole = Object.keys(columnRoles.wsu_org || {}).find(
             col => columnRoles.wsu_org[col] === 'City'
         ) || '';
+        const outcomesCountryRole = Object.keys(columnRoles.outcomes || {}).find(
+            col => columnRoles.outcomes[col] === 'Country'
+        ) || '';
+        const wsuCountryRole = Object.keys(columnRoles.wsu_org || {}).find(
+            col => columnRoles.wsu_org[col] === 'Country'
+        ) || '';
         const findFallbackColumn = (columns, token) => (
             columns.find(col => String(col).toLowerCase().includes(token)) || ''
         );
@@ -1012,6 +1018,10 @@ async function runValidation() {
             || findFallbackColumn(selectedColumns.outcomes, 'city');
         const wsuCityFallback = wsuCityRole
             || findFallbackColumn(selectedColumns.wsu_org, 'city');
+        const outcomesCountryFallback = outcomesCountryRole
+            || findFallbackColumn(selectedColumns.outcomes, 'country');
+        const wsuCountryFallback = wsuCountryRole
+            || findFallbackColumn(selectedColumns.wsu_org, 'country');
         const nameCompareThreshold = parseFloat(
             document.getElementById('name-compare-threshold')?.value || '0.8'
         );
@@ -1061,7 +1071,9 @@ async function runValidation() {
                     state_outcomes: outcomesStateFallback,
                     state_wsu: wsuStateFallback,
                     city_outcomes: outcomesCityFallback,
-                    city_wsu: wsuCityFallback
+                    city_wsu: wsuCityFallback,
+                    country_outcomes: outcomesCountryFallback,
+                    country_wsu: wsuCountryFallback
                 }
             },
             (stage, processed, total) => {
@@ -1139,6 +1151,39 @@ async function runGeneration() {
 
         const nameCompareOutcomes = document.getElementById('name-compare-outcomes')?.value || '';
         const nameCompareWsu = document.getElementById('name-compare-wsu')?.value || '';
+        const outcomesStateRole = Object.keys(columnRoles.outcomes || {}).find(
+            col => columnRoles.outcomes[col] === 'State'
+        ) || '';
+        const wsuStateRole = Object.keys(columnRoles.wsu_org || {}).find(
+            col => columnRoles.wsu_org[col] === 'State'
+        ) || '';
+        const outcomesCityRole = Object.keys(columnRoles.outcomes || {}).find(
+            col => columnRoles.outcomes[col] === 'City'
+        ) || '';
+        const wsuCityRole = Object.keys(columnRoles.wsu_org || {}).find(
+            col => columnRoles.wsu_org[col] === 'City'
+        ) || '';
+        const outcomesCountryRole = Object.keys(columnRoles.outcomes || {}).find(
+            col => columnRoles.outcomes[col] === 'Country'
+        ) || '';
+        const wsuCountryRole = Object.keys(columnRoles.wsu_org || {}).find(
+            col => columnRoles.wsu_org[col] === 'Country'
+        ) || '';
+        const findFallbackColumn = (columns, token) => (
+            columns.find(col => String(col).toLowerCase().includes(token)) || ''
+        );
+        const outcomesStateFallback = outcomesStateRole
+            || findFallbackColumn(selectedColumns.outcomes, 'state');
+        const wsuStateFallback = wsuStateRole
+            || findFallbackColumn(selectedColumns.wsu_org, 'state');
+        const outcomesCityFallback = outcomesCityRole
+            || findFallbackColumn(selectedColumns.outcomes, 'city');
+        const wsuCityFallback = wsuCityRole
+            || findFallbackColumn(selectedColumns.wsu_org, 'city');
+        const outcomesCountryFallback = outcomesCountryRole
+            || findFallbackColumn(selectedColumns.outcomes, 'country');
+        const wsuCountryFallback = wsuCountryRole
+            || findFallbackColumn(selectedColumns.wsu_org, 'country');
         const nameCompareThreshold = parseFloat(
             document.getElementById('name-compare-threshold')?.value || '0.8'
         );
@@ -1179,7 +1224,13 @@ async function runGeneration() {
                 outcomes_column: nameCompareOutcomes,
                 wsu_column: nameCompareWsu,
                 threshold: resolvedThreshold,
-                ambiguity_gap: resolvedGap
+                ambiguity_gap: resolvedGap,
+                state_outcomes: outcomesStateFallback,
+                state_wsu: wsuStateFallback,
+                city_outcomes: outcomesCityFallback,
+                city_wsu: wsuCityFallback,
+                country_outcomes: outcomesCountryFallback,
+                country_wsu: wsuCountryFallback
             },
             options: {
                 forceNameMatch

@@ -1,4 +1,4 @@
-/* global mergeData, validateMappings, detectMissingMappings, generateSummaryStats, normalizeKeyValue, calculateNameSimilarity */
+/* global mergeData, validateMappings, detectMissingMappings, generateSummaryStats, normalizeKeyValue, calculateNameSimilarity, isHighConfidenceNameMatch, statesMatch, countriesMatch */
 importScripts('validation.js');
 
 const WORKER_NAME_MATCH_AMBIGUITY_GAP = 0.03;
@@ -29,16 +29,105 @@ function buildKeyValueMap(rows, keyField) {
     return map;
 }
 
-function findBestNameMatch(sourceName, targetEntries, nameField, threshold, usedKeys, minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP) {
+function resolveLocationValue(row, fieldName) {
+    if (!row || !fieldName) return '';
+    return row[fieldName] ?? '';
+}
+
+function buildLocationContext(row, locationFields) {
+    return {
+        state: resolveLocationValue(row, locationFields.state),
+        city: resolveLocationValue(row, locationFields.city),
+        country: resolveLocationValue(row, locationFields.country)
+    };
+}
+
+function hasLocationSignal(context) {
+    return Boolean(context.state || context.city || context.country);
+}
+
+function hasComparableState(state1, state2) {
+    const normalized1 = String(state1 || '').trim().toLowerCase();
+    const normalized2 = String(state2 || '').trim().toLowerCase();
+    return Boolean(normalized1 && normalized2 && normalized1 !== 'ot' && normalized2 !== 'ot');
+}
+
+function shouldBlockByLocation(sourceContext, targetContext) {
+    if (
+        sourceContext.country && targetContext.country &&
+        !countriesMatch(sourceContext.country, targetContext.country)
+    ) {
+        return true;
+    }
+
+    if (
+        hasComparableState(sourceContext.state, targetContext.state) &&
+        sourceContext.country &&
+        targetContext.country &&
+        countriesMatch(sourceContext.country, targetContext.country) &&
+        !statesMatch(sourceContext.state, targetContext.state)
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+function passesNameGate(sourceName, targetName, sourceContext, targetContext, score, threshold) {
+    const hasContext = hasLocationSignal(sourceContext) || hasLocationSignal(targetContext);
+    const highConfidence = isHighConfidenceNameMatch(
+        sourceName,
+        targetName,
+        sourceContext.state,
+        targetContext.state,
+        sourceContext.city,
+        targetContext.city,
+        sourceContext.country,
+        targetContext.country,
+        score,
+        threshold
+    );
+    if (highConfidence) {
+        return true;
+    }
+    if (score < threshold) {
+        return false;
+    }
+    if (!hasContext) {
+        return true;
+    }
+
+    const strictScore = Math.max(0.9, threshold + 0.08);
+    return score >= strictScore;
+}
+
+function findBestNameMatch(
+    sourceRow,
+    sourceNameField,
+    sourceLocationFields,
+    targetEntries,
+    targetNameField,
+    targetLocationFields,
+    threshold,
+    usedKeys,
+    minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP
+) {
+    const sourceName = sourceRow?.[sourceNameField];
     if (!sourceName) return null;
+    const sourceContext = buildLocationContext(sourceRow, sourceLocationFields);
     let best = null;
     let bestScore = -1;
     let secondBestScore = -1;
     targetEntries.forEach(({ key, row }) => {
         if (usedKeys.has(key)) return;
-        const targetName = row[nameField];
+        const targetName = row[targetNameField];
         if (!targetName) return;
+        const targetContext = buildLocationContext(row, targetLocationFields);
+        if (shouldBlockByLocation(sourceContext, targetContext)) return;
         const score = calculateNameSimilarity(sourceName, targetName);
+        if (!passesNameGate(sourceName, targetName, sourceContext, targetContext, score, threshold)) {
+            return;
+        }
         if (score > bestScore) {
             secondBestScore = bestScore;
             bestScore = score;
@@ -47,10 +136,11 @@ function findBestNameMatch(sourceName, targetEntries, nameField, threshold, used
             secondBestScore = score;
         }
     });
-    if (!best || best.score < threshold) {
+    if (!best) {
         return null;
     }
-    if (secondBestScore >= 0 && bestScore - secondBestScore < minGap) {
+    const effectiveGap = bestScore >= 0.9 ? minGap : (minGap + 0.01);
+    if (secondBestScore >= 0 && bestScore - secondBestScore < effectiveGap) {
         return {
             ambiguous: true,
             bestScore,
@@ -66,6 +156,8 @@ function collectTopNameCandidates(
     targetRows,
     sourceNameField,
     targetNameField,
+    sourceLocationFields,
+    targetLocationFields,
     threshold,
     maxPerSource = 3,
     minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP,
@@ -82,6 +174,7 @@ function collectTopNameCandidates(
         if (!sourceName) {
             return;
         }
+        const sourceContext = buildLocationContext(sourceRow, sourceLocationFields);
 
         const topMatches = [];
         targetRows.forEach((targetRow, targetIndex) => {
@@ -89,8 +182,12 @@ function collectTopNameCandidates(
             if (!targetName) {
                 return;
             }
+            const targetContext = buildLocationContext(targetRow, targetLocationFields);
+            if (shouldBlockByLocation(sourceContext, targetContext)) {
+                return;
+            }
             const score = calculateNameSimilarity(sourceName, targetName);
-            if (score < threshold) {
+            if (!passesNameGate(sourceName, targetName, sourceContext, targetContext, score, threshold)) {
                 return;
             }
 
@@ -101,9 +198,10 @@ function collectTopNameCandidates(
             }
         });
 
+        const effectiveGap = topMatches[0]?.score >= 0.9 ? minGap : (minGap + 0.01);
         if (
             topMatches.length > 1 &&
-            (topMatches[0].score - topMatches[1].score) < minGap
+            (topMatches[0].score - topMatches[1].score) < effectiveGap
         ) {
             ambiguousSources.add(sourceIndex);
             return;
@@ -122,6 +220,8 @@ function assignGlobalNameMatches(
     targetRows,
     sourceNameField,
     targetNameField,
+    sourceLocationFields,
+    targetLocationFields,
     threshold,
     minGap = WORKER_NAME_MATCH_AMBIGUITY_GAP,
     onProgress = null
@@ -131,6 +231,8 @@ function assignGlobalNameMatches(
         targetRows,
         sourceNameField,
         targetNameField,
+        sourceLocationFields,
+        targetLocationFields,
         threshold,
         4,
         minGap,
@@ -165,6 +267,16 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
     const ambiguityGap = typeof nameCompare.ambiguity_gap === 'number'
         ? nameCompare.ambiguity_gap
         : WORKER_NAME_MATCH_AMBIGUITY_GAP;
+    const outcomesLocationFields = {
+        state: nameCompare.state_outcomes || '',
+        city: nameCompare.city_outcomes || '',
+        country: nameCompare.country_outcomes || ''
+    };
+    const wsuLocationFields = {
+        state: nameCompare.state_wsu || '',
+        city: nameCompare.city_wsu || '',
+        country: nameCompare.country_wsu || ''
+    };
     const canNameMatch = nameCompareEnabled && outcomesNameField && wsuNameField;
     const forceNameMatch = Boolean(options.forceNameMatch);
 
@@ -187,6 +299,8 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
             wsuOrg,
             outcomesNameField,
             wsuNameField,
+            outcomesLocationFields,
+            wsuLocationFields,
             threshold,
             ambiguityGap,
             (processed, total) => reportProgress('match_candidates', processed, total)
@@ -270,9 +384,12 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
 
             if (!outcomesRow && wsuRow && canNameMatch) {
                 const match = findBestNameMatch(
-                    wsuRow[wsuNameField],
+                    wsuRow,
+                    wsuNameField,
+                    wsuLocationFields,
                     outcomesEntries,
                     outcomesNameField,
+                    outcomesLocationFields,
                     threshold,
                     usedOutcomes,
                     ambiguityGap
@@ -297,9 +414,12 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
             }
             if (outcomesRow && !wsuRow && canNameMatch) {
                 const match = findBestNameMatch(
-                    outcomesRow[outcomesNameField],
+                    outcomesRow,
+                    outcomesNameField,
+                    outcomesLocationFields,
                     wsuEntries,
                     wsuNameField,
+                    wsuLocationFields,
                     threshold,
                     usedWsu,
                     ambiguityGap

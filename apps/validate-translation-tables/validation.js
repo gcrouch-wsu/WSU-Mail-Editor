@@ -272,16 +272,22 @@ const NAME_MATCH_AMBIGUITY_GAP = 0.03;
 const NAME_TOKEN_ALIASES = {
     univ: 'university',
     uni: 'university',
+    universiti: 'university',
     universitat: 'university',
     universite: 'university',
     universita: 'university',
     universidad: 'university',
     universidade: 'university',
     coll: 'college',
+    col: 'college',
     intl: 'international',
     int: 'international',
+    intnl: 'international',
     tech: 'technology',
     sci: 'science',
+    engr: 'engineering',
+    engg: 'engineering',
+    stds: 'studies',
     st: 'saint',
     mt: 'mount',
     ag: 'agricultural',
@@ -291,6 +297,7 @@ const NAME_TOKEN_ALIASES = {
     sch: 'school',
     cc: 'community',
     comm: 'community',
+    cmty: 'community',
     jr: 'junior',
     u: 'university',
     ft: 'fort',
@@ -318,7 +325,8 @@ const NAME_TOKEN_ALIASES = {
     sfsu: 'state',
     unc: 'north',
     uab: 'alabama',
-    uofl: 'louisville'
+    uofl: 'louisville',
+    natl: 'national'
 };
 
 function normalizeNameForCompare(value) {
@@ -326,6 +334,8 @@ function normalizeNameForCompare(value) {
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\buniveristy\b/g, 'university')
+        .replace(/\buniversiti\b/g, 'university')
         .replace(/\bcal state university\b/g, 'california state')
         .replace(/\bcalifornia state university\b/g, 'california state')
         .replace(/\bcal state\b/g, 'california state')
@@ -341,6 +351,14 @@ function normalizeNameForCompare(value) {
         .replace(/\bjunior college\b/g, 'community college')
         .replace(/\bjr college\b/g, 'community college')
         .replace(/\bcc\b/g, 'community college')
+        .replace(/\bcmty\b/g, 'community')
+        .replace(/\bcol\b/g, 'college')
+        .replace(/\bnatl\b/g, 'national')
+        .replace(/\bengr\b/g, 'engineering')
+        .replace(/\bengg\b/g, 'engineering')
+        .replace(/\bstds\b/g, 'studies')
+        .replace(/\bintn'?l\b/g, 'international')
+        .replace(/\blowcountry\b/g, 'low country')
         .replace(/\bft\b/g, 'fort')
         .replace(/\bu of\b/g, 'university of')
         .replace(/\bla verne\b/g, 'laverne')
@@ -400,7 +418,7 @@ function tokenOverlapStats(tokens1, tokens2) {
     };
 }
 
-const US_STATE_MAP = {
+const STATE_PROVINCE_MAP = {
     al: 'alabama', ak: 'alaska', az: 'arizona', ar: 'arkansas', ca: 'california',
     co: 'colorado', ct: 'connecticut', de: 'delaware', fl: 'florida', ga: 'georgia',
     hi: 'hawaii', id: 'idaho', il: 'illinois', in: 'indiana', ia: 'iowa',
@@ -411,11 +429,41 @@ const US_STATE_MAP = {
     ok: 'oklahoma', or: 'oregon', pa: 'pennsylvania', ri: 'rhode island', sc: 'south carolina',
     sd: 'south dakota', tn: 'tennessee', tx: 'texas', ut: 'utah', va: 'virginia',
     vt: 'vermont', wa: 'washington', wi: 'wisconsin', wv: 'west virginia', wy: 'wyoming',
-    dc: 'district of columbia'
+    dc: 'district of columbia',
+    ab: 'alberta', bc: 'british columbia', mb: 'manitoba', nb: 'new brunswick',
+    nl: 'newfoundland and labrador', ns: 'nova scotia', nt: 'northwest territories',
+    nu: 'nunavut', on: 'ontario', pe: 'prince edward island', qc: 'quebec',
+    sk: 'saskatchewan', yt: 'yukon'
 };
+
+const COUNTRY_CODE_MAP = {
+    us: 'usa', usa: 'usa', 'united states': 'usa', 'united states of america': 'usa',
+    ca: 'can', can: 'can', canada: 'can',
+    uk: 'gbr', gb: 'gbr', gbr: 'gbr', 'united kingdom': 'gbr', 'great britain': 'gbr',
+    in: 'ind', ind: 'ind', india: 'ind',
+    bg: 'bgd', bgd: 'bgd', bangladesh: 'bgd',
+    pk: 'pak', pak: 'pak', pakistan: 'pak',
+    my: 'mys', mys: 'mys', malaysia: 'mys',
+    ni: 'nga', ng: 'nga', nga: 'nga', nigeria: 'nga',
+    th: 'tha', tha: 'tha', thailand: 'tha',
+    np: 'npl', npl: 'npl', nepal: 'npl',
+    kr: 'kor', kor: 'kor', korea: 'kor', 'south korea': 'kor'
+};
+
+const NAME_JOINER_STOPWORDS = new Set([
+    'of', 'the', 'and', 'for', 'at', 'in', 'on', 'de', 'la', 'le', 'du', 'da', 'di', 'del'
+]);
 
 function normalizeStateValue(value) {
     return String(value || '').trim().toLowerCase();
+}
+
+function normalizeCountryValue(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\./g, '')
+        .replace(/\s+/g, ' ');
 }
 
 function statesMatch(value1, value2) {
@@ -430,28 +478,132 @@ function statesMatch(value1, value2) {
     ) {
         return true;
     }
-    const mapped1 = US_STATE_MAP[normalized1] || normalized1;
-    const mapped2 = US_STATE_MAP[normalized2] || normalized2;
+    const mapped1 = STATE_PROVINCE_MAP[normalized1] || normalized1;
+    const mapped2 = STATE_PROVINCE_MAP[normalized2] || normalized2;
     return mapped1 === mapped2;
 }
 
-function extractParentheticalTokens(nameValue) {
+function countriesMatch(value1, value2) {
+    const country1 = normalizeCountryValue(value1);
+    const country2 = normalizeCountryValue(value2);
+    if (!country1 || !country2) return false;
+    const mapped1 = COUNTRY_CODE_MAP[country1] || country1;
+    const mapped2 = COUNTRY_CODE_MAP[country2] || country2;
+    return mapped1 === mapped2;
+}
+
+function extractParentheticalChunks(nameValue) {
     if (!nameValue) return [];
-    const matches = String(nameValue).match(/\(([^)]+)\)/g);
-    if (!matches) return [];
-    return matches
-        .map(match => match.replace(/[()]/g, ''))
+    return Array.from(String(nameValue).matchAll(/\(([^)]+)\)/g))
+        .map(match => String(match[1] || '').trim())
+        .filter(Boolean);
+}
+
+function extractParentheticalTokens(nameValue) {
+    const chunks = extractParentheticalChunks(nameValue);
+    if (!chunks.length) return [];
+    return chunks
         .flatMap(chunk => normalizeNameForCompare(chunk).split(' '))
         .filter(Boolean);
 }
 
 function extractHyphenSuffixTokens(nameValue) {
     if (!nameValue) return [];
+    const normalizedName = String(nameValue).replace(/[–—]/g, '-');
+    const safeParts = normalizedName.split('-');
+    if (safeParts.length >= 2) {
+        const safeSuffix = safeParts[safeParts.length - 1].trim();
+        if (safeSuffix) {
+            return normalizeNameForCompare(safeSuffix).split(' ').filter(Boolean);
+        }
+    }
     const parts = String(nameValue).split(/[-–—]/);
     if (parts.length < 2) return [];
     const suffix = parts[parts.length - 1].trim();
     if (!suffix) return [];
     return normalizeNameForCompare(suffix).split(' ').filter(Boolean);
+}
+
+function extractAliasParentheticalCandidates(nameValue) {
+    const chunks = extractParentheticalChunks(nameValue);
+    if (!chunks.length) return [];
+    return chunks
+        .filter(chunk => /\b(now|formerly|aka|previously)\b/i.test(chunk))
+        .map(chunk => chunk.replace(/\b(now|formerly|aka|previously)\b/gi, ' '))
+        .map(chunk => normalizeNameForCompare(chunk))
+        .map(chunk => chunk.replace(/\bclosed\s+[0-9]{4}\b/g, '').trim())
+        .filter(Boolean);
+}
+
+function aliasParentheticalMatches(nameWithAlias, otherName) {
+    if (!nameWithAlias || !otherName) return false;
+    const aliasCandidates = extractAliasParentheticalCandidates(nameWithAlias);
+    if (!aliasCandidates.length) return false;
+
+    const normalizedOther = normalizeNameForCompare(otherName);
+    const otherTokens = getInformativeTokens(tokenizeName(otherName));
+    if (!normalizedOther || !otherTokens.length) return false;
+
+    for (const candidate of aliasCandidates) {
+        if (candidate === normalizedOther) {
+            return true;
+        }
+        const aliasTokens = getInformativeTokens(tokenizeName(candidate));
+        if (!aliasTokens.length) {
+            continue;
+        }
+        const overlap = tokenOverlapStats(aliasTokens, otherTokens);
+        const required = Math.min(2, aliasTokens.length, otherTokens.length);
+        if (required > 0 && overlap.matches >= required && overlap.score >= 0.6) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function parentheticalAcronymMatches(nameWithAcronym, otherName) {
+    if (!nameWithAcronym || !otherName) return false;
+    const chunks = extractParentheticalChunks(nameWithAcronym);
+    if (!chunks.length) return false;
+
+    const tokens = tokenizeName(otherName).filter(
+        token => token.length > 1 && !NAME_JOINER_STOPWORDS.has(token)
+    );
+    if (tokens.length < 2) return false;
+    const initials = tokens.map(token => token[0]).join('');
+    if (!initials) return false;
+
+    return chunks.some(chunk => {
+        const acronym = normalizeNameForCompare(chunk).replace(/\s+/g, '');
+        if (!/^[a-z]{3,6}$/.test(acronym)) return false;
+        return initials === acronym || initials.includes(acronym);
+    });
+}
+
+function normalizeUniversityRemainder(nameValue) {
+    const normalized = normalizeNameForCompare(nameValue);
+    if (!normalized) return '';
+    if (normalized.startsWith('university of ')) {
+        return normalized.slice('university of '.length).trim();
+    }
+    if (normalized.endsWith(' university')) {
+        return normalized.slice(0, -' university'.length).trim();
+    }
+    return '';
+}
+
+function universityWordOrderVariant(name1, name2) {
+    const remainder1 = normalizeUniversityRemainder(name1);
+    const remainder2 = normalizeUniversityRemainder(name2);
+    if (!remainder1 || !remainder2) return false;
+    if (remainder1.length < 4 || remainder2.length < 4) return false;
+    return remainder1 === remainder2;
+}
+
+function hasInternationalStateGap(state1, state2) {
+    const normalized1 = normalizeStateValue(state1);
+    const normalized2 = normalizeStateValue(state2);
+    return !normalized1 || !normalized2 || normalized1 === 'ot' || normalized2 === 'ot';
 }
 
 function locationInNameMatches(nameValue, cityValue, stateValue) {
@@ -486,6 +638,8 @@ function isHighConfidenceNameMatch(
     state2,
     city1,
     city2,
+    country1,
+    country2,
     similarity,
     threshold
 ) {
@@ -493,16 +647,35 @@ function isHighConfidenceNameMatch(
     const stateOkay = statesMatch(state1, state2);
     const cityOkay = cityInName(name1, city2) || cityInName(name2, city1);
     const parenOkay = locationInNameMatches(name1, city2, state2) || locationInNameMatches(name2, city1, state1);
-    if (!stateOkay && !cityOkay && !parenOkay) return false;
+    const countryOkay = countriesMatch(country1, country2);
+    const aliasParenOkay = aliasParentheticalMatches(name1, name2) || aliasParentheticalMatches(name2, name1);
+    const acronymOkay = parentheticalAcronymMatches(name1, name2) || parentheticalAcronymMatches(name2, name1);
+    const universityVariantOkay = universityWordOrderVariant(name1, name2);
+
+    const tokens1 = getInformativeTokens(tokenizeName(name1));
+    const tokens2 = getInformativeTokens(tokenizeName(name2));
+    const overlap = tokenOverlapStats(tokens1, tokens2);
+
+    if ((aliasParenOkay || acronymOkay || universityVariantOkay) && (countryOkay || stateOkay || cityOkay || parenOkay)) {
+        return true;
+    }
+
+    if (!stateOkay && !cityOkay && !parenOkay && !countryOkay) return false;
 
     if (typeof similarity === 'number' && similarity >= Math.max(0, threshold - 0.05)) {
         return true;
     }
 
-    const tokens1 = getInformativeTokens(tokenizeName(name1));
-    const tokens2 = getInformativeTokens(tokenizeName(name2));
-    const overlap = tokenOverlapStats(tokens1, tokens2);
-    return overlap.matches >= (parenOkay ? 1 : 2);
+    if (parenOkay || stateOkay) {
+        return overlap.matches >= 1;
+    }
+    if (cityOkay) {
+        return overlap.matches >= 2;
+    }
+    if (countryOkay && hasInternationalStateGap(state1, state2)) {
+        return overlap.matches >= 2 && overlap.score >= 0.6;
+    }
+    return overlap.matches >= 1;
 }
 
 function cityInName(nameValue, cityValue) {
@@ -893,6 +1066,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
     const wsuStateKey = nameCompare.state_wsu ? `wsu_${nameCompare.state_wsu}` : '';
     const outcomesCityKey = nameCompare.city_outcomes ? `outcomes_${nameCompare.city_outcomes}` : '';
     const wsuCityKey = nameCompare.city_wsu ? `wsu_${nameCompare.city_wsu}` : '';
+    const outcomesCountryKey = nameCompare.country_outcomes ? `outcomes_${nameCompare.country_outcomes}` : '';
+    const wsuCountryKey = nameCompare.country_wsu ? `wsu_${nameCompare.country_wsu}` : '';
     const canCompareNames = nameCompareEnabled && outcomesKey && wsuKey;
     const ambiguityScoreCache = canCompareNames ? new Map() : null;
 
@@ -951,6 +1126,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                 const stateValue2 = wsuStateKey ? row[wsuStateKey] : '';
                 const cityValue1 = outcomesCityKey ? row[outcomesCityKey] : '';
                 const cityValue2 = wsuCityKey ? row[wsuCityKey] : '';
+                const countryValue1 = outcomesCountryKey ? row[outcomesCountryKey] : '';
+                const countryValue2 = wsuCountryKey ? row[wsuCountryKey] : '';
                 if (isHighConfidenceNameMatch(
                     row[outcomesKey],
                     row[wsuKey],
@@ -958,6 +1135,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     stateValue2,
                     cityValue1,
                     cityValue2,
+                    countryValue1,
+                    countryValue2,
                     similarity,
                     threshold
                 )) {
@@ -983,6 +1162,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                 const stateValue2 = wsuStateKey ? row[wsuStateKey] : '';
                 const cityValue1 = outcomesCityKey ? row[outcomesCityKey] : '';
                 const cityValue2 = wsuCityKey ? row[wsuCityKey] : '';
+                const countryValue1 = outcomesCountryKey ? row[outcomesCountryKey] : '';
+                const countryValue2 = wsuCountryKey ? row[wsuCountryKey] : '';
                 if (!isHighConfidenceNameMatch(
                     row[outcomesKey],
                     row[wsuKey],
@@ -990,6 +1171,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     stateValue2,
                     cityValue1,
                     cityValue2,
+                    countryValue1,
+                    countryValue2,
                     similarity,
                     threshold
                 )) {
