@@ -56,6 +56,7 @@ let debugState = {
     wsu_org: null
 };
 let activeWorker = null;
+let activeExportWorker = null;
 let pageBusy = false;
 
 function beforeUnloadHandler(event) {
@@ -124,6 +125,55 @@ function runWorkerTask(type, payload, onProgress) {
         };
         worker.postMessage({ type, payload });
     });
+}
+
+function runExportWorkerTask(type, payload, onProgress) {
+    return new Promise((resolve, reject) => {
+        if (activeExportWorker) {
+            activeExportWorker.terminate();
+        }
+        const worker = new Worker('export-worker.js');
+        activeExportWorker = worker;
+
+        worker.onmessage = (event) => {
+            const message = event.data || {};
+            if (message.type === 'progress') {
+                if (onProgress) onProgress(message.stage, message.processed, message.total);
+                return;
+            }
+            if (message.type === 'result') {
+                worker.terminate();
+                activeExportWorker = null;
+                resolve(message.result);
+                return;
+            }
+            if (message.type === 'error') {
+                worker.terminate();
+                activeExportWorker = null;
+                reject(new Error(message.message));
+            }
+        };
+        worker.onerror = (event) => {
+            worker.terminate();
+            activeExportWorker = null;
+            reject(new Error(event.message || 'Export worker error'));
+        };
+        worker.postMessage({ type, payload });
+    });
+}
+
+function downloadArrayBuffer(buffer, filename) {
+    const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
 }
 
 function setupModeSelector() {
@@ -1262,7 +1312,20 @@ async function runGeneration() {
             generated.cleanRows,
             generated.errorRows,
             generated.selectedColumns,
-            generated.headerLabels
+            generated.headerLabels,
+            {
+                onProgress: (stage, percent) => {
+                    if (progressStage && progressPercent && progressBar) {
+                        progressStage.textContent = stage;
+                        progressPercent.textContent = `${percent}%`;
+                        progressBar.style.width = `${percent}%`;
+                    }
+                    const loadingMessage = document.getElementById('loading-message');
+                    if (loadingMessage) {
+                        loadingMessage.textContent = stage;
+                    }
+                }
+            }
         );
 
         document.getElementById('loading').classList.add('hidden');
@@ -1282,121 +1345,25 @@ async function runGeneration() {
     }
 }
 
-async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCols, headerLabels) {
-    const workbook = new ExcelJS.Workbook();
-
-    const cleanSheet = workbook.addWorksheet('Clean_Translation_Table');
-    const cleanHeaders = [];
-    selectedCols.outcomes.forEach(col => {
-        cleanHeaders.push(`Outcomes: ${col}`);
-    });
-    selectedCols.wsu_org.forEach(col => {
-        cleanHeaders.push(`myWSU: ${col}`);
-    });
-    cleanHeaders.push('Similarity %');
-    cleanSheet.addRow(cleanHeaders);
-    cleanSheet.getRow(1).eachCell((cell, colNumber) => {
-        const header = cleanHeaders[colNumber - 1] || '';
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        if (header.startsWith('Outcomes:')) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } }; // Green
-        } else if (header.startsWith('myWSU:')) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC2410C' } }; // Orange
-        } else {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } }; // Blue
+async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCols, headerLabels, options = {}) {
+    const onProgress = typeof options.onProgress === 'function'
+        ? options.onProgress
+        : null;
+    const result = await runExportWorkerTask(
+        'build_generation_export',
+        {
+            cleanRows,
+            errorRows,
+            selectedCols,
+            headerLabels
+        },
+        (stage, processed, total) => {
+            if (!onProgress) return;
+            const percent = total ? Math.round((processed / total) * 100) : 0;
+            onProgress(stage, percent);
         }
-    });
-    cleanRows.forEach(row => {
-        const rowData = [];
-        selectedCols.outcomes.forEach(col => {
-            rowData.push(row[`outcomes_${col}`] ?? '');
-        });
-        selectedCols.wsu_org.forEach(col => {
-            rowData.push(row[`wsu_${col}`] ?? '');
-        });
-        rowData.push(row.match_similarity ?? '');
-        cleanSheet.addRow(rowData);
-    });
-    cleanSheet.views = [{ state: 'frozen', ySplit: 1 }];
-    cleanSheet.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: cleanHeaders.length }
-    };
-    cleanSheet.columns.forEach((column, idx) => {
-        let maxLength = cleanSheet.getRow(1).getCell(idx + 1).value.toString().length;
-        cleanSheet.eachRow((row, rowNumber) => {
-            if (rowNumber === 1) return;
-            const value = String(row.getCell(idx + 1).value || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
-        });
-        column.width = Math.min(maxLength + 2, 50);
-    });
-
-    const errorSheet = workbook.addWorksheet('Generation_Errors');
-    const errorHeaders = [
-        'Normalized Key',
-        'Missing In'
-    ];
-    selectedCols.outcomes.forEach(col => {
-        errorHeaders.push(`Outcomes: ${col}`);
-    });
-    selectedCols.wsu_org.forEach(col => {
-        errorHeaders.push(`myWSU: ${col}`);
-    });
-    errorSheet.addRow(errorHeaders);
-    errorSheet.getRow(1).eachCell((cell, colNumber) => {
-        const header = errorHeaders[colNumber - 1] || '';
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        if (header.startsWith('Outcomes:')) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } }; // Green
-        } else if (header.startsWith('myWSU:')) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC2410C' } }; // Orange
-        } else {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } }; // Red
-        }
-    });
-    errorRows.forEach(row => {
-        const rowData = [
-            row.normalized_key,
-            row.missing_in
-        ];
-        selectedCols.outcomes.forEach(col => {
-            rowData.push(row[`outcomes_${col}`] ?? '');
-        });
-        selectedCols.wsu_org.forEach(col => {
-            rowData.push(row[`wsu_${col}`] ?? '');
-        });
-        errorSheet.addRow(rowData);
-    });
-    errorSheet.views = [{ state: 'frozen', ySplit: 1 }];
-    errorSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: errorHeaders.length } };
-    errorSheet.columns.forEach((column, idx) => {
-        let maxLength = errorHeaders[idx].length;
-        errorSheet.eachRow((row, rowNumber) => {
-            if (rowNumber === 1) return;
-            const value = String(row.getCell(idx + 1).value || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
-        });
-        column.width = Math.min(maxLength + 2, 50);
-    });
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    });
-
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Generated_Translation_Table.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    );
+    downloadArrayBuffer(result.buffer, result.filename || 'Generated_Translation_Table.xlsx');
 }
 
 function displayResults(stats, errorSamples) {
@@ -1661,12 +1628,16 @@ function setupDownloadButton() {
             const includeSuggestions = Boolean(
                 document.getElementById('include-suggestions')?.checked
             );
+            const showMappingLogic = Boolean(
+                document.getElementById('show-mapping-logic')?.checked
+            );
             await createExcelOutput(
                 validatedData,
                 missingData,
                 selectedColumns,
                 {
                     includeSuggestions,
+                    showMappingLogic,
                     nameCompareConfig: lastNameCompareConfig,
                     onProgress: (stage, percent) => {
                         if (progressText && progressBar) {
@@ -1706,710 +1677,35 @@ function setupDownloadButton() {
 }
 
 async function createExcelOutput(validated, missing, selectedCols, options = {}) {
-    const workbook = new ExcelJS.Workbook();
-    const includeSuggestions = Boolean(options.includeSuggestions);
-    const nameCompareConfig = options.nameCompareConfig || {};
-    const onProgress = typeof options.onProgress === 'function'
+    const onProgressCb = typeof options.onProgress === 'function'
         ? options.onProgress
         : null;
-    const reportProgress = (stage, percent) => {
-        if (onProgress) onProgress(stage, percent);
-    };
-    const yieldToUi = () => new Promise(resolve => setTimeout(resolve, 0));
-    const canSuggestNames = Boolean(
-        includeSuggestions &&
-        nameCompareConfig.enabled &&
-        nameCompareConfig.outcomes &&
-        nameCompareConfig.wsu
-    );
-    reportProgress('Building export...', 5);
-    await yieldToUi();
-
-    const outcomesColumns = selectedCols.outcomes.map(col => `outcomes_${col}`);
-    const wsuColumns = selectedCols.wsu_org.map(col => `wsu_${col}`);
-    const suggestionColumns = includeSuggestions
-        ? [
-            'Suggested_Key',
-            'Suggested_School',
-            'Suggested_City',
-            'Suggested_State',
-            'Suggested_Country',
-            'Suggestion_Score'
-        ]
-        : [];
-    const roleOrder = ['School', 'City', 'State', 'Country', 'Other'];
-    const getRoleColumns = (sourceKey) => {
-        const roles = columnRoles[sourceKey] || {};
-        const ordered = [];
-        roleOrder.forEach(role => {
-            Object.keys(roles).forEach(col => {
-                if (roles[col] === role && !ordered.includes(col)) {
-                    ordered.push(col);
-                }
-            });
-        });
-        return ordered;
-    };
-
-    const getRoleMap = (sourceKey) => {
-        const roles = columnRoles[sourceKey] || {};
-        const roleMap = {};
-        Object.keys(roles).forEach(col => {
-            const role = roles[col];
-            if (role && !roleMap[role]) {
-                roleMap[role] = col;
-            }
-        });
-        return roleMap;
-    };
-
-    const roleMapOutcomes = getRoleMap('outcomes');
-    const roleMapWsu = getRoleMap('wsu_org');
-
-    const getFallbackRoleColumn = (columns, roleName) => {
-        const roleLower = roleName.toLowerCase();
-        return columns.find(col => String(col).toLowerCase().includes(roleLower)) || '';
-    };
-
-    const getRoleValue = (row, roleMap, fallbackColumns, roleName, prefix) => {
-        const roleColumn = roleMap[roleName] || getFallbackRoleColumn(fallbackColumns, roleName);
-        if (!roleColumn) return '';
-        const key = prefix ? `${prefix}${roleColumn}` : roleColumn;
-        return row?.[key] ?? '';
-    };
-
-    const fillSuggestedFields = (rowData, row, roleMap, fallbackColumns, keyValue, prefix) => {
-        rowData.Suggested_Key = keyValue || '';
-        rowData.Suggested_School = getRoleValue(row, roleMap, fallbackColumns, 'School', prefix);
-        rowData.Suggested_City = getRoleValue(row, roleMap, fallbackColumns, 'City', prefix);
-        rowData.Suggested_State = getRoleValue(row, roleMap, fallbackColumns, 'State', prefix);
-        rowData.Suggested_Country = getRoleValue(row, roleMap, fallbackColumns, 'Country', prefix);
-    };
-
-    const normalizeValue = (value) => {
-        if (typeof normalizeKeyValue === 'function') {
-            return normalizeKeyValue(value);
-        }
-        return String(value || '').trim().toLowerCase();
-    };
-
-    const similarityScore = (valueA, valueB) => {
-        if (typeof similarityRatio === 'function') {
-            return similarityRatio(valueA, valueB);
-        }
-        return valueA && valueB && valueA === valueB ? 1 : 0;
-    };
-
-    const MIN_KEY_SUGGESTION_SCORE = 0.6;
-    const minNameScore = Number.isFinite(nameCompareConfig.threshold)
-        ? nameCompareConfig.threshold
-        : 0.8;
-
-    const outcomesKeyCandidates = loadedData.outcomes
-        .map(row => ({
-            raw: row[keyConfig.outcomes],
-            norm: normalizeValue(row[keyConfig.outcomes]),
-            row
-        }))
-        .filter(entry => entry.norm);
-
-    const wsuKeyCandidates = loadedData.wsu_org
-        .map(row => ({
-            raw: row[keyConfig.wsu],
-            norm: normalizeValue(row[keyConfig.wsu]),
-            row
-        }))
-        .filter(entry => entry.norm);
-
-    const wsuNameCandidates = canSuggestNames
-        ? loadedData.wsu_org
-            .map(row => ({
-                key: row[keyConfig.wsu],
-                name: row[nameCompareConfig.wsu],
-                normName: normalizeValue(row[nameCompareConfig.wsu]),
-                row
-            }))
-            .filter(entry => entry.normName)
-        : [];
-
-    const formatSuggestionScore = (score) => (
-        Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null
-    );
-
-    const getBestKeySuggestion = (value, candidates) => {
-        const normalized = normalizeValue(value);
-        if (!normalized) return null;
-        let best = null;
-        candidates.forEach(candidate => {
-            const score = similarityScore(normalized, candidate.norm);
-            if (!best || score > best.score) {
-                best = { key: candidate.raw, score, row: candidate.row };
-            }
-        });
-        if (!best || best.score < MIN_KEY_SUGGESTION_SCORE) {
-            return null;
-        }
-        return best;
-    };
-
-    const getBestNameSuggestion = (outcomesName) => {
-        if (!canSuggestNames || !outcomesName) return null;
-        const candidates = [];
-        wsuNameCandidates.forEach(candidate => {
-            const score = typeof calculateNameSimilarity === 'function'
-                ? calculateNameSimilarity(outcomesName, candidate.name)
-                : similarityScore(normalizeValue(outcomesName), candidate.normName);
-            if (score >= minNameScore) {
-                candidates.push({ row: candidate.row, key: candidate.key, score });
-            }
-        });
-        if (!candidates.length) return null;
-        candidates.sort((a, b) => b.score - a.score);
-        return candidates[0];
-    };
-
-    const normalizeErrorType = (row) => {
-        if (row.Error_Type === 'Input_Not_Found') {
-            return 'Input does not exist in Outcomes';
-        }
-        if (row.Error_Type === 'Output_Not_Found') {
-            return 'Output does not exist in myWSU';
-        }
-        if (row.Error_Type === 'Missing_Input') {
-            return 'Input is missing in Translate';
-        }
-        if (row.Error_Type === 'Missing_Output') {
-            return 'Output is missing in Translate';
-        }
-        if (row.Error_Type === 'Name_Mismatch') {
-            return 'Name mismatch';
-        }
-        if (row.Error_Type === 'Ambiguous_Match') {
-            return 'Ambiguous name match';
-        }
-        return row.Error_Type || '';
-    };
-
-    const applySuggestionColumns = (row, rowData, errorType) => {
-        if (!includeSuggestions) {
-            return;
-        }
-        rowData.Suggested_Key = '';
-        rowData.Suggested_School = '';
-        rowData.Suggested_City = '';
-        rowData.Suggested_State = '';
-        rowData.Suggested_Country = '';
-        rowData.Suggestion_Score = '';
-
-        if (errorType === 'Input_Not_Found') {
-            const nameSuggestion = canSuggestNames
-                ? getBestNameSuggestion(row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '')
-                : null;
-            const suggestion = canSuggestNames
-                ? nameSuggestion
-                : getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
-            if (suggestion) {
-                fillSuggestedFields(
-                    rowData,
-                    suggestion.row,
-                    roleMapOutcomes,
-                    selectedCols.outcomes,
-                    suggestion.key,
-                    ''
-                );
-                rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
-            }
-        } else if (errorType === 'Output_Not_Found') {
-            const nameSuggestion = canSuggestNames
-                ? getBestNameSuggestion(row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '')
-                : null;
-            const suggestion = canSuggestNames
-                ? nameSuggestion
-                : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
-            if (suggestion) {
-                fillSuggestedFields(
-                    rowData,
-                    suggestion.row,
-                    roleMapWsu,
-                    selectedCols.wsu_org,
-                    suggestion.key,
-                    ''
-                );
-                rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
-            }
-        } else if (
-            errorType === 'Name_Mismatch' ||
-            errorType === 'Ambiguous_Match' ||
-            errorType === 'Duplicate_Target' ||
-            errorType === 'Duplicate_Source' ||
-            errorType === 'High_Confidence_Match'
-        ) {
-            const outcomesName = row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '';
-            const wsuName = row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '';
-            if (errorType === 'Duplicate_Target' || errorType === 'Duplicate_Source') {
-                if (errorType === 'Duplicate_Target') {
-                    const outcomesKeyValue = row[`outcomes_${keyLabels.outcomes}`] || row.translate_input;
-                    fillSuggestedFields(
-                        rowData,
-                        row,
-                        roleMapOutcomes,
-                        selectedCols.outcomes,
-                        outcomesKeyValue,
-                        'outcomes_'
-                    );
-                } else {
-                    const wsuKeyValue = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
-                    fillSuggestedFields(
-                        rowData,
-                        row,
-                        roleMapWsu,
-                        selectedCols.wsu_org,
-                        wsuKeyValue,
-                        'wsu_'
-                    );
-                }
-            } else if (errorType === 'High_Confidence_Match') {
-                const wsuKeyValue = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
-                fillSuggestedFields(
-                    rowData,
-                    row,
-                    roleMapWsu,
-                    selectedCols.wsu_org,
-                    wsuKeyValue,
-                    'wsu_'
-                );
-                const similarity = typeof calculateNameSimilarity === 'function'
-                    ? calculateNameSimilarity(outcomesName, wsuName)
-                    : null;
-                if (typeof similarity === 'number') {
-                    rowData.Suggestion_Score = formatSuggestionScore(similarity);
-                }
-            } else {
-                const suggestion = getBestNameSuggestion(outcomesName);
-                if (suggestion) {
-                    fillSuggestedFields(
-                        rowData,
-                        suggestion.row,
-                        roleMapWsu,
-                        selectedCols.wsu_org,
-                        suggestion.key,
-                        ''
-                    );
-                    rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
-                }
-            }
-        }
-    };
-
-    const buildHeaders = (outputColumns) => (
-        outputColumns.map(col => {
-            if (col === 'translate_input') return `${keyLabels.translateInput || 'Source key'} (Translate Input)`;
-            if (col === 'translate_output') return `${keyLabels.translateOutput || 'Target key'} (Translate Output)`;
-            if (col === 'outcomes_name') return 'School Name (Outcomes)';
-            if (col === `outcomes_${keyLabels.outcomes}` && keyLabels.outcomes) {
-                return `${keyLabels.outcomes} (Outcomes Key)`;
-            }
-            if (col === 'outcomes_mdb_code') return 'Outcomes Key';
-            if (col === 'wsu_Descr') return 'Organization Name (myWSU)';
-            if (col === `wsu_${keyLabels.wsu}` && keyLabels.wsu) {
-                return `${keyLabels.wsu} (myWSU Key)`;
-            }
-            if (col === 'wsu_Org ID') return 'myWSU Key';
-            if (col === 'Error_Type') return 'Error Type';
-            if (col === 'Suggested_Key') return 'Suggested Key';
-            if (col === 'Suggested_School') return 'Suggested School';
-            if (col === 'Suggested_City') return 'Suggested City';
-            if (col === 'Suggested_State') return 'Suggested State';
-            if (col === 'Suggested_Country') return 'Suggested Country';
-            if (col === 'Suggestion_Score') return 'Suggestion Score';
-            return col;
-        })
-    );
-
-    const getHeaderFill = (col, style) => {
-        if (col === 'Error_Type') return style.errorHeaderColor;
-        if (col === 'Duplicate_Group') return style.groupHeaderColor;
-        if (['translate_input', 'translate_output'].includes(col)) return style.translateHeaderColor;
-        if (col.startsWith('outcomes_')) return style.outcomesHeaderColor;
-        if (col.startsWith('wsu_')) return style.wsuHeaderColor;
-        if (col.startsWith('Suggested_') || col === 'Suggestion_Score') {
-            return style.suggestionHeaderColor;
-        }
-        return style.defaultHeaderColor;
-    };
-
-    const getBodyFill = (col, style) => {
-        if (col === 'Error_Type') return style.errorBodyColor;
-        if (col === 'Duplicate_Group') return style.groupBodyColor;
-        if (['translate_input', 'translate_output'].includes(col)) return style.translateBodyColor;
-        if (col.startsWith('outcomes_')) return style.outcomesBodyColor;
-        if (col.startsWith('wsu_')) return style.wsuBodyColor;
-        if (col.startsWith('Suggested_') || col === 'Suggestion_Score') {
-            return style.suggestionBodyColor;
-        }
-        return style.defaultBodyColor;
-    };
-
-    const columnIndexToLetter = (index) => {
-        let result = '';
-        let current = index;
-        while (current > 0) {
-            const remainder = (current - 1) % 26;
-            result = String.fromCharCode(65 + remainder) + result;
-            current = Math.floor((current - 1) / 26);
-        }
-        return result;
-    };
-
-    const addSheetWithRows = (sheetName, outputColumns, rows, style, rowBorderByError, groupColumn) => {
-        const sheet = workbook.addWorksheet(sheetName);
-        const headers = buildHeaders(outputColumns);
-        sheet.addRow(headers);
-        headers.forEach((header, idx) => {
-            const cell = sheet.getCell(1, idx + 1);
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: getHeaderFill(outputColumns[idx], style) } };
-        });
-
-        const sourceFillByColumn = outputColumns.map(col => ({
-            argb: getBodyFill(col, style)
-        }));
-
-        let prevGroup = null;
-        const groupBorderColor = 'FF9CA3AF';
-
-        rows.forEach(row => {
-            let isNewGroup = false;
-            if (groupColumn) {
-                const currentGroup = row[groupColumn] || '';
-                if (prevGroup !== null && currentGroup !== prevGroup) {
-                    isNewGroup = true;
-                }
-                prevGroup = currentGroup;
-            }
-
-            const rowData = outputColumns.map(col => row[col] ?? '');
-            const excelRow = sheet.addRow(rowData);
-            excelRow.eachCell((cell, colNumber) => {
-                const fill = sourceFillByColumn[colNumber - 1];
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fill };
-                if (isNewGroup) {
-                    const existingBorder = cell.border || {};
-                    cell.border = {
-                        ...existingBorder,
-                        top: { style: 'medium', color: { argb: groupBorderColor } }
-                    };
-                }
-                if (outputColumns[colNumber - 1] === 'Suggestion_Score') {
-                    cell.numFmt = '0%';
-                }
-            });
-
-            if (rowBorderByError && row.Error_Type) {
-                const borderColor = rowBorderByError[row.Error_Type];
-                if (borderColor) {
-                    const indicatorCell = excelRow.getCell(1);
-                    const existingBorder = indicatorCell.border || {};
-                    indicatorCell.border = {
-                        ...existingBorder,
-                        left: { style: 'medium', color: { argb: borderColor } }
-                    };
-                }
-            }
-        });
-
-        sheet.views = [{ state: 'frozen', ySplit: 1 }];
-        sheet.autoFilter = {
-            from: { row: 1, column: 1 },
-            to: { row: 1, column: headers.length }
-        };
-        sheet.columns.forEach((column, idx) => {
-            let maxLength = headers[idx].length;
-            rows.forEach(row => {
-                const value = String(row[outputColumns[idx]] || '');
-                if (value.length > maxLength) {
-                    maxLength = value.length;
-                }
-            });
-            column.width = Math.min(maxLength + 2, 50);
-        });
-
-        const suggestionIndex = outputColumns.indexOf('Suggestion_Score');
-        if (suggestionIndex >= 0 && rows.length > 0) {
-            const columnLetter = columnIndexToLetter(suggestionIndex + 1);
-            const ref = `${columnLetter}2:${columnLetter}${sheet.rowCount}`;
-            sheet.addConditionalFormatting({
-                ref,
-                rules: [
-                    {
-                        type: 'colorScale',
-                        cfvo: [
-                            { type: 'min' },
-                            { type: 'percentile', value: 50 },
-                            { type: 'max' }
-                        ],
-                        color: [
-                            { argb: 'FFF87171' },
-                            { argb: 'FFFACC15' },
-                            { argb: 'FF4ADE80' }
-                        ]
-                    }
-                ]
-            });
-        }
-        return sheet;
-    };
-
-    const rowBorderByError = {
-        'Input does not exist in Outcomes': 'FFEF4444',
-        'Output does not exist in myWSU': 'FFEF4444'
-    };
-
-    const errorRows = validated.filter(row => (
-        row.Error_Type !== 'Valid' && row.Error_Type !== 'High_Confidence_Match'
-    ));
-    const translateErrorRows = errorRows.filter(row => !['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
-    const oneToManyRows = errorRows.filter(row => ['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
-    const highConfidenceRows = validated.filter(row => row.Error_Type === 'High_Confidence_Match');
-    const validRows = validated.filter(row => row.Error_Type === 'Valid');
-
-    const errorColumns = [
-        'Error_Type',
-        ...outcomesColumns,
-        'translate_input',
-        'translate_output',
-        ...wsuColumns,
-        ...suggestionColumns
-    ];
-
-    const oneToManyColumns = [
-        ...outcomesColumns,
-        'translate_input',
-        'translate_output',
-        ...wsuColumns,
-        ...suggestionColumns
-    ];
-
-    const validColumns = [
-        ...outcomesColumns,
-        'translate_input',
-        'translate_output',
-        ...wsuColumns
-    ];
-    const highConfidenceColumns = [
-        ...outcomesColumns,
-        'translate_input',
-        'translate_output',
-        ...wsuColumns,
-        ...suggestionColumns
-    ];
-
-    const errorDataRows = translateErrorRows.map(row => {
-        const rowData = {};
-        errorColumns.forEach(col => {
-            rowData[col] = row[col] !== undefined ? row[col] : '';
-        });
-        rowData.Error_Type = normalizeErrorType(row) || row.Error_Type;
-        applySuggestionColumns(row, rowData, row.Error_Type);
-        return rowData;
-    });
-
-    const oneToManyDataRows = oneToManyRows.map(row => {
-        const rowData = {};
-        oneToManyColumns.forEach(col => {
-            rowData[col] = row[col] !== undefined ? row[col] : '';
-        });
-        rowData.Error_Type = row.Error_Type;
-        rowData.Duplicate_Group = row.Duplicate_Group || '';
-        applySuggestionColumns(row, rowData, row.Error_Type);
-        return rowData;
-    });
-
-    oneToManyDataRows.sort((a, b) => {
-        const groupA = a.Duplicate_Group || '';
-        const groupB = b.Duplicate_Group || '';
-        if (groupA !== groupB) return groupA.localeCompare(groupB);
-        const typeA = a.Error_Type || '';
-        const typeB = b.Error_Type || '';
-        return typeA.localeCompare(typeB);
-    });
-
-    const validDataRows = validRows.map(row => {
-        const rowData = {};
-        validColumns.forEach(col => {
-            rowData[col] = row[col] !== undefined ? row[col] : '';
-        });
-        return rowData;
-    });
-
-    const highConfidenceDataRows = highConfidenceRows.map(row => {
-        const rowData = {};
-        highConfidenceColumns.forEach(col => {
-            rowData[col] = row[col] !== undefined ? row[col] : '';
-        });
-        applySuggestionColumns(row, rowData, row.Error_Type);
-        return rowData;
-    });
-
-    const baseStyle = {
-        errorHeaderColor: 'FF991B1B',
-        errorBodyColor: 'FFFEE2E2',
-        groupHeaderColor: 'FFF59E0B',
-        groupBodyColor: 'FFFEF3C7',
-        translateHeaderColor: 'FF1E40AF',
-        translateBodyColor: 'FFDBEAFE',
-        outcomesHeaderColor: 'FF166534',
-        outcomesBodyColor: 'FFDCFCE7',
-        wsuHeaderColor: 'FFC2410C',
-        wsuBodyColor: 'FFFFEDD5',
-        suggestionHeaderColor: 'FF6D28D9',
-        suggestionBodyColor: 'FFEDE9FE',
-        defaultHeaderColor: 'FF981e32',
-        defaultBodyColor: 'FFFFFFFF'
-    };
-
-    addSheetWithRows(
-        'Errors_in_Translate',
-        errorColumns,
-        errorDataRows,
-        baseStyle,
-        rowBorderByError
-    );
-    reportProgress('Building One to Many sheet...', 30);
-    await yieldToUi();
-    addSheetWithRows(
-        'One_to_Many',
-        oneToManyColumns,
-        oneToManyDataRows,
-        baseStyle,
-        rowBorderByError,
-        'Duplicate_Group'
-    );
-    reportProgress('Building high confidence matches...', 45);
-    await yieldToUi();
-    addSheetWithRows(
-        'High_Confidence_Matches',
-        highConfidenceColumns,
-        highConfidenceDataRows,
-        baseStyle
-    );
-    reportProgress('Building valid mappings...', 60);
-    await yieldToUi();
-    addSheetWithRows(
-        'Valid_Mappings',
-        validColumns,
-        validDataRows,
+    const result = await runExportWorkerTask(
+        'build_validation_export',
         {
-            ...baseStyle,
-            errorHeaderColor: 'FF16A34A',
-            errorBodyColor: 'FFDCFCE7'
+            validated,
+            missing,
+            selectedCols,
+            options: {
+                includeSuggestions: Boolean(options.includeSuggestions),
+                showMappingLogic: Boolean(options.showMappingLogic),
+                nameCompareConfig: options.nameCompareConfig || {}
+            },
+            context: {
+                loadedData,
+                columnRoles,
+                keyConfig,
+                keyLabels
+            }
+        },
+        (stage, processed, total) => {
+            if (!onProgressCb) return;
+            const percent = total ? Math.round((processed / total) * 100) : 0;
+            onProgressCb(stage, percent);
         }
     );
-    reportProgress('Building missing mappings...', 75);
-    await yieldToUi();
-
-    const outcomesRowsByKey = new Map();
-    loadedData.outcomes.forEach(row => {
-        const normalized = normalizeKeyValue(row[keyConfig.outcomes]);
-        if (normalized && !outcomesRowsByKey.has(normalized)) {
-            outcomesRowsByKey.set(normalized, row);
-        }
-    });
-
-    const wsuRowsByKey = new Map();
-    loadedData.wsu_org.forEach(row => {
-        const normalized = normalizeKeyValue(row[keyConfig.wsu]);
-        if (normalized && !wsuRowsByKey.has(normalized)) {
-            wsuRowsByKey.set(normalized, row);
-        }
-    });
-
-    const translateInputs = new Set(
-        loadedData.translate
-            .map(row => normalizeKeyValue(row[keyConfig.translateInput]))
-            .filter(Boolean)
-    );
-    const translateOutputs = new Set(
-        loadedData.translate
-            .map(row => normalizeKeyValue(row[keyConfig.translateOutput]))
-            .filter(Boolean)
-    );
-
-    const sharedOutcomesKeys = Array.from(outcomesRowsByKey.keys())
-        .filter(key => wsuRowsByKey.has(key) && !translateInputs.has(key))
-        .sort((a, b) => String(a).localeCompare(String(b)));
-
-    const sharedWsuKeys = Array.from(wsuRowsByKey.keys())
-        .filter(key => outcomesRowsByKey.has(key) && !translateOutputs.has(key))
-        .sort((a, b) => String(a).localeCompare(String(b)));
-
-    const missingPairColumns = [
-        ...outcomesColumns,
-        'translate_input',
-        'translate_output',
-        ...wsuColumns
-    ];
-
-    const missingOutcomesRows = sharedOutcomesKeys.map(key => {
-        const outcomesRow = outcomesRowsByKey.get(key) || {};
-        const wsuRow = wsuRowsByKey.get(key) || {};
-        const rowData = {};
-        selectedCols.outcomes.forEach(col => {
-            rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
-        });
-        rowData.translate_input = outcomesRow[keyConfig.outcomes] ?? key;
-        rowData.translate_output = wsuRow[keyConfig.wsu] ?? key;
-        selectedCols.wsu_org.forEach(col => {
-            rowData[`wsu_${col}`] = wsuRow[col] ?? '';
-        });
-        return rowData;
-    });
-
-    addSheetWithRows(
-        'In_Outcomes_Not_In_Translate',
-        missingPairColumns,
-        missingOutcomesRows,
-        baseStyle
-    );
-
-    const missingWsuRows = sharedWsuKeys.map(key => {
-        const outcomesRow = outcomesRowsByKey.get(key) || {};
-        const wsuRow = wsuRowsByKey.get(key) || {};
-        const rowData = {};
-        selectedCols.outcomes.forEach(col => {
-            rowData[`outcomes_${col}`] = outcomesRow[col] ?? '';
-        });
-        rowData.translate_input = outcomesRow[keyConfig.outcomes] ?? key;
-        rowData.translate_output = wsuRow[keyConfig.wsu] ?? key;
-        selectedCols.wsu_org.forEach(col => {
-            rowData[`wsu_${col}`] = wsuRow[col] ?? '';
-        });
-        return rowData;
-    });
-
-    addSheetWithRows(
-        'In_myWSU_Not_In_Translate',
-        missingPairColumns,
-        missingWsuRows,
-        baseStyle
-    );
-    reportProgress('Finalizing Excel file...', 90);
-    await yieldToUi();
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    reportProgress('Saving file...', 98);
-    const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    });
-
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'WSU_Mapping_Validation_Report.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    downloadArrayBuffer(result.buffer, result.filename || 'WSU_Mapping_Validation_Report.xlsx');
+    return;
 }
 
 function setupResetButton() {

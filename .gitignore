@@ -48,6 +48,11 @@ test-list.html
 export.xml
 export*.xml
 
+# Local data files
+*.csv
+*.xlsx
+*.txt
+
 # Development/Documentation files (keep local, don't push to repo)
 AI_HANDOFF.md
 VERCEL_DEPLOYMENT_TROUBLESHOOTING.md

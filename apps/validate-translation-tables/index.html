@@ -72,7 +72,7 @@
                             <p>4. If using name comparison, pick name columns and adjust threshold/ambiguity gap</p>
                             <p>5. (Optional) Map roles (School/City/State/Country) to improve suggestions</p>
                             <p>6. Click "Validate Mappings" to identify errors</p>
-                            <p>7. Review the dashboard and download the Excel report (includes One_to_Many and High_Confidence_Matches)</p>
+                            <p>7. Review the dashboard and download the Excel report (includes One_to_Many, High_Confidence_Matches, and Missing_Mappings)</p>
                         </div>
                         <div id="instructions-create" class="hidden">
                             <p>1. Upload the Outcomes source and myWSU table</p>
@@ -349,6 +349,10 @@
                         <input id="include-suggestions" type="checkbox" class="mr-2" checked>
                         Include name-match suggestions in validation error sheets (optional)
                     </label>
+                    <label class="flex items-center text-sm text-gray-700 mt-2">
+                        <input id="show-mapping-logic" type="checkbox" class="mr-2">
+                        Show mapping logic in validation export sheets (optional)
+                    </label>
                     <p class="text-xs text-gray-500 mt-2">
                         Mark which columns to include in exports, pick the key column, and map roles (school, city, state, country) for suggestions.
                         Key columns cannot be assigned a role.
@@ -538,12 +542,8 @@
                     </div>
 
                     <div>
-                        <strong class="text-blue-700">Missing Mappings (Sheet: In_Outcomes_Not_In_Translate):</strong>
-                        <p class="mt-1">Outcomes records that have no entry in the Translation Table. These may be intentional but are listed for visibility.</p>
-                    </div>
-                    <div>
-                        <strong class="text-blue-700">Missing Mappings (Sheet: In_myWSU_Not_In_Translate):</strong>
-                        <p class="mt-1">myWSU records that are not referenced by any translation output. These may be intentional but are listed for visibility.</p>
+                        <strong class="text-blue-700">Missing Mappings (Sheet: Missing_Mappings):</strong>
+                        <p class="mt-1">High-confidence Outcomes-to-myWSU name/location pairs where the translate input and/or output is missing. Use this sheet to add likely missing mappings.</p>
                     </div>
                 </div>
 
