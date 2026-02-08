@@ -533,7 +533,8 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
 
     const guessRole = (col) => {
         const normalized = String(col || '').toLowerCase();
-        if (normalized.includes('name') || normalized.includes('school')) return 'School';
+        if (normalized.includes('school type')) return 'Other';
+        if (normalized.includes('name') || normalized.includes('school name')) return 'School';
         if (normalized.includes('city')) return 'City';
         if (normalized.includes('state')) return 'State';
         if (normalized.includes('country')) return 'Country';
@@ -805,6 +806,7 @@ function updateSelectedColumns() {
 
     document.querySelectorAll('select[name="outcomes-role"]').forEach(select => {
         const col = select.dataset.col;
+        const wasDisabled = select.disabled;
         if (col === outcomesKey) {
             if (select.value && select.value !== '') {
                 select.dataset.prevRole = select.value;
@@ -813,7 +815,8 @@ function updateSelectedColumns() {
             select.disabled = true;
         } else {
             select.disabled = false;
-            if (!select.value && select.dataset.prevRole) {
+            // Restore previous role only when coming back from key-lock state.
+            if (wasDisabled && !select.value && select.dataset.prevRole) {
                 select.value = select.dataset.prevRole;
             }
         }
@@ -823,6 +826,7 @@ function updateSelectedColumns() {
     });
     document.querySelectorAll('select[name="wsu-role"]').forEach(select => {
         const col = select.dataset.col;
+        const wasDisabled = select.disabled;
         if (col === wsuKey) {
             if (select.value && select.value !== '') {
                 select.dataset.prevRole = select.value;
@@ -831,7 +835,8 @@ function updateSelectedColumns() {
             select.disabled = true;
         } else {
             select.disabled = false;
-            if (!select.value && select.dataset.prevRole) {
+            // Restore previous role only when coming back from key-lock state.
+            if (wasDisabled && !select.value && select.dataset.prevRole) {
                 select.value = select.dataset.prevRole;
             }
         }
