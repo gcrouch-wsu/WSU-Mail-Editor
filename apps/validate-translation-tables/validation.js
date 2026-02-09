@@ -447,10 +447,10 @@ const COUNTRY_CODE_MAP = {
     ca: 'can', can: 'can', canada: 'can',
     uk: 'gbr', gb: 'gbr', gbr: 'gbr', 'united kingdom': 'gbr', 'great britain': 'gbr',
     in: 'ind', ind: 'ind', india: 'ind',
-    bg: 'bgd', bgd: 'bgd', bangladesh: 'bgd',
+    bd: 'bgd', bgd: 'bgd', bangladesh: 'bgd',
     pk: 'pak', pak: 'pak', pakistan: 'pak',
     my: 'mys', mys: 'mys', malaysia: 'mys',
-    ni: 'nga', ng: 'nga', nga: 'nga', nigeria: 'nga',
+    ng: 'nga', nga: 'nga', nigeria: 'nga',
     th: 'tha', tha: 'tha', thailand: 'tha',
     np: 'npl', npl: 'npl', nepal: 'npl',
     kr: 'kor', kor: 'kor', korea: 'kor', 'south korea': 'kor'
@@ -988,24 +988,42 @@ function normalizeKeyValue(value) {
     return raw.toLowerCase();
 }
 
+function buildUniqueKeyMap(rows, keyField, datasetLabel) {
+    const map = new Map();
+    const duplicateCounts = new Map();
+
+    rows.forEach(row => {
+        const normalized = normalizeKeyValue(row[keyField]);
+        if (!normalized) {
+            return;
+        }
+        if (map.has(normalized)) {
+            duplicateCounts.set(normalized, (duplicateCounts.get(normalized) || 1) + 1);
+            return;
+        }
+        map.set(normalized, row);
+    });
+
+    if (duplicateCounts.size > 0) {
+        const duplicateKeys = Array.from(duplicateCounts.entries())
+            .sort((a, b) => b[1] - a[1]);
+        const sample = duplicateKeys
+            .slice(0, 5)
+            .map(([key, count]) => `${key} (${count})`)
+            .join(', ');
+        throw new Error(
+            `${datasetLabel} has duplicate key values in "${keyField}" (${duplicateCounts.size} duplicate keys). ` +
+            `Examples: ${sample}`
+        );
+    }
+
+    return map;
+}
+
 function mergeData(outcomes, translate, wsuOrg, keyConfig) {
     const merged = [];
-    const outcomesMap = new Map();
-    const wsuOrgMap = new Map();
-
-    outcomes.forEach(row => {
-        const key = normalizeKeyValue(row[keyConfig.outcomes]);
-        if (key) {
-            outcomesMap.set(key, row);
-        }
-    });
-
-    wsuOrg.forEach(row => {
-        const normalized = normalizeKeyValue(row[keyConfig.wsu]);
-        if (normalized) {
-            wsuOrgMap.set(normalized, row);
-        }
-    });
+    const outcomesMap = buildUniqueKeyMap(outcomes, keyConfig.outcomes, 'Outcomes source');
+    const wsuOrgMap = buildUniqueKeyMap(wsuOrg, keyConfig.wsu, 'myWSU source');
 
     for (const tRow of translate) {
         const inputRaw = tRow[keyConfig.translateInput] ?? '';

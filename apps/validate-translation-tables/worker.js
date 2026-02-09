@@ -14,18 +14,35 @@ function reportProgress(stage, processed, total) {
     }
 }
 
-function buildKeyValueMap(rows, keyField) {
+function buildKeyValueMap(rows, keyField, datasetLabel) {
     const map = new Map();
+    const duplicateCounts = new Map();
     rows.forEach(row => {
         const raw = row[keyField];
         const normalized = normalizeKeyValue(raw);
         if (!normalized) {
             return;
         }
-        if (!map.has(normalized)) {
-            map.set(normalized, row);
+        if (map.has(normalized)) {
+            duplicateCounts.set(normalized, (duplicateCounts.get(normalized) || 1) + 1);
+            return;
         }
+        map.set(normalized, row);
     });
+
+    if (duplicateCounts.size > 0) {
+        const duplicateKeys = Array.from(duplicateCounts.entries())
+            .sort((a, b) => b[1] - a[1]);
+        const sample = duplicateKeys
+            .slice(0, 5)
+            .map(([key, count]) => `${key} (${count})`)
+            .join(', ');
+        throw new Error(
+            `${datasetLabel} has duplicate key values in "${keyField}" (${duplicateCounts.size} duplicate keys). ` +
+            `Examples: ${sample}`
+        );
+    }
+
     return map;
 }
 
@@ -363,8 +380,8 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
         return { cleanRows, errorRows, selectedColumns, headerLabels };
     }
 
-    const outcomesMap = buildKeyValueMap(outcomes, keyConfig.outcomes);
-    const wsuMap = buildKeyValueMap(wsuOrg, keyConfig.wsu);
+    const outcomesMap = buildKeyValueMap(outcomes, keyConfig.outcomes, 'Outcomes source');
+    const wsuMap = buildKeyValueMap(wsuOrg, keyConfig.wsu, 'myWSU source');
     const allKeys = new Set([...outcomesMap.keys(), ...wsuMap.keys()]);
     const outcomesEntries = Array.from(outcomesMap.entries()).map(([key, row]) => ({ key, row }));
     const wsuEntries = Array.from(wsuMap.entries()).map(([key, row]) => ({ key, row }));

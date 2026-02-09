@@ -743,8 +743,8 @@ async function buildValidationExport(payload) {
     );
 
     const rowBorderByError = {
-        'Input does not exist in Outcomes': 'FFEF4444',
-        'Output does not exist in myWSU': 'FFEF4444'
+        'Input key not found in Outcomes': 'FFEF4444',
+        'Output key not found in myWSU': 'FFEF4444'
     };
 
     const errorRows = validated.filter(row => (

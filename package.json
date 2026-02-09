@@ -23,7 +23,8 @@
     "start": "npm run start --workspace=apps/platform",
     "lint": "npm run lint --workspaces",
     "format": "npm run format --workspaces",
-    "checkfmt": "npm run checkfmt --workspaces"
+    "checkfmt": "npm run checkfmt --workspaces",
+    "check:validate-translation": "node apps/validate-translation-tables/checks.js"
   },
   "repository": {
     "type": "git",
@@ -37,4 +38,3 @@
   },
   "homepage": "https://github.com/gcrouch-wsu/WSU-Mail-Editor#readme"
 }
-

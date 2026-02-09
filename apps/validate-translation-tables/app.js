@@ -48,7 +48,14 @@ let lastNameCompareConfig = {
     enabled: false,
     outcomes: '',
     wsu: '',
-    threshold: 0.8
+    threshold: 0.8,
+    ambiguity_gap: 0.03,
+    state_outcomes: '',
+    state_wsu: '',
+    city_outcomes: '',
+    city_wsu: '',
+    country_outcomes: '',
+    country_wsu: ''
 };
 let debugState = {
     outcomes: null,
@@ -56,8 +63,11 @@ let debugState = {
     wsu_org: null
 };
 let activeWorker = null;
+let activeWorkerReject = null;
 let activeExportWorker = null;
+let activeExportWorkerReject = null;
 let pageBusy = false;
+let runLocked = false;
 
 function beforeUnloadHandler(event) {
     event.preventDefault();
@@ -76,6 +86,39 @@ function setPageBusy(isBusy) {
     }
 }
 
+function hideLoadingUI() {
+    const loading = document.getElementById('loading');
+    const progressWrap = document.getElementById('loading-progress');
+    if (loading) {
+        loading.classList.add('hidden');
+    }
+    if (progressWrap) {
+        progressWrap.classList.add('hidden');
+    }
+}
+
+function applyPrimaryActionDisabledState(button, disabled) {
+    if (!button) return;
+    button.disabled = disabled;
+    if (disabled) {
+        button.classList.add('bg-gray-400', 'cursor-not-allowed');
+        button.classList.remove('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+        return;
+    }
+    button.classList.remove('bg-gray-400', 'cursor-not-allowed');
+    button.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+}
+
+function setPrimaryActionsBusy(isBusy) {
+    applyPrimaryActionDisabledState(document.getElementById('validate-btn'), isBusy);
+    applyPrimaryActionDisabledState(document.getElementById('generate-btn'), isBusy);
+}
+
+function setRunLock(isLocked) {
+    runLocked = Boolean(isLocked);
+    setPrimaryActionsBusy(runLocked || pageBusy);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     setupModeSelector();
     setupFileUploads();
@@ -89,6 +132,8 @@ document.addEventListener('DOMContentLoaded', function() {
     setupResetButton();
     setupNameCompareControls();
     setupShowAllErrorsToggle();
+    setupMappingLogicPreviewToggle();
+    setupMatchingRulesToggle();
     updateModeUI();
 });
 
@@ -96,9 +141,15 @@ function runWorkerTask(type, payload, onProgress) {
     return new Promise((resolve, reject) => {
         if (activeWorker) {
             activeWorker.terminate();
+            if (typeof activeWorkerReject === 'function') {
+                activeWorkerReject(new Error('Previous task was cancelled.'));
+            }
+            activeWorkerReject = null;
+            activeWorker = null;
         }
         const worker = new Worker('worker.js');
         activeWorker = worker;
+        activeWorkerReject = reject;
 
         worker.onmessage = (event) => {
             const message = event.data || {};
@@ -109,18 +160,21 @@ function runWorkerTask(type, payload, onProgress) {
             if (message.type === 'result') {
                 worker.terminate();
                 activeWorker = null;
+                activeWorkerReject = null;
                 resolve(message.result);
                 return;
             }
             if (message.type === 'error') {
                 worker.terminate();
                 activeWorker = null;
+                activeWorkerReject = null;
                 reject(new Error(message.message));
             }
         };
         worker.onerror = (event) => {
             worker.terminate();
             activeWorker = null;
+            activeWorkerReject = null;
             reject(new Error(event.message || 'Worker error'));
         };
         worker.postMessage({ type, payload });
@@ -131,9 +185,15 @@ function runExportWorkerTask(type, payload, onProgress) {
     return new Promise((resolve, reject) => {
         if (activeExportWorker) {
             activeExportWorker.terminate();
+            if (typeof activeExportWorkerReject === 'function') {
+                activeExportWorkerReject(new Error('Previous export task was cancelled.'));
+            }
+            activeExportWorkerReject = null;
+            activeExportWorker = null;
         }
         const worker = new Worker('export-worker.js');
         activeExportWorker = worker;
+        activeExportWorkerReject = reject;
 
         worker.onmessage = (event) => {
             const message = event.data || {};
@@ -144,18 +204,21 @@ function runExportWorkerTask(type, payload, onProgress) {
             if (message.type === 'result') {
                 worker.terminate();
                 activeExportWorker = null;
+                activeExportWorkerReject = null;
                 resolve(message.result);
                 return;
             }
             if (message.type === 'error') {
                 worker.terminate();
                 activeExportWorker = null;
+                activeExportWorkerReject = null;
                 reject(new Error(message.message));
             }
         };
         worker.onerror = (event) => {
             worker.terminate();
             activeExportWorker = null;
+            activeExportWorkerReject = null;
             reject(new Error(event.message || 'Export worker error'));
         };
         worker.postMessage({ type, payload });
@@ -478,6 +541,16 @@ function processAvailableFiles() {
                 : 'Switch to Create mode to generate a translation table.';
         }
 
+        if (pageBusy || runLocked) {
+            setPrimaryActionsBusy(true);
+            if (validateMessage && currentMode === 'validate') {
+                validateMessage.textContent = 'Validation is running. Please wait...';
+            }
+            if (generateMessage && currentMode === 'create') {
+                generateMessage.textContent = 'Generation is running. Please wait...';
+            }
+        }
+
     } catch (error) {
         console.error('Error processing files:', error);
         alert('Error processing files. Please try again.');
@@ -702,6 +775,9 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
         return;
     }
 
+    const previousTranslateInput = keyConfig.translateInput || translateInputSelect.value || '';
+    const previousTranslateOutput = keyConfig.translateOutput || translateOutputSelect.value || '';
+
     translateInputSelect.innerHTML = '<option value="">Select column</option>';
     translateOutputSelect.innerHTML = '<option value="">Select column</option>';
     if (translateColumns.length) {
@@ -749,26 +825,33 @@ function populateKeySelection(outcomesColumns, translateColumns, wsuOrgColumns) 
         ]) || (translateColumns[1] || translateColumns[0] || ''))
         : '';
 
-    translateInputSelect.value = defaultTranslateInput;
-    translateOutputSelect.value = defaultTranslateOutput;
+    const resolvedTranslateInput = translateColumns.includes(previousTranslateInput)
+        ? previousTranslateInput
+        : defaultTranslateInput;
+    const resolvedTranslateOutput = translateColumns.includes(previousTranslateOutput)
+        ? previousTranslateOutput
+        : defaultTranslateOutput;
+
+    translateInputSelect.value = resolvedTranslateInput;
+    translateOutputSelect.value = resolvedTranslateOutput;
 
     keyConfig = {
         outcomes: keyConfig.outcomes || '',
-        translateInput: defaultTranslateInput,
-        translateOutput: defaultTranslateOutput,
+        translateInput: resolvedTranslateInput,
+        translateOutput: resolvedTranslateOutput,
         wsu: keyConfig.wsu || ''
     };
 
     keyLabels = {
         outcomes: keyConfig.outcomes,
-        translateInput: defaultTranslateInput,
-        translateOutput: defaultTranslateOutput,
+        translateInput: resolvedTranslateInput,
+        translateOutput: resolvedTranslateOutput,
         wsu: keyConfig.wsu
     };
 
-    [translateInputSelect, translateOutputSelect].forEach(select => {
-        select.addEventListener('change', updateKeyConfig);
-    });
+    // Avoid duplicate listeners as this function runs each time files are (re)processed.
+    translateInputSelect.onchange = updateKeyConfig;
+    translateOutputSelect.onchange = updateKeyConfig;
 }
 
 function updateKeyConfig() {
@@ -873,6 +956,11 @@ function populateNameCompareOptions(outcomesColumns, wsuOrgColumns) {
 
     if (!outcomesSelect || !wsuSelect || !thresholdInput || !ambiguityInput) return;
 
+    const previousOutcomes = outcomesSelect.value;
+    const previousWsu = wsuSelect.value;
+    const previousThreshold = thresholdInput.value;
+    const previousGap = ambiguityInput.value;
+
     outcomesSelect.innerHTML = '<option value="">Select column</option>';
     wsuSelect.innerHTML = '<option value="">Select column</option>';
 
@@ -909,11 +997,17 @@ function populateNameCompareOptions(outcomesColumns, wsuOrgColumns) {
 
     const defaultOutcomes = outcomesColumns.includes('name') ? 'name' : '';
     const defaultWsu = wsuOrgColumns.includes('Descr') ? 'Descr' : '';
-    if (defaultOutcomes) outcomesSelect.value = defaultOutcomes;
-    if (defaultWsu) wsuSelect.value = defaultWsu;
+    const resolvedOutcomes = outcomesColumns.includes(previousOutcomes)
+        ? previousOutcomes
+        : defaultOutcomes;
+    const resolvedWsu = wsuOrgColumns.includes(previousWsu)
+        ? previousWsu
+        : defaultWsu;
+    if (resolvedOutcomes) outcomesSelect.value = resolvedOutcomes;
+    if (resolvedWsu) wsuSelect.value = resolvedWsu;
 
-    thresholdInput.value = '0.8';
-    ambiguityInput.value = '0.03';
+    thresholdInput.value = previousThreshold || '0.8';
+    ambiguityInput.value = previousGap || '0.03';
     updateNameCompareState();
 }
 
@@ -945,7 +1039,24 @@ function setupShowAllErrorsToggle() {
         if (validatedData.length > 0) {
             const limit = showAllErrors ? 0 : 10;
             displayErrorDetails(getErrorSamples(validatedData, limit));
+            renderMappingLogicPreview();
         }
+    });
+}
+
+function setupMappingLogicPreviewToggle() {
+    const checkbox = document.getElementById('show-logic-preview');
+    if (!checkbox) return;
+    checkbox.addEventListener('change', function() {
+        renderMappingLogicPreview();
+    });
+}
+
+function setupMatchingRulesToggle() {
+    const checkbox = document.getElementById('show-matching-rules');
+    if (!checkbox) return;
+    checkbox.addEventListener('change', function() {
+        renderMatchingRulesExamples();
     });
 }
 
@@ -1014,6 +1125,10 @@ function updateValidateNameModeUI() {
 }
 
 async function runValidation() {
+    if (runLocked) {
+        return;
+    }
+    setRunLock(true);
     try {
         if (currentMode !== 'validate') {
             alert('Switch to Validate mode to run validation.');
@@ -1106,7 +1221,14 @@ async function runValidation() {
             enabled: Boolean(nameCompareEnabled),
             outcomes: nameCompareOutcomes,
             wsu: nameCompareWsu,
-            threshold: resolvedThreshold
+            threshold: resolvedThreshold,
+            ambiguity_gap: resolvedGap,
+            state_outcomes: outcomesStateFallback,
+            state_wsu: wsuStateFallback,
+            city_outcomes: outcomesCityFallback,
+            city_wsu: wsuCityFallback,
+            country_outcomes: outcomesCountryFallback,
+            country_wsu: wsuCountryFallback
         };
 
         const translateRows = loadedData.translate || [];
@@ -1151,6 +1273,7 @@ async function runValidation() {
         document.getElementById('loading-message').textContent =
             `System check passed: ${translateRowCount.toLocaleString()} rows, no blank key cells`;
 
+        let lastValidationPercent = 5;
         setPageBusy(true);
         const result = await runWorkerTask(
             'validate',
@@ -1175,16 +1298,23 @@ async function runValidation() {
             },
             (stage, processed, total) => {
                 if (progressStage && progressPercent && progressBar) {
-                    const percent = total ? Math.round((processed / total) * 100) : 0;
+                    let percent = lastValidationPercent;
                     if (stage === 'merge') {
                         progressStage.textContent = 'Merging data...';
+                        percent = Math.max(percent, 10);
                     } else if (stage === 'validate') {
                         progressStage.textContent = 'Validating mappings...';
+                        const validatePercent = total
+                            ? 10 + Math.round((processed / total) * 85)
+                            : 10;
+                        percent = Math.max(percent, validatePercent);
                     } else {
                         progressStage.textContent = 'Analyzing mappings...';
+                        percent = Math.max(percent, 10);
                     }
-                    progressPercent.textContent = `${percent}%`;
-                    progressBar.style.width = `${percent}%`;
+                    lastValidationPercent = Math.min(percent, 100);
+                    progressPercent.textContent = `${lastValidationPercent}%`;
+                    progressBar.style.width = `${lastValidationPercent}%`;
                 }
                 const message = stage === 'merge'
                     ? 'Merging data...'
@@ -1202,27 +1332,30 @@ async function runValidation() {
         const limit = showAllErrors ? 0 : 10;
         const errorSamples = getErrorSamples(validatedData, limit);
 
-        document.getElementById('loading').classList.add('hidden');
-        if (progressWrap) {
-            progressWrap.classList.add('hidden');
+        if (progressStage && progressPercent && progressBar) {
+            progressStage.textContent = 'Complete';
+            progressPercent.textContent = '100%';
+            progressBar.style.width = '100%';
         }
-        setPageBusy(false);
 
         displayResults(stats, errorSamples);
 
     } catch (error) {
         console.error('Validation error:', error);
         alert(`Error running validation: ${error.message}`);
-        document.getElementById('loading').classList.add('hidden');
-        const progressWrap = document.getElementById('loading-progress');
-        if (progressWrap) {
-            progressWrap.classList.add('hidden');
-        }
+    } finally {
+        hideLoadingUI();
         setPageBusy(false);
+        setRunLock(false);
+        processAvailableFiles();
     }
 }
 
 async function runGeneration() {
+    if (runLocked) {
+        return;
+    }
+    setRunLock(true);
     try {
         if (currentMode !== 'create') {
             alert('Switch to Create mode to generate a translation table.');
@@ -1301,13 +1434,11 @@ async function runGeneration() {
 
         if ((forceNameMatch && !canNameMatch) || (!forceNameMatch && !hasKeyConfig && !canNameMatch)) {
             alert('Select key columns or enable name comparison to generate a table.');
-            document.getElementById('loading').classList.add('hidden');
             return;
         }
 
         if (nameCompareEnabled && (!nameCompareOutcomes || !nameCompareWsu)) {
             alert('Select both name columns or disable name comparison.');
-            document.getElementById('loading').classList.add('hidden');
             return;
         }
 
@@ -1375,20 +1506,14 @@ async function runGeneration() {
             }
         );
 
-        document.getElementById('loading').classList.add('hidden');
-        if (progressWrap) {
-            progressWrap.classList.add('hidden');
-        }
-        setPageBusy(false);
     } catch (error) {
         console.error('Generation error:', error);
         alert(`Error generating translation table: ${error.message}`);
-        document.getElementById('loading').classList.add('hidden');
-        const progressWrap = document.getElementById('loading-progress');
-        if (progressWrap) {
-            progressWrap.classList.add('hidden');
-        }
+    } finally {
+        hideLoadingUI();
         setPageBusy(false);
+        setRunLock(false);
+        processAvailableFiles();
     }
 }
 
@@ -1429,10 +1554,236 @@ function displayResults(stats, errorSamples) {
     createErrorChart(stats.errors);
 
     displayErrorDetails(errorSamples);
+    renderMappingLogicPreview();
+    renderMatchingRulesExamples();
 
     document.getElementById('results').classList.remove('hidden');
 
     document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+}
+
+function formatScorePercent(score) {
+    if (!Number.isFinite(score)) return '';
+    return `${Math.round(Math.max(0, Math.min(1, score)) * 100)}%`;
+}
+
+function getConfiguredValue(row, prefix, fieldName) {
+    if (!fieldName) return '';
+    const key = `${prefix}_${fieldName}`;
+    return row?.[key] ?? '';
+}
+
+function buildMatchingExample(row) {
+    const threshold = Number.isFinite(lastNameCompareConfig?.threshold)
+        ? lastNameCompareConfig.threshold
+        : 0.8;
+    const outcomesNameKey = lastNameCompareConfig?.outcomes
+        ? `outcomes_${lastNameCompareConfig.outcomes}`
+        : '';
+    const wsuNameKey = lastNameCompareConfig?.wsu
+        ? `wsu_${lastNameCompareConfig.wsu}`
+        : '';
+    const outcomesName = outcomesNameKey ? (row[outcomesNameKey] || row.outcomes_name || '') : (row.outcomes_name || '');
+    const wsuName = wsuNameKey ? (row[wsuNameKey] || row.wsu_Descr || '') : (row.wsu_Descr || '');
+    const normalizedOutcomes = typeof normalizeNameForCompare === 'function'
+        ? normalizeNameForCompare(outcomesName)
+        : outcomesName;
+    const normalizedWsu = typeof normalizeNameForCompare === 'function'
+        ? normalizeNameForCompare(wsuName)
+        : wsuName;
+    const similarity = (outcomesName && wsuName && typeof calculateNameSimilarity === 'function')
+        ? calculateNameSimilarity(outcomesName, wsuName)
+        : null;
+    const similarityText = formatScorePercent(similarity);
+
+    const outcomesState = getConfiguredValue(row, 'outcomes', lastNameCompareConfig?.state_outcomes);
+    const wsuState = getConfiguredValue(row, 'wsu', lastNameCompareConfig?.state_wsu);
+    const outcomesCity = getConfiguredValue(row, 'outcomes', lastNameCompareConfig?.city_outcomes);
+    const wsuCity = getConfiguredValue(row, 'wsu', lastNameCompareConfig?.city_wsu);
+    const outcomesCountry = getConfiguredValue(row, 'outcomes', lastNameCompareConfig?.country_outcomes);
+    const wsuCountry = getConfiguredValue(row, 'wsu', lastNameCompareConfig?.country_wsu);
+
+    const evidence = [];
+    if (similarityText) {
+        evidence.push(`Similarity ${similarityText} (threshold ${formatScorePercent(threshold)})`);
+    }
+    if (outcomesState && wsuState && typeof statesMatch === 'function' && statesMatch(outcomesState, wsuState)) {
+        evidence.push(`State match: ${outcomesState} = ${wsuState}`);
+    }
+    if (outcomesCountry && wsuCountry && typeof countriesMatch === 'function' && countriesMatch(outcomesCountry, wsuCountry)) {
+        evidence.push(`Country match: ${outcomesCountry} = ${wsuCountry}`);
+    }
+    if (typeof cityInName === 'function' && (cityInName(outcomesName, wsuCity) || cityInName(wsuName, outcomesCity))) {
+        evidence.push('City name appears in the other side');
+    }
+    if (typeof locationInNameMatches === 'function' && (
+        locationInNameMatches(outcomesName, wsuCity, wsuState) ||
+        locationInNameMatches(wsuName, outcomesCity, outcomesState)
+    )) {
+        evidence.push('Parenthetical/hyphen location token matched');
+    }
+    if (row.Error_Type === 'High_Confidence_Match') {
+        evidence.push('High-confidence override applied');
+    }
+
+    return `
+        <div class="border border-gray-200 rounded p-3">
+            <p class="text-sm"><strong>Outcomes:</strong> ${escapeHtml(outcomesName || '—')}</p>
+            <p class="text-sm"><strong>myWSU:</strong> ${escapeHtml(wsuName || '—')}</p>
+            <p class="text-xs text-gray-500 mt-2"><strong>Normalized:</strong> ${escapeHtml(normalizedOutcomes || '—')} ↔ ${escapeHtml(normalizedWsu || '—')}</p>
+            <p class="text-xs text-gray-500 mt-1"><strong>Evidence:</strong> ${escapeHtml(evidence.join(' | ') || 'No evidence available')}</p>
+            <p class="text-xs text-gray-500 mt-1"><strong>Decision:</strong> ${escapeHtml(normalizeErrorTypeForPreview(row.Error_Type) || row.Error_Type || '—')}</p>
+        </div>
+    `;
+}
+
+function renderMatchingRulesExamples() {
+    const toggle = document.getElementById('show-matching-rules');
+    const panel = document.getElementById('matching-rules-panel');
+    const container = document.getElementById('matching-examples');
+    if (!container || !panel || !toggle) return;
+    if (!toggle.checked) {
+        panel.classList.add('hidden');
+        return;
+    }
+    panel.classList.remove('hidden');
+    if (!validatedData.length) {
+        container.innerHTML = '<p class="text-xs text-gray-500">Examples from this run will appear after validation.</p>';
+        return;
+    }
+
+    const priority = [
+        'High_Confidence_Match',
+        'Name_Mismatch',
+        'Ambiguous_Match',
+        'Output_Not_Found',
+        'Valid'
+    ];
+    const examples = [];
+    priority.forEach(type => {
+        if (examples.length >= 2) return;
+        const match = validatedData.find(row => row.Error_Type === type && !examples.includes(row));
+        if (match) examples.push(match);
+    });
+    if (examples.length < 2) {
+        validatedData.slice(0, 2 - examples.length).forEach(row => examples.push(row));
+    }
+
+    const html = examples.map(example => buildMatchingExample(example)).join('');
+    container.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${html || '<p class="text-xs text-gray-500">No examples available.</p>'}
+        </div>
+    `;
+}
+
+function normalizeErrorTypeForPreview(errorType) {
+    if (errorType === 'Input_Not_Found') return 'Input key not found in Outcomes';
+    if (errorType === 'Output_Not_Found') return 'Output key not found in myWSU';
+    if (errorType === 'Missing_Input') return 'Input key is blank in Translate';
+    if (errorType === 'Missing_Output') return 'Output key is blank in Translate';
+    if (errorType === 'Name_Mismatch') return 'Name mismatch';
+    if (errorType === 'Ambiguous_Match') return 'Ambiguous name match';
+    return errorType || '';
+}
+
+function buildMappingLogicPreviewText(row) {
+    const threshold = Number.isFinite(lastNameCompareConfig?.threshold)
+        ? lastNameCompareConfig.threshold
+        : 0.8;
+    const thresholdText = formatScorePercent(threshold);
+    const outcomesNameKey = lastNameCompareConfig?.outcomes
+        ? `outcomes_${lastNameCompareConfig.outcomes}`
+        : '';
+    const wsuNameKey = lastNameCompareConfig?.wsu
+        ? `wsu_${lastNameCompareConfig.wsu}`
+        : '';
+    const outcomesName = outcomesNameKey ? (row[outcomesNameKey] || row.outcomes_name || '') : (row.outcomes_name || '');
+    const wsuName = wsuNameKey ? (row[wsuNameKey] || row.wsu_Descr || '') : (row.wsu_Descr || '');
+    const similarity = (outcomesName && wsuName && typeof calculateNameSimilarity === 'function')
+        ? calculateNameSimilarity(outcomesName, wsuName)
+        : null;
+    const similarityText = formatScorePercent(similarity);
+
+    switch (row.Error_Type) {
+    case 'Valid':
+        if (similarityText) {
+            return `Valid: key checks passed and name similarity ${similarityText} met/exceeded threshold ${thresholdText}.`;
+        }
+        return 'Valid: key checks passed and no blocking validation rules fired.';
+    case 'High_Confidence_Match':
+        return similarityText
+            ? `High confidence override: similarity ${similarityText} was below threshold ${thresholdText}, but alias/location/token rules confirmed this mapping.`
+            : `High confidence override: alias/location/token rules confirmed this mapping below threshold ${thresholdText}.`;
+    case 'Duplicate_Target':
+        return 'Many-to-one duplicate: multiple source keys map to the same target key.';
+    case 'Duplicate_Source':
+        return 'One-to-many duplicate: one source key maps to multiple target keys.';
+    case 'Input_Not_Found':
+        return 'Key lookup failed: translate input key value is present but was not found in Outcomes keys.';
+    case 'Output_Not_Found':
+        if (row.Error_Subtype === 'Output_Not_Found_Likely_Stale_Key') {
+            const suggested = row.Suggested_Key ? ` Suggested replacement key: ${row.Suggested_Key}.` : '';
+            return `Key lookup failed: translate output key was not found in myWSU keys. Likely stale key.${suggested}`;
+        }
+        if (row.Error_Subtype === 'Output_Not_Found_Ambiguous_Replacement') {
+            return 'Key lookup failed: translate output key was not found in myWSU keys. Multiple high-confidence replacement candidates were found.';
+        }
+        if (row.Error_Subtype === 'Output_Not_Found_No_Replacement') {
+            return 'Key lookup failed: translate output key was not found in myWSU keys. No high-confidence replacement candidate was found.';
+        }
+        return 'Key lookup failed: translate output key value is present but was not found in myWSU keys.';
+    case 'Missing_Input':
+        return 'Translate row has a blank input key cell.';
+    case 'Missing_Output':
+        return 'Translate row has a blank output key cell.';
+    case 'Name_Mismatch':
+        return similarityText
+            ? `Name comparison failed: similarity ${similarityText} is below threshold ${thresholdText}.`
+            : 'Name comparison failed: below configured threshold.';
+    case 'Ambiguous_Match':
+        return 'Name comparison ambiguous: another candidate scored within the ambiguity gap.';
+    default:
+        return row.Error_Description || 'Classified by validation rules.';
+    }
+}
+
+function renderMappingLogicPreview() {
+    const toggle = document.getElementById('show-logic-preview');
+    const panel = document.getElementById('logic-preview-panel');
+    const body = document.getElementById('logic-preview-body');
+    const summary = document.getElementById('logic-preview-summary');
+    if (!toggle || !panel || !body || !summary) return;
+
+    if (!toggle.checked || !validatedData.length) {
+        panel.classList.add('hidden');
+        body.innerHTML = '';
+        summary.textContent = '';
+        return;
+    }
+
+    const maxRows = 200;
+    const rows = validatedData.slice(0, maxRows);
+    const rowsHtml = rows.map((row, index) => {
+        const subtype = row.Error_Subtype ? ` (${row.Error_Subtype})` : '';
+        const classification = `${normalizeErrorTypeForPreview(row.Error_Type)}${subtype}`;
+        const logicText = buildMappingLogicPreviewText(row);
+        return `
+            <tr class="border-b align-top">
+                <td class="py-2 px-3 text-xs text-gray-500">${index + 1}</td>
+                <td class="py-2 px-3 text-sm">${escapeHtml(row.translate_input)}</td>
+                <td class="py-2 px-3 text-sm">${escapeHtml(row.translate_output)}</td>
+                <td class="py-2 px-3 text-sm">${escapeHtml(classification)}</td>
+                <td class="py-2 px-3 text-sm">${escapeHtml(logicText)}</td>
+            </tr>
+        `;
+    }).join('');
+
+    body.innerHTML = rowsHtml;
+    summary.textContent = validatedData.length > maxRows
+        ? `Showing first ${maxRows.toLocaleString()} of ${validatedData.length.toLocaleString()} rows.`
+        : `Showing all ${validatedData.length.toLocaleString()} rows.`;
+    panel.classList.remove('hidden');
 }
 
 function createErrorChart(errors) {
