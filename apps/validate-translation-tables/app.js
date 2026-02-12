@@ -1851,8 +1851,6 @@ function createErrorChart(errors) {
 
     const data = {
         labels: [
-            'Blank Input Keys (Translate)',
-            'Blank Output Keys (Translate)',
             'Input Keys Not Found in Outcomes',
             'Output Keys Not Found in myWSU',
             'Duplicate Target Keys',
@@ -1864,8 +1862,6 @@ function createErrorChart(errors) {
         datasets: [{
             label: 'Error Count',
             data: [
-                errors.missing_inputs,
-                errors.missing_outputs,
                 errors.input_not_found,
                 errors.output_not_found,
                 errors.duplicate_targets,
@@ -1880,7 +1876,6 @@ function createErrorChart(errors) {
                 'rgba(251, 191, 36, 0.8)',  // Yellow
                 'rgba(59, 130, 246, 0.8)',  // Blue
                 'rgba(14, 116, 144, 0.8)',  // Teal
-                'rgba(94, 234, 212, 0.8)',  // Cyan
                 'rgba(234, 179, 8, 0.8)',   // Amber
                 'rgba(168, 85, 247, 0.8)',  // Purple
                 'rgba(74, 222, 128, 0.8)'   // Green
@@ -1891,7 +1886,6 @@ function createErrorChart(errors) {
                 'rgb(251, 191, 36)',
                 'rgb(59, 130, 246)',
                 'rgb(14, 116, 144)',
-                'rgb(94, 234, 212)',
                 'rgb(202, 138, 4)',
                 'rgb(147, 51, 234)',
                 'rgb(22, 163, 74)'
@@ -1965,8 +1959,6 @@ function displayErrorDetails(errorSamples) {
     detailsDiv.innerHTML = '';
 
     const errorTypes = [
-        { key: 'Missing_Input', title: 'Blank Input Keys in Translate', color: 'red' },
-        { key: 'Missing_Output', title: 'Blank Output Keys in Translate', color: 'red' },
         { key: 'Input_Not_Found', title: 'Input Keys Not Found in Outcomes', color: 'orange' },
         { key: 'Output_Not_Found', title: 'Output Keys Not Found in myWSU', color: 'orange' },
         { key: 'Output_Not_Found_Likely_Stale_Key', title: 'Likely Stale Output Keys (Suggested Replacements)', color: 'orange' },
@@ -2002,16 +1994,6 @@ function createErrorCard(title, sample, color) {
     };
 
     const explanations = {
-        'Blank Input Keys in Translate': {
-            icon: '🔴',
-            text: 'Translate input key cell is blank (no value provided).',
-            impact: 'Critical - Structural table issue; validation stops at system check'
-        },
-        'Blank Output Keys in Translate': {
-            icon: '🔴',
-            text: 'Translate output key cell is blank (no value provided).',
-            impact: 'Critical - Structural table issue; validation stops at system check'
-        },
         'Input Keys Not Found in Outcomes': {
             icon: '🔴',
             text: 'Translate input key value is present, but it does not exist in Outcomes keys.',

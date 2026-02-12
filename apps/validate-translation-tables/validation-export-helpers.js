@@ -4,11 +4,13 @@
  */
 'use strict';
 
-const OUTPUT_NOT_FOUND_SUBTYPE = {
-    LIKELY_STALE_KEY: 'Output_Not_Found_Likely_Stale_Key',
-    AMBIGUOUS_REPLACEMENT: 'Output_Not_Found_Ambiguous_Replacement',
-    NO_REPLACEMENT: 'Output_Not_Found_No_Replacement'
-};
+const OUTPUT_NOT_FOUND_SUBTYPE = (typeof self !== 'undefined' && self.OUTPUT_NOT_FOUND_SUBTYPE)
+    ? self.OUTPUT_NOT_FOUND_SUBTYPE
+    : {
+        LIKELY_STALE_KEY: 'Output_Not_Found_Likely_Stale_Key',
+        AMBIGUOUS_REPLACEMENT: 'Output_Not_Found_Ambiguous_Replacement',
+        NO_REPLACEMENT: 'Output_Not_Found_No_Replacement'
+    };
 
 /** Priority order: lower number = higher priority (tackle first). */
 const PRIORITY_ORDER = {
