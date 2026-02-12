@@ -298,8 +298,12 @@ function generateTranslationTableWorker(outcomes, wsuOrg, keyConfig, nameCompare
     const forceNameMatch = Boolean(options.forceNameMatch);
 
     const headerLabels = {
-        input: keyLabels.outcomes || outcomesNameField || 'Outcomes Key',
-        output: keyLabels.wsu || wsuNameField || 'myWSU Key'
+        input: forceNameMatch
+            ? (outcomesNameField || keyLabels.outcomes || 'Outcomes Name')
+            : (keyLabels.outcomes || outcomesNameField || 'Outcomes Key'),
+        output: forceNameMatch
+            ? (wsuNameField || keyLabels.wsu || 'myWSU Name')
+            : (keyLabels.wsu || wsuNameField || 'myWSU Key')
     };
 
     const cleanRows = [];

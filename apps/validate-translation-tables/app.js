@@ -531,7 +531,9 @@ function processAvailableFiles() {
             generateBtn.disabled = false;
             generateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
             generateBtn.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
-            generateMessage.textContent = 'Choose match method and columns, then generate.';
+            generateMessage.textContent = matchMethod === 'name'
+                ? 'Name matching mode: key selections are optional and ignored.'
+                : 'Choose match method and columns, then generate.';
         } else {
             generateBtn.disabled = true;
             generateBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
@@ -549,6 +551,10 @@ function processAvailableFiles() {
             if (generateMessage && currentMode === 'create') {
                 generateMessage.textContent = 'Generation is running. Please wait...';
             }
+        }
+
+        if (currentMode === 'create') {
+            syncCreateKeyControlsForMatchMethod();
         }
 
     } catch (error) {
@@ -884,8 +890,13 @@ function updateSelectedColumns() {
     columnRoles.outcomes = {};
     columnRoles.wsu_org = {};
 
-    const outcomesKey = document.querySelector('input[name="outcomes-key"]:checked')?.value || '';
-    const wsuKey = document.querySelector('input[name="wsu-key"]:checked')?.value || '';
+    const ignoreKeysForCreateNameMode = currentMode === 'create' && matchMethod === 'name';
+    const outcomesKey = ignoreKeysForCreateNameMode
+        ? ''
+        : (document.querySelector('input[name="outcomes-key"]:checked')?.value || '');
+    const wsuKey = ignoreKeysForCreateNameMode
+        ? ''
+        : (document.querySelector('input[name="wsu-key"]:checked')?.value || '');
 
     document.querySelectorAll('select[name="outcomes-role"]').forEach(select => {
         const col = select.dataset.col;
@@ -935,6 +946,39 @@ function setupNameCompareControls() {
     const fields = document.getElementById('name-compare-fields');
     if (!fields) return;
     updateNameCompareState();
+}
+
+function syncCreateKeyControlsForMatchMethod() {
+    if (currentMode !== 'create') {
+        return;
+    }
+    const useNameOnly = matchMethod === 'name';
+    const keyHelp = document.getElementById('create-key-help');
+    if (keyHelp) {
+        keyHelp.classList.toggle('hidden', !useNameOnly);
+    }
+
+    const toggleGroup = (groupName) => {
+        const inputs = Array.from(document.querySelectorAll(`input[name="${groupName}"]`));
+        if (!inputs.length) return;
+        if (useNameOnly) {
+            inputs.forEach(input => {
+                input.checked = false;
+                input.disabled = true;
+            });
+            return;
+        }
+        inputs.forEach(input => {
+            input.disabled = false;
+        });
+        const hasChecked = inputs.some(input => input.checked);
+        if (!hasChecked) {
+            inputs[0].checked = true;
+        }
+    };
+
+    toggleGroup('outcomes-key');
+    toggleGroup('wsu-key');
 }
 
 function updateNameCompareState() {
@@ -1112,6 +1156,8 @@ function updateMatchMethodUI() {
     if (nameCompare) {
         nameCompare.classList.toggle('hidden', matchMethod === 'key');
     }
+    syncCreateKeyControlsForMatchMethod();
+    updateSelectedColumns();
 }
 
 function updateValidateNameModeUI() {

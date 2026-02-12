@@ -76,9 +76,9 @@
                         </div>
                         <div id="instructions-create" class="hidden">
                             <p>1. Upload the Outcomes source and myWSU table</p>
-                            <p>2. In the column list, pick the key columns and the columns to include (include City/State to enable high-confidence matching)</p>
+                            <p>2. In the column list, pick columns to include; key columns are required only for key matching.</p>
                             <p>3. Choose match method: key or name</p>
-                            <p>4. If matching by name, pick name columns and adjust threshold/ambiguity gap</p>
+                            <p>4. If matching by name, pick name columns and adjust threshold/ambiguity gap (key selection is optional and ignored)</p>
                             <p>5. (Optional) Map roles (School/City/State/Country) to improve suggestions</p>
                             <p>6. Click "Generate Translation Table" to create a clean Input/Output table</p>
                             <p>7. Review the missing-value report and download the Excel output</p>
@@ -354,8 +354,11 @@
                         Show mapping logic in validation export sheets (optional)
                     </label>
                     <p class="text-xs text-gray-500 mt-2">
-                        Mark which columns to include in exports, pick the key column, and map roles (school, city, state, country) for suggestions.
-                        Key columns cannot be assigned a role.
+                        Mark which columns to include in exports, pick key columns when key matching, and map roles (school, city, state, country) for suggestions.
+                        Key columns cannot be assigned a role in key-matching mode.
+                    </p>
+                    <p id="create-key-help" class="text-xs text-blue-700 mt-1 hidden">
+                        Create + Match by name: key selections are optional and ignored.
                     </p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
