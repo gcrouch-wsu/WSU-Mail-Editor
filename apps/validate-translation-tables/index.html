@@ -490,6 +490,12 @@
                 <canvas id="error-chart" height="100"></canvas>
             </div>
 
+            <div id="recommended-review-order" class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded hidden">
+                <h3 class="text-base font-semibold text-blue-900 mb-2">Recommended Review Order</h3>
+                <p class="text-sm text-blue-800 mb-3">Process the Action_Queue sheet in this order for fastest results:</p>
+                <ul id="review-order-list" class="text-sm text-blue-800 space-y-1 list-disc list-inside"></ul>
+            </div>
+
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <label class="flex items-center text-sm text-gray-700">
                     <input id="show-all-errors" type="checkbox" class="mr-2">

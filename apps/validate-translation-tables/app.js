@@ -1537,6 +1537,7 @@ async function runGeneration() {
             generated.errorRows,
             generated.selectedColumns,
             generated.headerLabels,
+            generated.generationConfig,
             {
                 onProgress: (stage, percent) => {
                     if (progressStage && progressPercent && progressBar) {
@@ -1563,7 +1564,14 @@ async function runGeneration() {
     }
 }
 
-async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCols, headerLabels, options = {}) {
+async function createGeneratedTranslationExcel(
+    cleanRows,
+    errorRows,
+    selectedCols,
+    headerLabels,
+    generationConfig = {},
+    options = {}
+) {
     const onProgress = typeof options.onProgress === 'function'
         ? options.onProgress
         : null;
@@ -1573,7 +1581,8 @@ async function createGeneratedTranslationExcel(cleanRows, errorRows, selectedCol
             cleanRows,
             errorRows,
             selectedCols,
-            headerLabels
+            headerLabels,
+            generationConfig
         },
         (stage, processed, total) => {
             if (!onProgress) return;
@@ -1599,6 +1608,7 @@ function displayResults(stats, errorSamples) {
 
     createErrorChart(stats.errors);
 
+    renderRecommendedReviewOrder(stats.errors);
     displayErrorDetails(errorSamples);
     renderMappingLogicPreview();
     renderMatchingRulesExamples();
@@ -1918,6 +1928,36 @@ function createErrorChart(errors) {
             }
         }
     });
+}
+
+function renderRecommendedReviewOrder(errors) {
+    const panel = document.getElementById('recommended-review-order');
+    const list = document.getElementById('review-order-list');
+    if (!panel || !list) return;
+
+    const e = errors || {};
+    const structural = (e.missing_inputs || 0) + (e.missing_outputs || 0) + (e.input_not_found || 0) + (e.output_not_found_no_replacement ?? 0);
+    const duplicates = (e.duplicate_targets || 0) + (e.duplicate_sources || 0);
+    const staleKey = e.output_not_found_likely_stale_key || 0;
+    const nameWarnings = (e.name_mismatches || 0) + (e.ambiguous_matches || 0);
+    const ambiguousReplacement = e.output_not_found_ambiguous_replacement || 0;
+
+    const rawItems = [
+        structural > 0 && `Structural/key failures (${structural})`,
+        duplicates > 0 && `Duplicate conflicts (${duplicates})`,
+        staleKey > 0 && `Stale-key candidates (${staleKey})`,
+        ambiguousReplacement > 0 && `Ambiguous replacement (${ambiguousReplacement})`,
+        nameWarnings > 0 && `Name warnings (${nameWarnings})`
+    ].filter(Boolean);
+    const items = rawItems.map((text, i) => `${i + 1}. ${text}`);
+
+    if (items.length === 0) {
+        panel.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+    }
+    list.innerHTML = items.map(text => `<li>${escapeHtml(text)}</li>`).join('');
+    panel.classList.remove('hidden');
 }
 
 function displayErrorDetails(errorSamples) {

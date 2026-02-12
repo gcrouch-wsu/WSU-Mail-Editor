@@ -99,6 +99,73 @@ runCheck('mergeData succeeds with unique keys', () => {
     assert.equal(merged[0].wsu_school, 'Beta One');
 });
 
+const helpersPath = path.join(__dirname, 'validation-export-helpers.js');
+const helpersCode = fs.readFileSync(helpersPath, 'utf8');
+const helpersContext = { module: { exports: {} }, require: () => {} };
+vm.createContext(helpersContext);
+vm.runInContext(helpersCode, helpersContext, { filename: helpersPath });
+const helpers = helpersContext.module.exports;
+
+runCheck('validation-export-helpers: OUTPUT_NOT_FOUND_SUBTYPE has three values', () => {
+    assert.ok(helpers.OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY);
+    assert.ok(helpers.OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT);
+    assert.ok(helpers.OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT);
+});
+
+runCheck('validation-export-helpers: getPriority returns correct order', () => {
+    assert.ok(helpers.getPriority('Missing_Input') < helpers.getPriority('Name_Mismatch'));
+    assert.ok(helpers.getPriority('Output_Not_Found', helpers.OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT) <
+        helpers.getPriority('Output_Not_Found', helpers.OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY));
+});
+
+runCheck('validation-export-helpers: getRecommendedAction returns non-empty', () => {
+    assert.ok(helpers.getRecommendedAction('Missing_Input').length > 0);
+    assert.ok(helpers.getRecommendedAction('Output_Not_Found', helpers.OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY).length > 0);
+});
+
+runCheck('generateSummaryStats returns Output_Not_Found subtype keys', () => {
+    const validated = [
+        { Error_Type: 'Output_Not_Found', Error_Subtype: 'Output_Not_Found_Likely_Stale_Key' },
+        { Error_Type: 'Output_Not_Found', Error_Subtype: 'Output_Not_Found_Ambiguous_Replacement' },
+        { Error_Type: 'Output_Not_Found', Error_Subtype: 'Output_Not_Found_No_Replacement' }
+    ];
+    const outcomes = [];
+    const translate = [];
+    const wsu = [];
+    const stats = context.generateSummaryStats(validated, outcomes, translate, wsu);
+    assert.ok('output_not_found_likely_stale_key' in stats.errors);
+    assert.ok('output_not_found_ambiguous_replacement' in stats.errors);
+    assert.ok('output_not_found_no_replacement' in stats.errors);
+});
+
+runCheck('Action_Queue context columns include Missing_In and Similarity', () => {
+    assert.ok(helpers.ACTION_QUEUE_CONTEXT_COLUMNS.includes('Missing_In'));
+    assert.ok(helpers.ACTION_QUEUE_CONTEXT_COLUMNS.includes('Similarity'));
+});
+
+runCheck('filterOutputNotFoundBySubtype uses raw subtype', () => {
+    const rows = [
+        { _rawErrorType: 'Output_Not_Found', _rawErrorSubtype: helpers.OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT },
+        { _rawErrorType: 'Output_Not_Found', _rawErrorSubtype: helpers.OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT },
+        { _rawErrorType: 'Input_Not_Found', _rawErrorSubtype: '' }
+    ];
+    const ambiguous = helpers.filterOutputNotFoundBySubtype(rows, helpers.OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT);
+    const noRepl = helpers.filterOutputNotFoundBySubtype(rows, helpers.OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT);
+    assert.equal(ambiguous.length, 1);
+    assert.equal(noRepl.length, 1);
+    assert.equal(ambiguous[0]._rawErrorSubtype, helpers.OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT);
+    assert.equal(noRepl[0]._rawErrorSubtype, helpers.OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT);
+});
+
+runCheck('getQAValidateRowsForEmptyQueue returns valid structure', () => {
+    const rows = helpers.getQAValidateRowsForEmptyQueue();
+    assert.equal(rows.length, 5);
+    assert.equal(rows[0][0], 'Check');
+    assert.equal(rows[1][1], 0);
+    assert.equal(rows[1][2], 'PASS');
+    assert.equal(rows[2][2], 'PASS', 'Approved for update status should be PASS when empty');
+});
+
 if (failures > 0) {
     console.error(`\n${failures} check(s) failed.`);
     process.exit(1);
