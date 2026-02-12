@@ -64,14 +64,21 @@
     /** Columns required for Missing_Mappings context in Action_Queue */
     const ACTION_QUEUE_CONTEXT_COLUMNS = ['Missing_In', 'Similarity'];
 
-    /** QA_Checks_Validate rows when Action_Queue is empty */
+    /** QA_Checks_Validate rows when Action_Queue is empty - matches non-empty layout for consistency */
     function getQAValidateRowsForEmptyQueue() {
         return [
             ['Check', 'Count', 'Status', 'Detail'],
-            ['Unresolved actions', 0, 'PASS', 'Rows without a decision'],
-            ['Approved for update', 0, 'PASS', 'Accept or Update Key decisions'],
-            ['Stale-key rows lacking decision', 0, 'PASS', 'Likely stale key rows without decision'],
-            ['Duplicate conflict rows lacking decision', 0, 'PASS', 'One-to-many rows without decision']
+            ['Unresolved actions', 0, 'PASS', 'Blank, No Match, or Needs Research'],
+            ['Approved review rows', 0, 'PASS', 'Rows approved from Review_Workbench'],
+            ['Approved rows beyond formula capacity', 0, 'PASS', 'Rows above formula capacity'],
+            ['Blank final keys on publish-eligible rows (sanity)', 0, 'PASS', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
+            ['Update Key without Suggested_Key', 0, 'PASS', 'Update Key chosen but Suggested_Key blank; fix or change decision'],
+            ['Update Key with invalid Update Side', 0, 'PASS', 'Update Key chosen but Key_Update_Side is None; fix or change decision'],
+            ['Stale-key rows lacking decision', 0, 'PASS', 'Likely stale key rows without decision (advisory)'],
+            ['One-to-many rows lacking decision', 0, 'PASS', 'One-to-many rows without decision (advisory)'],
+            ['Duplicate final input keys', 0, 'PASS', 'Duplicates in Final_Translation_Table input keys'],
+            ['Duplicate final output keys', 0, 'PASS', 'Duplicates in Final_Translation_Table output keys'],
+            ['Publish gate', 'PASS', '', 'Final publish gate status (B8/B9 are advisory)']
         ];
     }
 

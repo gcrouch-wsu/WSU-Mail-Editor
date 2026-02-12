@@ -17,6 +17,7 @@ const getActionPriority = (typeof ValidationExportHelpers !== 'undefined' && Val
 const getRecommendedAction = (typeof ValidationExportHelpers !== 'undefined' && ValidationExportHelpers)
     ? ValidationExportHelpers.getRecommendedAction
     : () => 'Review and resolve';
+const MAX_VALIDATE_DYNAMIC_REVIEW_FORMULA_ROWS = 5000;
 
 function reportProgress(stage, processed) {
     self.postMessage({
@@ -91,7 +92,8 @@ function addSheetWithRows(workbook, config) {
         style,
         headers,
         rowBorderByError,
-        groupColumn
+        groupColumn,
+        freezeConfig
     } = config;
     const sheet = workbook.addWorksheet(sheetName);
     sheet.addRow(headers);
@@ -149,7 +151,9 @@ function addSheetWithRows(workbook, config) {
         }
     });
 
-    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet.views = freezeConfig
+        ? [{ state: 'frozen', xSplit: freezeConfig.xSplit || 0, ySplit: freezeConfig.ySplit ?? 1 }]
+        : [{ state: 'frozen', ySplit: 1 }];
     sheet.autoFilter = {
         from: { row: 1, column: 1 },
         to: { row: 1, column: headers.length }
@@ -618,6 +622,7 @@ async function buildGenerationExport(payload) {
         { key: 'Alternate_Choice', header: 'Alternate Choice', group: 'decision' },
         { key: 'Final_myWSU_Key', header: 'Final myWSU Key', group: 'decision' },
         { key: 'Final_myWSU_Name', header: 'Final myWSU Name', group: 'decision' },
+        { key: '_dup_final_key_count', header: '_Dup Final Key Count', group: 'decision' },
         { key: 'Reason_Code', header: 'Reason Code', group: 'decision' },
         { key: 'Reviewer', header: 'Reviewer', group: 'decision' },
         { key: 'Review_Date', header: 'Review Date', group: 'decision' },
@@ -646,6 +651,9 @@ async function buildGenerationExport(payload) {
     const colAlt3Name = reviewColLetterByKey.Alt_3_Name;
     const colFinalKey = reviewColLetterByKey.Final_myWSU_Key;
     const colFinalName = reviewColLetterByKey.Final_myWSU_Name;
+    const colDupFinalKeyCount = reviewColLetterByKey._dup_final_key_count;
+    const reviewDecisionLastRow = Math.max(2, reviewSheet.rowCount);
+    const reviewDecisionFinalKeyRange = `$${colFinalKey}$2:$${colFinalKey}$${reviewDecisionLastRow}`;
     for (let rowNum = 2; rowNum <= reviewSheet.rowCount; rowNum += 1) {
         reviewSheet.getCell(`${colFinalKey}${rowNum}`).value = {
             formula: `IF($${colDecision}${rowNum}="Accept",$${colPropKey}${rowNum},IF($${colDecision}${rowNum}="Choose Alternate",IF($${colAltChoice}${rowNum}="Alt 1",$${colAlt1Key}${rowNum},IF($${colAltChoice}${rowNum}="Alt 2",$${colAlt2Key}${rowNum},IF($${colAltChoice}${rowNum}="Alt 3",$${colAlt3Key}${rowNum},""))),""))`
@@ -653,6 +661,14 @@ async function buildGenerationExport(payload) {
         reviewSheet.getCell(`${colFinalName}${rowNum}`).value = {
             formula: `IF($${colDecision}${rowNum}="Accept",$${colPropName}${rowNum},IF($${colDecision}${rowNum}="Choose Alternate",IF($${colAltChoice}${rowNum}="Alt 1",$${colAlt1Name}${rowNum},IF($${colAltChoice}${rowNum}="Alt 2",$${colAlt2Name}${rowNum},IF($${colAltChoice}${rowNum}="Alt 3",$${colAlt3Name}${rowNum},""))),""))`
         };
+        reviewSheet.getCell(`${colDupFinalKeyCount}${rowNum}`).value = {
+            formula: `IF($${colFinalKey}${rowNum}="","",COUNTIF(${reviewDecisionFinalKeyRange},$${colFinalKey}${rowNum}))`
+        };
+    }
+    const dupCountColumn = reviewSheet.getColumn(reviewColIndexByKey._dup_final_key_count);
+    if (dupCountColumn) {
+        dupCountColumn.hidden = true;
+        dupCountColumn.width = 4;
     }
     if (reviewSheet.rowCount > 1) {
         reviewSheet.dataValidations.add(
@@ -718,15 +734,13 @@ async function buildGenerationExport(payload) {
     reportProgress('Building QA sheet...', 86);
     const qaSheet = workbook.addWorksheet('QA_Checks');
     const decisionRange = `Review_Decisions!$${colDecision}$2:$${colDecision}$${reviewLastRow}`;
-    const finalKeyRange = `Review_Decisions!$${colFinalKey}$2:$${colFinalKey}$${reviewLastRow}`;
-    const firstFinalKeyCell = `Review_Decisions!$${colFinalKey}$2`;
-    const finalKeyRowOffset = `ROW(${finalKeyRange})-ROW(${firstFinalKeyCell})+1`;
-    const perRowFinalKey = `INDEX(${finalKeyRange},${finalKeyRowOffset})`;
+    const reviewFinalKeyRange = `Review_Decisions!$${colFinalKey}$2:$${colFinalKey}$${reviewLastRow}`;
+    const reviewDupFinalKeyRange = `Review_Decisions!$${colDupFinalKeyCount}$2:$${colDupFinalKeyCount}$${reviewLastRow}`;
     const qaRows = [
         ['Check', 'Count', 'Status', 'Detail'],
         ['Unresolved count', `=COUNTIF(${decisionRange},"")+COUNTIF(${decisionRange},"No Match")+COUNTIF(${decisionRange},"Needs Research")`, '=IF(B2=0,"PASS","CHECK")', 'Blank, No Match, or Needs Research decisions'],
-        ['Blank final key with approved decision', `=COUNTIFS(${decisionRange},"Accept",${finalKeyRange},"")+COUNTIFS(${decisionRange},"Choose Alternate",${finalKeyRange},"")`, '=IF(B3=0,"PASS","FAIL")', 'Approved rows should produce final keys'],
-        ['Duplicate final keys (approved)', `=SUMPRODUCT(((${decisionRange}="Accept")+(${decisionRange}="Choose Alternate"))*(${finalKeyRange}<>"")*((COUNTIFS(${finalKeyRange},${perRowFinalKey},${decisionRange},"Accept")+COUNTIFS(${finalKeyRange},${perRowFinalKey},${decisionRange},"Choose Alternate"))>1))/2`, '=IF(B4=0,"PASS","CHECK")', 'Duplicates among approved final keys'],
+        ['Blank final key with approved decision', `=COUNTIFS(${decisionRange},"Accept",${reviewFinalKeyRange},"")+COUNTIFS(${decisionRange},"Choose Alternate",${reviewFinalKeyRange},"")`, '=IF(B3=0,"PASS","FAIL")', 'Approved rows should produce final keys'],
+        ['Duplicate final keys (approved)', `=SUMPRODUCT(((${decisionRange}="Accept")+(${decisionRange}="Choose Alternate"))*(${reviewFinalKeyRange}<>"")*(${reviewDupFinalKeyRange}>1))/2`, '=IF(B4=0,"PASS","CHECK")', 'Duplicates among approved final keys'],
         ['Approved total', `=COUNTIF(${decisionRange},"Accept")+COUNTIF(${decisionRange},"Choose Alternate")`, '', 'Rows that will publish to final translation table']
     ];
     qaRows.forEach(row => qaSheet.addRow(row));
@@ -776,6 +790,14 @@ async function buildValidationExport(payload) {
             'Suggestion_Score'
         ]
         : [];
+    const reviewSuggestionColumns = [
+        'Suggested_Key',
+        'Suggested_School',
+        'Suggested_City',
+        'Suggested_State',
+        'Suggested_Country',
+        'Suggestion_Score'
+    ];
 
     const roleOrder = ['School', 'City', 'State', 'Country', 'Other'];
     const getRoleMap = (sourceKey) => {
@@ -809,8 +831,27 @@ async function buildValidationExport(payload) {
     const getRoleValue = (row, roleMap, fallbackColumns, roleName, prefix) => {
         const roleColumn = roleMap[roleName] || getFallbackRoleColumn(fallbackColumns, roleName);
         if (!roleColumn) return '';
-        const key = prefix ? `${prefix}${roleColumn}` : roleColumn;
-        return row?.[key] ?? '';
+        const keyCandidates = [];
+        if (prefix) {
+            keyCandidates.push(`${prefix}${roleColumn}`);
+        }
+        keyCandidates.push(roleColumn);
+        if (!prefix) {
+            keyCandidates.push(`outcomes_${roleColumn}`, `wsu_${roleColumn}`);
+        }
+        for (const key of keyCandidates) {
+            const value = row?.[key];
+            if (value !== undefined && value !== null && value !== '') {
+                return value;
+            }
+        }
+        for (const key of keyCandidates) {
+            const value = row?.[key];
+            if (value !== undefined && value !== null) {
+                return value;
+            }
+        }
+        return '';
     };
     const fillSuggestedFields = (rowData, row, roleMap, fallbackColumns, keyValue, prefix) => {
         rowData.Suggested_Key = keyValue || '';
@@ -839,6 +880,9 @@ async function buildValidationExport(payload) {
         nameCompareConfig.outcomes &&
         nameCompareConfig.wsu
     );
+    const outcomesSuggestionCityColumn = nameCompareConfig.city_outcomes || roleMapOutcomes.City || getFallbackRoleColumn(selectedCols.outcomes || [], 'city');
+    const outcomesSuggestionStateColumn = nameCompareConfig.state_outcomes || roleMapOutcomes.State || getFallbackRoleColumn(selectedCols.outcomes || [], 'state');
+    const outcomesSuggestionCountryColumn = nameCompareConfig.country_outcomes || roleMapOutcomes.Country || getFallbackRoleColumn(selectedCols.outcomes || [], 'country');
     const wsuSuggestionCityColumn = nameCompareConfig.city_wsu || roleMapWsu.City || getFallbackRoleColumn(selectedCols.wsu_org || [], 'city');
     const wsuSuggestionStateColumn = nameCompareConfig.state_wsu || roleMapWsu.State || getFallbackRoleColumn(selectedCols.wsu_org || [], 'state');
     const wsuSuggestionCountryColumn = nameCompareConfig.country_wsu || roleMapWsu.Country || getFallbackRoleColumn(selectedCols.wsu_org || [], 'country');
@@ -872,6 +916,19 @@ async function buildValidationExport(payload) {
             }))
             .filter(entry => entry.normName)
         : [];
+    const outcomesNameCandidates = canSuggestNames
+        ? (loadedData.outcomes || [])
+            .map(row => ({
+                key: row[keyConfig.outcomes],
+                name: row[nameCompareConfig.outcomes],
+                normName: normalizeValue(row[nameCompareConfig.outcomes]),
+                city: outcomesSuggestionCityColumn ? (row[outcomesSuggestionCityColumn] ?? '') : '',
+                state: outcomesSuggestionStateColumn ? (row[outcomesSuggestionStateColumn] ?? '') : '',
+                country: outcomesSuggestionCountryColumn ? (row[outcomesSuggestionCountryColumn] ?? '') : '',
+                row
+            }))
+            .filter(entry => entry.normName)
+        : [];
 
     const formatSuggestionScore = (score) => (
         Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null
@@ -898,6 +955,29 @@ async function buildValidationExport(payload) {
             const score = typeof calculateNameSimilarity === 'function'
                 ? calculateNameSimilarity(outcomesName, candidate.name)
                 : similarityScore(normalizeValue(outcomesName), candidate.normName);
+            if (score >= minNameScore) {
+                candidates.push({
+                    row: candidate.row,
+                    key: candidate.key,
+                    name: candidate.name,
+                    city: candidate.city,
+                    state: candidate.state,
+                    country: candidate.country,
+                    score
+                });
+            }
+        });
+        if (!candidates.length) return null;
+        candidates.sort((a, b) => b.score - a.score);
+        return candidates[0];
+    };
+    const getBestOutcomesNameSuggestion = (wsuName) => {
+        if (!canSuggestNames || !wsuName) return null;
+        const candidates = [];
+        outcomesNameCandidates.forEach(candidate => {
+            const score = typeof calculateNameSimilarity === 'function'
+                ? calculateNameSimilarity(wsuName, candidate.name)
+                : similarityScore(normalizeValue(wsuName), candidate.normName);
             if (score >= minNameScore) {
                 candidates.push({
                     row: candidate.row,
@@ -956,7 +1036,7 @@ async function buildValidationExport(payload) {
 
         if (errorType === 'Input_Not_Found') {
             const nameSuggestion = canSuggestNames
-                ? getBestNameSuggestion(row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '')
+                ? getBestOutcomesNameSuggestion(row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '')
                 : null;
             const suggestion = canSuggestNames
                 ? nameSuggestion
@@ -1497,7 +1577,11 @@ async function buildValidationExport(payload) {
             Owner: '',
             Status: '',
             Resolution_Note: '',
-            Resolved_Date: ''
+            Resolved_Date: '',
+            Reviewer: '',
+            Review_Date: '',
+            Reason_Code: '',
+            Notes: ''
         };
     });
     const actionQueueFromOneToMany = oneToManyDataRows.map(row => {
@@ -1520,7 +1604,11 @@ async function buildValidationExport(payload) {
             Owner: '',
             Status: '',
             Resolution_Note: '',
-            Resolved_Date: ''
+            Resolved_Date: '',
+            Reviewer: '',
+            Review_Date: '',
+            Reason_Code: '',
+            Notes: ''
         };
     });
     const actionQueueFromMissing = missingMappingsRows.map(row => {
@@ -1542,7 +1630,11 @@ async function buildValidationExport(payload) {
             Owner: '',
             Status: '',
             Resolution_Note: '',
-            Resolved_Date: ''
+            Resolved_Date: '',
+            Reviewer: '',
+            Review_Date: '',
+            Reason_Code: '',
+            Notes: ''
         };
     });
     const actionQueueFromErrorsWithMissing = actionQueueFromErrors.map(row => ({
@@ -1550,7 +1642,7 @@ async function buildValidationExport(payload) {
         Missing_In: row.Missing_In ?? '',
         Similarity: row.Similarity ?? row.Suggestion_Score ?? ''
     }));
-    const actionQueueRows = [...actionQueueFromErrorsWithMissing, ...actionQueueFromOneToMany, ...actionQueueFromMissing]
+    const actionQueueRowsUnstable = [...actionQueueFromErrorsWithMissing, ...actionQueueFromOneToMany, ...actionQueueFromMissing]
         .sort((a, b) => {
             const pa = a.Priority ?? 99;
             const pb = b.Priority ?? 99;
@@ -1568,30 +1660,99 @@ async function buildValidationExport(payload) {
             const toB = String(b.translate_output || '');
             return toA.localeCompare(toB);
         });
+    const inferKeyUpdateSide = (row) => {
+        const rawType = row._rawErrorType || '';
+        if (rawType === 'Input_Not_Found' || rawType === 'Missing_Input') {
+            return 'Input';
+        }
+        if (rawType === 'Output_Not_Found' || rawType === 'Missing_Output') {
+            return 'Output';
+        }
+        if (rawType === 'Missing_Mapping') {
+            const missing = String(row.Missing_In || '');
+            if (missing.includes('Input and Output')) return 'Both';
+            if (missing.includes('Input')) return 'Input';
+            if (missing.includes('Output')) return 'Output';
+        }
+        return 'None';
+    };
+    const sanitizeIdPart = (value) => String(normalizeValue(value || '')).replace(/\|/g, '/');
+    const buildStableReviewId = (row) => {
+        const outcomesKeyValue = keyLabels.outcomes ? row[`outcomes_${keyLabels.outcomes}`] : '';
+        const wsuKeyValue = keyLabels.wsu ? row[`wsu_${keyLabels.wsu}`] : '';
+        return [
+            sanitizeIdPart(row.Source_Sheet || ''),
+            sanitizeIdPart(row._rawErrorType || row.Error_Type || ''),
+            sanitizeIdPart(row.translate_input || ''),
+            sanitizeIdPart(row.translate_output || ''),
+            sanitizeIdPart(outcomesKeyValue || ''),
+            sanitizeIdPart(wsuKeyValue || ''),
+            sanitizeIdPart(row.Missing_In || ''),
+            sanitizeIdPart(row.Duplicate_Group || '')
+        ].join('|');
+    };
+    const actionQueueRows = actionQueueRowsUnstable.map(row => ({
+        ...row,
+        Suggested_Key: row.Suggested_Key ?? '',
+        Suggested_School: row.Suggested_School ?? '',
+        Suggested_City: row.Suggested_City ?? '',
+        Suggested_State: row.Suggested_State ?? '',
+        Suggested_Country: row.Suggested_Country ?? '',
+        Suggestion_Score: row.Suggestion_Score ?? '',
+        Current_Input: row.translate_input ?? '',
+        Current_Output: row.translate_output ?? '',
+        Key_Update_Side: inferKeyUpdateSide(row),
+        Review_Row_ID: buildStableReviewId(row),
+        Final_Input: '',
+        Final_Output: '',
+        Publish_Eligible: '',
+        Approval_Source: '',
+        Has_Update: ''
+    }));
+    const reviewIdCount = new Map();
+    actionQueueRows.forEach(row => {
+        const baseId = row.Review_Row_ID;
+        const seen = (reviewIdCount.get(baseId) || 0) + 1;
+        reviewIdCount.set(baseId, seen);
+        if (seen > 1) {
+            row.Review_Row_ID = `${baseId}#${seen}`;
+        }
+    });
     const actionQueueBaseCols = [
+        'Review_Row_ID',
         'Priority',
         'Recommended_Action',
         'Error_Type',
         'Error_Subtype',
         'Source_Sheet',
+        'Key_Update_Side',
         'Is_Stale_Key',
         'Missing_In',
         'Similarity',
         ...errorColumns.filter(c => !['Error_Type', 'Error_Subtype', '_rawErrorType', '_rawErrorSubtype'].includes(c)),
+        ...reviewSuggestionColumns,
         'Decision',
         'Owner',
         'Status',
         'Resolution_Note',
-        'Resolved_Date'
+        'Resolved_Date',
+        'Reviewer',
+        'Review_Date',
+        'Reason_Code',
+        'Notes'
     ];
     const actionQueueColumns = actionQueueBaseCols.filter((v, i, arr) => arr.indexOf(v) === i);
     const actionQueueHeaders = buildHeaders(actionQueueColumns, keyLabels).map((h, i) => {
         const col = actionQueueColumns[i];
+        if (col === 'Review_Row_ID') return 'Review Row ID';
         if (col === 'Recommended_Action') return 'Recommended Action';
         if (col === 'Source_Sheet') return 'Source Sheet';
+        if (col === 'Key_Update_Side') return 'Update Side';
         if (col === 'Is_Stale_Key') return 'Stale Key (1=yes)';
         if (col === 'Resolution_Note') return 'Resolution Note';
         if (col === 'Resolved_Date') return 'Resolved Date';
+        if (col === 'Review_Date') return 'Review Date';
+        if (col === 'Reason_Code') return 'Reason Code';
         return h || col;
     });
     addSheetWithRows(workbook, {
@@ -1610,20 +1771,489 @@ async function buildValidationExport(payload) {
             {
                 type: 'list',
                 allowBlank: true,
-                formulae: ['"Accept,Update Key,No Change,Needs Research"']
+                formulae: ['"Accept,Update Key,Allow One-to-Many,No Change,No Match,Needs Research"']
             }
         );
     }
 
-    reportProgress('Building QA_Checks_Validate...', 84);
+    reportProgress('Building Review_Workbench...', 82);
+    const reviewWorkbenchColumns = [
+        'Review_Row_ID',
+        'Priority',
+        'Error_Type',
+        'Error_Subtype',
+        'Source_Sheet',
+        'Key_Update_Side',
+        'Is_Stale_Key',
+        'Missing_In',
+        'Similarity',
+        ...outcomesColumns,
+        'translate_input',
+        'translate_output',
+        ...wsuColumns,
+        ...mappingColumns,
+        ...reviewSuggestionColumns,
+        'Recommended_Action',
+        'Decision',
+        'Decision_Warning',
+        'Current_Input',
+        'Current_Output',
+        'Final_Input',
+        'Final_Output',
+        'Publish_Eligible',
+        'Approval_Source',
+        'Has_Update',
+        'Owner',
+        'Status',
+        'Resolution_Note',
+        'Resolved_Date',
+        'Reviewer',
+        'Review_Date',
+        'Reason_Code',
+        'Notes'
+    ].filter((v, i, arr) => arr.indexOf(v) === i);
+    const reviewWorkbenchHeaders = buildHeaders(reviewWorkbenchColumns, keyLabels).map((h, i) => {
+        const col = reviewWorkbenchColumns[i];
+        if (col === 'Review_Row_ID') return 'Review Row ID';
+        if (col === 'Recommended_Action') return 'Recommended Action';
+        if (col === 'Source_Sheet') return 'Source Sheet';
+        if (col === 'Key_Update_Side') return 'Update Side';
+        if (col === 'Is_Stale_Key') return 'Stale Key (1=yes)';
+        if (col === 'Current_Input') return 'Current Translate Input';
+        if (col === 'Current_Output') return 'Current Translate Output';
+        if (col === 'Final_Input') return 'Final Translate Input';
+        if (col === 'Final_Output') return 'Final Translate Output';
+        if (col === 'Publish_Eligible') return 'Publish Eligible (1=yes)';
+        if (col === 'Approval_Source') return 'Approval Source';
+        if (col === 'Has_Update') return 'Has Update (1=yes)';
+        if (col === 'Decision_Warning') return 'Decision Warning';
+        if (col === 'Resolution_Note') return 'Resolution Note';
+        if (col === 'Resolved_Date') return 'Resolved Date';
+        if (col === 'Review_Date') return 'Review Date';
+        if (col === 'Reason_Code') return 'Reason Code';
+        return h || col;
+    });
+    const finalOutputColIndex = reviewWorkbenchColumns.indexOf('Final_Output') + 1;
+    addSheetWithRows(workbook, {
+        sheetName: 'Review_Workbench',
+        outputColumns: reviewWorkbenchColumns,
+        rows: actionQueueRows,
+        style: baseStyle,
+        headers: reviewWorkbenchHeaders,
+        rowBorderByError: null,
+        freezeConfig: { xSplit: finalOutputColIndex, ySplit: 1 }
+    });
+    const reviewSheet = workbook.getWorksheet('Review_Workbench');
+    const reviewColIndex = {};
+    reviewWorkbenchColumns.forEach((col, idx) => {
+        reviewColIndex[col] = idx + 1;
+    });
+    const reviewColLetter = {};
+    Object.keys(reviewColIndex).forEach(key => {
+        reviewColLetter[key] = columnIndexToLetter(reviewColIndex[key]);
+    });
+    const decisionListFormula = '"Accept,Update Key,Allow One-to-Many,No Change,No Match,Needs Research"';
+    if (reviewSheet && actionQueueRows.length > 0) {
+        const rowEnd = actionQueueRows.length + 1;
+        reviewSheet.dataValidations.add(
+            `${reviewColLetter.Decision}2:${reviewColLetter.Decision}${rowEnd}`,
+            {
+                type: 'list',
+                allowBlank: true,
+                formulae: [decisionListFormula]
+            }
+        );
+        for (let rowNum = 2; rowNum <= rowEnd; rowNum += 1) {
+            reviewSheet.getCell(`${reviewColLetter.Final_Input}${rowNum}`).value = {
+                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many",$${reviewColLetter.Decision}${rowNum}="No Change"),$${reviewColLetter.Current_Input}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Update Key",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Input",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Input}${rowNum}),""))`
+            };
+            reviewSheet.getCell(`${reviewColLetter.Final_Output}${rowNum}`).value = {
+                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many",$${reviewColLetter.Decision}${rowNum}="No Change"),$${reviewColLetter.Current_Output}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Update Key",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Output",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Output}${rowNum}),""))`
+            };
+            // "No Change" intentionally stays non-publishable; use "Accept" to publish unchanged rows.
+            reviewSheet.getCell(`${reviewColLetter.Publish_Eligible}${rowNum}`).value = {
+                formula: `IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Final_Input}${rowNum}<>"",$${reviewColLetter.Final_Output}${rowNum}<>""),1,0)`
+            };
+            reviewSheet.getCell(`${reviewColLetter.Approval_Source}${rowNum}`).value = {
+                formula: `IF($${reviewColLetter.Publish_Eligible}${rowNum}=1,"Review Decision","")`
+            };
+            reviewSheet.getCell(`${reviewColLetter.Has_Update}${rowNum}`).value = {
+                formula: `IF(OR($${reviewColLetter.Current_Input}${rowNum}<>$${reviewColLetter.Final_Input}${rowNum},$${reviewColLetter.Current_Output}${rowNum}<>$${reviewColLetter.Final_Output}${rowNum}),1,0)`
+            };
+            reviewSheet.getCell(`${reviewColLetter.Decision_Warning}${rowNum}`).value = {
+                formula: `IF(AND($${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Suggested_Key}${rowNum}=""),"Update Key needs Suggested_Key",IF(AND($${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Update Key needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))`
+            };
+        }
+        const editableCols = ['Decision', 'Owner', 'Status', 'Resolution_Note', 'Resolved_Date', 'Reviewer', 'Review_Date', 'Reason_Code', 'Notes'];
+        editableCols.forEach(col => {
+            const letter = reviewColLetter[col];
+            if (!letter) return;
+            for (let rowNum = 2; rowNum <= rowEnd; rowNum += 1) {
+                reviewSheet.getCell(`${letter}${rowNum}`).protection = { locked: false };
+            }
+        });
+        try {
+            await reviewSheet.protect('', {
+                selectLockedCells: true,
+                selectUnlockedCells: true
+            });
+        } catch (error) {
+            // Protection is best-effort; continue export if the runtime lacks support.
+            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+                console.warn('Review_Workbench protection skipped:', error?.message || String(error));
+            }
+        }
+        const decCol = reviewColLetter.Decision;
+        const decRef = `${decCol}2:${decCol}${rowEnd}`;
+        const fullDataRef = `A2:${columnIndexToLetter(reviewWorkbenchColumns.length)}${rowEnd}`;
+        const warningCol = reviewColLetter.Decision_Warning;
+        const staleCol = reviewColLetter.Is_Stale_Key;
+        const sourceCol = reviewColLetter.Source_Sheet;
+        try {
+            reviewSheet.addConditionalFormatting({
+                ref: decRef,
+                rules: [
+                    { type: 'containsText', operator: 'containsText', text: 'Accept', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Update Key', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Allow One-to-Many', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'No Change', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'No Match', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Needs Research', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEDD5' } } } }
+                ]
+            });
+            const cfDec = reviewColLetter.Decision;
+            const cfStale = reviewColLetter.Is_Stale_Key;
+            const cfSource = reviewColLetter.Source_Sheet;
+            const ruleStale = {
+                type: 'expression',
+                formula: 'AND($' + cfDec + '2="",$' + cfStale + '2=1)',
+                style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } }, border: { left: { style: 'medium', color: { argb: 'FFF59E0B' } } } }
+            };
+            const ruleOneToMany = {
+                type: 'expression',
+                formula: 'AND($' + cfDec + '2="",$' + cfSource + '2="One_to_Many")',
+                style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }, border: { left: { style: 'medium', color: { argb: 'FFEAB308' } } } }
+            };
+            const ruleBlankDec = {
+                type: 'expression',
+                formula: '$' + cfDec + '2=""',
+                style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } } }
+            };
+            reviewSheet.addConditionalFormatting({
+                ref: fullDataRef,
+                rules: [ruleStale, ruleOneToMany, ruleBlankDec]
+            });
+            reviewSheet.addConditionalFormatting({
+                ref: `${warningCol}2:${warningCol}${rowEnd}`,
+                rules: [
+                    { type: 'containsText', operator: 'containsText', text: 'Update Key needs', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'valid Update Side', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Approved but blank', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } }
+                ]
+            });
+        } catch (cfError) {
+            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+                console.warn('Review_Workbench conditional formatting skipped:', cfError?.message || String(cfError));
+            }
+        }
+    }
+
+    reportProgress('Building Approved_Mappings...', 84);
+    const buildAutoApprovedRow = (row, sourceSheet, sourceType) => {
+        const outcomesKeyValue = keyLabels.outcomes ? row[`outcomes_${keyLabels.outcomes}`] : '';
+        const wsuKeyValue = keyLabels.wsu ? row[`wsu_${keyLabels.wsu}`] : '';
+        return {
+            Review_Row_ID: [
+                'auto',
+                sanitizeIdPart(sourceType),
+                sanitizeIdPart(row.translate_input || ''),
+                sanitizeIdPart(row.translate_output || ''),
+                sanitizeIdPart(outcomesKeyValue || ''),
+                sanitizeIdPart(wsuKeyValue || '')
+            ].join('|'),
+            Source_Sheet: sourceSheet,
+            Error_Type: sourceType,
+            ...Object.fromEntries(outcomesColumns.map(col => [col, row[col] ?? ''])),
+            translate_input: row.translate_input ?? '',
+            translate_output: row.translate_output ?? '',
+            ...Object.fromEntries(wsuColumns.map(col => [col, row[col] ?? ''])),
+            Suggested_Key: row.Suggested_Key ?? '',
+            Suggested_School: row.Suggested_School ?? '',
+            Suggested_City: row.Suggested_City ?? '',
+            Suggested_State: row.Suggested_State ?? '',
+            Suggested_Country: row.Suggested_Country ?? '',
+            Suggestion_Score: row.Suggestion_Score ?? '',
+            Current_Input: row.translate_input ?? '',
+            Current_Output: row.translate_output ?? '',
+            Decision: 'Auto Approve',
+            Owner: '',
+            Status: 'Auto',
+            Resolution_Note: sourceType === 'High_Confidence_Match'
+                ? 'Auto-approved high-confidence mapping'
+                : 'Auto-approved valid mapping',
+            Resolved_Date: '',
+            Reviewer: '',
+            Review_Date: '',
+            Reason_Code: 'AUTO',
+            Notes: '',
+            Final_Input: row.translate_input ?? '',
+            Final_Output: row.translate_output ?? '',
+            Publish_Eligible: 1,
+            Approval_Source: sourceType === 'High_Confidence_Match' ? 'High_Confidence_Matches' : 'Valid_Mappings',
+            Has_Update: 0
+        };
+    };
+    const autoApprovedRows = [
+        ...validDataRows.map(row => buildAutoApprovedRow(row, 'Valid_Mappings', 'Valid')),
+        ...highConfidenceDataRows.map(row => buildAutoApprovedRow(row, 'High_Confidence_Matches', 'High_Confidence_Match'))
+    ];
+    const approvedColumns = [
+        'Review_Row_ID',
+        'Approval_Source',
+        'Source_Sheet',
+        'Error_Type',
+        ...outcomesColumns,
+        'translate_input',
+        'translate_output',
+        ...wsuColumns,
+        ...mappingColumns,
+        ...reviewSuggestionColumns,
+        'Current_Input',
+        'Current_Output',
+        'Decision',
+        'Owner',
+        'Status',
+        'Resolution_Note',
+        'Resolved_Date',
+        'Reviewer',
+        'Review_Date',
+        'Reason_Code',
+        'Notes',
+        'Final_Input',
+        'Final_Output',
+        'Publish_Eligible',
+        'Has_Update'
+    ].filter((v, i, arr) => arr.indexOf(v) === i);
+    const approvedRows = [...autoApprovedRows];
+    const reviewRowCount = actionQueueRows.length;
+    const cappedReviewFormulaRows = Math.min(reviewRowCount, MAX_VALIDATE_DYNAMIC_REVIEW_FORMULA_ROWS);
+    const reviewLastRow = Math.max(2, reviewRowCount + 1);
+    const reviewPublishRange = `Review_Workbench!$${reviewColLetter.Publish_Eligible}$2:$${reviewColLetter.Publish_Eligible}$${reviewLastRow}`;
+    const reviewRelativeRows = `ROW(${reviewPublishRange})-ROW(Review_Workbench!$${reviewColLetter.Publish_Eligible}$2)+1`;
+    const reviewApprovedPick = (k) => `AGGREGATE(15,6,${reviewRelativeRows}/(${reviewPublishRange}=1),${k})`;
+    const reviewIndexValue = (key, k) => {
+        const letter = reviewColLetter[key];
+        if (!letter) return '""';
+        return `IFERROR(INDEX(Review_Workbench!$${letter}$2:$${letter}$${reviewLastRow},${reviewApprovedPick(k)}),"")`;
+    };
+    for (let outputIndex = 1; outputIndex <= cappedReviewFormulaRows; outputIndex += 1) {
+        const formulaRow = {};
+        approvedColumns.forEach(col => {
+            if (col === 'Approval_Source') {
+                formulaRow[col] = { formula: `IF(${reviewIndexValue('Decision', outputIndex)}="","", "Review Decision")` };
+                return;
+            }
+            if (reviewColLetter[col]) {
+                formulaRow[col] = { formula: reviewIndexValue(col, outputIndex) };
+                return;
+            }
+            formulaRow[col] = '';
+        });
+        approvedRows.push(formulaRow);
+    }
+    const approvedHeaders = buildHeaders(approvedColumns, keyLabels).map((h, i) => {
+        const col = approvedColumns[i];
+        if (col === 'Review_Row_ID') return 'Review Row ID';
+        if (col === 'Approval_Source') return 'Approval Source';
+        if (col === 'Source_Sheet') return 'Source Sheet';
+        if (col === 'Current_Input') return 'Current Translate Input';
+        if (col === 'Current_Output') return 'Current Translate Output';
+        if (col === 'Final_Input') return 'Final Translate Input';
+        if (col === 'Final_Output') return 'Final Translate Output';
+        if (col === 'Publish_Eligible') return 'Publish Eligible (1=yes)';
+        if (col === 'Has_Update') return 'Has Update (1=yes)';
+        if (col === 'Resolution_Note') return 'Resolution Note';
+        if (col === 'Resolved_Date') return 'Resolved Date';
+        if (col === 'Review_Date') return 'Review Date';
+        if (col === 'Reason_Code') return 'Reason Code';
+        return h || col;
+    });
+    addSheetWithRows(workbook, {
+        sheetName: 'Approved_Mappings',
+        outputColumns: approvedColumns,
+        rows: approvedRows,
+        style: baseStyle,
+        headers: approvedHeaders,
+        rowBorderByError: null
+    });
+    const approvedSheet = workbook.getWorksheet('Approved_Mappings');
+    const approvedColIndex = {};
+    approvedColumns.forEach((col, idx) => {
+        approvedColIndex[col] = idx + 1;
+    });
+    const approvedColLetter = {};
+    Object.keys(approvedColIndex).forEach(key => {
+        approvedColLetter[key] = columnIndexToLetter(approvedColIndex[key]);
+    });
+    const approvedLastRow = Math.max(2, approvedRows.length + 1);
+
+    reportProgress('Building Final_Translation_Table...', 87);
+    const finalSheet = workbook.addWorksheet('Final_Translation_Table');
+    const finalColumns = [
+        { key: 'translate_input', header: 'Translate Input' },
+        { key: 'translate_output', header: 'Translate Output' },
+        { key: 'Review_Row_ID', header: 'Review Row ID' },
+        { key: 'Decision', header: 'Decision' },
+        { key: 'Source_Sheet', header: 'Source Sheet' },
+        { key: 'Owner', header: 'Owner' },
+        { key: 'Resolved_Date', header: 'Resolved Date' },
+        { key: '_approved_pick', header: '_Approved Pick' },
+        { key: '_dup_input_count', header: '_Dup Input Count' },
+        { key: '_dup_output_count', header: '_Dup Output Count' }
+    ];
+    finalSheet.addRow(finalColumns.map(col => col.header));
+    finalSheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B7285' } };
+    });
+    const approvedFinalInputRange = `Approved_Mappings!$${approvedColLetter.Final_Input}$2:$${approvedColLetter.Final_Input}$${approvedLastRow}`;
+    const approvedFinalOutputRange = `Approved_Mappings!$${approvedColLetter.Final_Output}$2:$${approvedColLetter.Final_Output}$${approvedLastRow}`;
+    const approvedRelativeRows = `ROW(${approvedFinalInputRange})-ROW(Approved_Mappings!$${approvedColLetter.Final_Input}$2)+1`;
+    const finalMask = `((${approvedFinalInputRange}<>"")*(${approvedFinalOutputRange}<>""))`;
+    const finalPick = (k) => `AGGREGATE(15,6,${approvedRelativeRows}/(${finalMask}),${k})`;
+    const finalIndex = (colKey, pickRef) => (
+        `IF(${pickRef}="","",INDEX(Approved_Mappings!$${approvedColLetter[colKey]}$2:$${approvedColLetter[colKey]}$${approvedLastRow},${pickRef}))`
+    );
+    const finalFormulaRows = Math.max(1, autoApprovedRows.length + cappedReviewFormulaRows);
+    const finalInputDuplicateCountRange = `$A$2:$A$${finalFormulaRows + 1}`;
+    const finalOutputDuplicateCountRange = `$B$2:$B$${finalFormulaRows + 1}`;
+    for (let outputIndex = 1; outputIndex <= finalFormulaRows; outputIndex += 1) {
+        const rowNum = outputIndex + 1;
+        const pickRef = `$H${rowNum}`;
+        finalSheet.addRow([
+            { formula: finalIndex('Final_Input', pickRef) },
+            { formula: finalIndex('Final_Output', pickRef) },
+            { formula: finalIndex('Review_Row_ID', pickRef) },
+            { formula: finalIndex('Decision', pickRef) },
+            { formula: finalIndex('Source_Sheet', pickRef) },
+            { formula: finalIndex('Owner', pickRef) },
+            { formula: finalIndex('Resolved_Date', pickRef) },
+            { formula: `IFERROR(${finalPick(outputIndex)},"")` },
+            { formula: `IF($A${rowNum}="","",COUNTIF(${finalInputDuplicateCountRange},$A${rowNum}))` },
+            { formula: `IF($B${rowNum}="","",COUNTIF(${finalOutputDuplicateCountRange},$B${rowNum}))` }
+        ]);
+    }
+    finalSheet.columns = [
+        { width: 24 },
+        { width: 24 },
+        { width: 56 },
+        { width: 22 },
+        { width: 22 },
+        { width: 18 },
+        { width: 16 },
+        { width: 4, hidden: true },
+        { width: 4, hidden: true },
+        { width: 4, hidden: true }
+    ];
+
+    reportProgress('Building Translation_Key_Updates...', 89);
+    const updatesSheet = workbook.addWorksheet('Translation_Key_Updates');
+    const updatesColumns = [
+        { key: 'Review_Row_ID', header: 'Review Row ID' },
+        { key: 'Current_Input', header: 'Current Translate Input' },
+        { key: 'Current_Output', header: 'Current Translate Output' },
+        { key: 'Final_Input', header: 'Final Translate Input' },
+        { key: 'Final_Output', header: 'Final Translate Output' },
+        { key: 'Decision', header: 'Decision' },
+        { key: 'Source_Sheet', header: 'Source Sheet' },
+        { key: 'Owner', header: 'Owner' },
+        { key: 'Resolution_Note', header: 'Resolution Note' },
+        { key: '_update_pick', header: '_Update Pick' }
+    ];
+    updatesSheet.addRow(updatesColumns.map(col => col.header));
+    updatesSheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C2D12' } };
+    });
+    const approvedUpdateRange = `Approved_Mappings!$${approvedColLetter.Has_Update}$2:$${approvedColLetter.Has_Update}$${approvedLastRow}`;
+    const updateMask = `((${approvedUpdateRange}=1)*(${approvedFinalInputRange}<>"")*(${approvedFinalOutputRange}<>""))`;
+    const updatePick = (k) => `AGGREGATE(15,6,${approvedRelativeRows}/(${updateMask}),${k})`;
+    const updateIndex = (colKey, pickRef) => (
+        `IF(${pickRef}="","",INDEX(Approved_Mappings!$${approvedColLetter[colKey]}$2:$${approvedColLetter[colKey]}$${approvedLastRow},${pickRef}))`
+    );
+    // Has_Update is reviewer-driven; auto-approved rows are intentionally excluded (always 0).
+    const updateFormulaRows = Math.max(1, cappedReviewFormulaRows);
+    for (let outputIndex = 1; outputIndex <= updateFormulaRows; outputIndex += 1) {
+        const rowNum = outputIndex + 1;
+        const pickRef = `$J${rowNum}`;
+        updatesSheet.addRow([
+            { formula: updateIndex('Review_Row_ID', pickRef) },
+            { formula: updateIndex('Current_Input', pickRef) },
+            { formula: updateIndex('Current_Output', pickRef) },
+            { formula: updateIndex('Final_Input', pickRef) },
+            { formula: updateIndex('Final_Output', pickRef) },
+            { formula: updateIndex('Decision', pickRef) },
+            { formula: updateIndex('Source_Sheet', pickRef) },
+            { formula: updateIndex('Owner', pickRef) },
+            { formula: updateIndex('Resolution_Note', pickRef) },
+            { formula: `IFERROR(${updatePick(outputIndex)},"")` }
+        ]);
+    }
+    updatesSheet.columns = [
+        { width: 56 },
+        { width: 24 },
+        { width: 24 },
+        { width: 24 },
+        { width: 24 },
+        { width: 22 },
+        { width: 22 },
+        { width: 18 },
+        { width: 46 },
+        { width: 4, hidden: true }
+    ];
+
+    reportProgress('Building Review_Instructions...', 90);
+    const reviewInstructionsSheet = workbook.addWorksheet('Review_Instructions', { properties: { tabColor: { argb: 'FF1E3A8A' } } });
+    const instructionsRows = [
+        ['How to Review'],
+        [''],
+        ['Recommended order:'],
+        ['1. Review_Workbench - make decisions row by row (sorted by priority)'],
+        ['2. Action_Queue - same data, triage/reference view'],
+        ['3. QA_Checks_Validate - confirm all checks pass before publish'],
+        [''],
+        ['Decision meanings:'],
+        ['- Accept: keep as-is, publish'],
+        ['- Update Key: replace key with Suggested_Key; needs non-blank Suggested_Key and valid Update Side'],
+        ['- Allow One-to-Many: allow duplicate target (intentional merge)'],
+        ['- No Change: leave as-is, do NOT publish (use Accept to publish unchanged)'],
+        ['- No Match: no valid mapping found'],
+        ['- Needs Research: hold for follow-up'],
+        [''],
+        ['Gate-blocking (must be zero for PASS): Unresolved, overflow, blank finals, Update Key without Suggested_Key, Update Key with invalid Update Side, duplicates'],
+        ['Advisory (review but not gate-blocking): Stale-key lacking decision, One-to-many lacking decision'],
+        [''],
+        ['Publish gate shows PASS when ready to publish.']
+    ];
+    instructionsRows.forEach(row => reviewInstructionsSheet.addRow(row));
+    reviewInstructionsSheet.getCell('A1').font = { bold: true, size: 14 };
+    reviewInstructionsSheet.columns = [{ width: 70 }];
+
+    reportProgress('Building QA_Checks_Validate...', 91);
     const qaValidateSheet = workbook.addWorksheet('QA_Checks_Validate');
-    const aqLastRow = Math.max(2, actionQueueRows.length + 1);
-    const colDecision = columnIndexToLetter(actionQueueColumns.indexOf('Decision') + 1);
-    const colIsStaleKey = columnIndexToLetter(actionQueueColumns.indexOf('Is_Stale_Key') + 1);
-    const colSource = columnIndexToLetter(actionQueueColumns.indexOf('Source_Sheet') + 1);
-    const decisionRange = `Action_Queue!$${colDecision}$2:$${colDecision}$${aqLastRow}`;
-    const isStaleKeyRange = `Action_Queue!$${colIsStaleKey}$2:$${colIsStaleKey}$${aqLastRow}`;
-    const sourceRange = `Action_Queue!$${colSource}$2:$${colSource}$${aqLastRow}`;
+    const decisionRange = `Review_Workbench!$${reviewColLetter.Decision}$2:$${reviewColLetter.Decision}$${reviewLastRow}`;
+    const reviewPublishRangeRef = `Review_Workbench!$${reviewColLetter.Publish_Eligible}$2:$${reviewColLetter.Publish_Eligible}$${reviewLastRow}`;
+    const reviewFinalInputRange = `Review_Workbench!$${reviewColLetter.Final_Input}$2:$${reviewColLetter.Final_Input}$${reviewLastRow}`;
+    const reviewFinalOutputRange = `Review_Workbench!$${reviewColLetter.Final_Output}$2:$${reviewColLetter.Final_Output}$${reviewLastRow}`;
+    const reviewStaleRange = `Review_Workbench!$${reviewColLetter.Is_Stale_Key}$2:$${reviewColLetter.Is_Stale_Key}$${reviewLastRow}`;
+    const reviewSourceRange = `Review_Workbench!$${reviewColLetter.Source_Sheet}$2:$${reviewColLetter.Source_Sheet}$${reviewLastRow}`;
+    const reviewSuggestedKeyRange = `Review_Workbench!$${reviewColLetter.Suggested_Key}$2:$${reviewColLetter.Suggested_Key}$${reviewLastRow}`;
+    const reviewKeyUpdateSideRange = `Review_Workbench!$${reviewColLetter.Key_Update_Side}$2:$${reviewColLetter.Key_Update_Side}$${reviewLastRow}`;
+    const finalLastRow = Math.max(2, finalFormulaRows + 1);
+    const finalInputRange = `Final_Translation_Table!$A$2:$A$${finalLastRow}`;
+    const finalOutputRange = `Final_Translation_Table!$B$2:$B$${finalLastRow}`;
+    const finalDupInputCountRange = `Final_Translation_Table!$I$2:$I$${finalLastRow}`;
+    const finalDupOutputCountRange = `Final_Translation_Table!$J$2:$J$${finalLastRow}`;
     const getQAEmptyRows = (typeof ValidationExportHelpers !== 'undefined' && ValidationExportHelpers &&
         typeof ValidationExportHelpers.getQAValidateRowsForEmptyQueue === 'function')
         ? ValidationExportHelpers.getQAValidateRowsForEmptyQueue
@@ -1637,10 +2267,17 @@ async function buildValidationExport(payload) {
     const qaRows = actionQueueRows.length > 0
         ? [
             ['Check', 'Count', 'Status', 'Detail'],
-            ['Unresolved actions', `=COUNTIF(${decisionRange},"")`, '=IF(B2=0,"PASS","CHECK")', 'Rows without a decision'],
-            ['Approved for update', `=COUNTIF(${decisionRange},"Accept")+COUNTIF(${decisionRange},"Update Key")`, '', 'Accept or Update Key decisions'],
-            ['Stale-key rows lacking decision', `=COUNTIFS(${isStaleKeyRange},1,${decisionRange},"")`, '=IF(B4=0,"PASS","CHECK")', 'Likely stale key rows without decision'],
-            ['Duplicate conflict rows lacking decision', `=COUNTIFS(${sourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B5=0,"PASS","CHECK")', 'One-to-many rows without decision']
+            ['Unresolved actions', `=COUNTIF(${decisionRange},"")+COUNTIF(${decisionRange},"No Match")+COUNTIF(${decisionRange},"Needs Research")`, '=IF(B2=0,"PASS","CHECK")', 'Blank, No Match, or Needs Research'],
+            ['Approved review rows', `=COUNTIF(${decisionRange},"Accept")+COUNTIF(${decisionRange},"Update Key")+COUNTIF(${decisionRange},"Allow One-to-Many")`, '=IF(B3>0,"PASS","CHECK")', 'Rows approved from Review_Workbench'],
+            ['Approved rows beyond formula capacity', `=MAX(0,B3-${cappedReviewFormulaRows})`, '=IF(B4=0,"PASS","CHECK")', `Rows above ${cappedReviewFormulaRows} approved review decisions exceed formula row capacity`],
+            ['Blank final keys on publish-eligible rows (sanity)', `=COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalInputRange},"")+COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalOutputRange},"")`, '=IF(B5=0,"PASS","FAIL")', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
+            ['Update Key without Suggested_Key', `=COUNTIFS(${decisionRange},"Update Key",${reviewSuggestedKeyRange},"")`, '=IF(B6=0,"PASS","FAIL")', 'Update Key chosen but Suggested_Key blank; fix or change decision'],
+            ['Update Key with invalid Update Side', `=COUNTIFS(${decisionRange},"Update Key",${reviewKeyUpdateSideRange},"None")`, '=IF(B7=0,"PASS","FAIL")', 'Update Key chosen but Key_Update_Side is None; fix or change decision'],
+            ['Stale-key rows lacking decision', `=COUNTIFS(${reviewStaleRange},1,${decisionRange},"")`, '=IF(B8=0,"PASS","CHECK")', 'Likely stale key rows without decision (advisory)'],
+            ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
+            ['Duplicate final input keys', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDupInputCountRange}>1))/2`, '=IF(B10=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys'],
+            ['Duplicate final output keys', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDupOutputCountRange}>1))/2`, '=IF(B11=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys'],
+            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B10=0,B11=0),"PASS","HOLD")`, '', 'Final publish gate status (B8/B9 are advisory)']
         ]
         : getQAEmptyRows();
     qaRows.forEach(row => qaValidateSheet.addRow(row));

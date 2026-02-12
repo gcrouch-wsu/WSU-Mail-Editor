@@ -1,216 +1,168 @@
-# Validate Translation Tables - Plain English User Guide
+# Validate Translation Tables - User Guide (Plain English)
 
-This guide explains how to use the tool in simple terms.
+This guide explains how to use the app without technical jargon.
 
 ## What this tool does
 
-This app helps you do two jobs:
+The app supports 2 workflows:
 
-1. Check an existing translation table for problems (`Validate` workflow).
-2. Build a new translation table from Outcomes and myWSU source files (`Create` workflow).
+1. `Validate` - check an existing translation table and fix errors.
+2. `Create` - build a new translation table from Outcomes and myWSU.
 
-A translation table maps one source key (Outcomes) to one target key (myWSU).
+A translation table maps one Outcomes key (`translate_input`) to one myWSU key (`translate_output`).
 
 ## Basic terms
 
-- `Workflow`: one path in the app (`Validate` or `Create`).
-- `Sheet`: a tab inside the Excel file.
-- `Key`: unique ID used to map records.
-- `Name matching`: matching school names when keys are missing or not usable.
+- `Workflow`: either Validate or Create.
+- `Sheet`: a tab in the Excel file.
+- `Key`: unique ID column used for mapping.
+- `Name matching`: uses school names (and location context) when key matching is not enough.
 
 ## Before you start
 
-- Use clean headers in your files.
-- Confirm key columns are truly unique in Outcomes and myWSU.
-- Include `Name`, `City`, `State`, and `Country` columns when possible. This improves match quality.
-- If text looks garbled after upload, change file encoding and re-parse.
+- Make sure Outcomes and myWSU key columns are unique.
+- Include school name, city, state, and country columns if possible.
+- If a file looks garbled after upload, change encoding and re-parse.
 
 ## Workflow 1: Validate an existing translation table
 
-Use this when you already have a translation table and want to find errors.
+Use this when you already have a translation table and want to correct it.
 
-**Note:** Existing translate tables are assumed to have complete key pairs (input and output both filled). Blank input or output keys are not expected in normal use.
-
-### Files you need
+### Files required
 
 - Outcomes source file
-- Translation table file
-- myWSU table file
+- Translate table file
+- myWSU source file
 
 ### Steps in the app
 
-1. Select `Validate` mode.
+1. Select `Validate`.
 2. Upload all 3 files.
 3. In `Select Columns, Keys, and Roles`:
-   - Choose key columns for Outcomes, Translate input, Translate output, and myWSU.
-   - Choose which columns to include in exports.
+   - Pick key columns for Outcomes, Translate input/output, and myWSU.
+   - Pick included columns.
    - Optionally map roles (`School`, `City`, `State`, `Country`).
-4. Choose validation method:
+4. Choose validation mode:
    - `Key only`, or
    - `Key + name comparison`.
-5. If using name comparison, select name columns and set:
-   - `Threshold` (how strict matching is)
-   - `Ambiguity gap` (how far apart top matches must be)
-6. Click `Validate Mappings`. A system check runs first (row count, no blank keys, no duplicate keys in Outcomes/myWSU). If it fails, fix the data before continuing.
-7. Review on-screen results (counts, cards, optional logic preview).
+5. If using name comparison, pick name columns and adjust threshold/ambiguity gap.
+6. Click `Validate Mappings`.
+7. Review on-screen cards and counts.
 8. Click `Download Full Report`.
 
-### How to review the Excel report (recommended order)
+### Validate Excel review order (left to right)
 
-Work through sheets in this order so you tackle problems in the right sequence.
+See the `Review_Instructions` sheet in the workbook for detailed guidance. Recommended order:
 
-1. **`Action_Queue`** – Your main working sheet. It merges all actionable rows from `Errors_in_Translate`, `One_to_Many`, and `Missing_Mappings`, sorted by priority. Start here and fix the highest-priority items first.
+1. `Review_Workbench` - main decision sheet (use this first).
+2. `Approved_Mappings` - rows currently approved for publish.
+3. `Final_Translation_Table` - final publish-ready key table.
+4. `Translation_Key_Updates` - only changed key pairs.
+5. `QA_Checks_Validate` - publish gate checks.
+6. Reference/detail tabs:
+   - `Action_Queue`
+   - `Errors_in_Translate`
+   - `Output_Not_Found_Ambiguous` (if present)
+   - `Output_Not_Found_No_Replacement` (if present)
+   - `One_to_Many`
+   - `Missing_Mappings`
+   - `High_Confidence_Matches`
+   - `Valid_Mappings`
 
-2. **`Errors_in_Translate`** – All rows where the translation table has an error (keys not found in Outcomes or myWSU, name mismatches, etc.). These are the core problems in your current table.
+### How `Review_Workbench` works
 
-3. **`Output_Not_Found_Ambiguous`** (if present) – Translate rows where the output key is missing in myWSU, but name matching found multiple plausible replacements. You must choose the correct one or mark for research.
+Each row has:
 
-4. **`Output_Not_Found_No_Replacement`** (if present) – Translate rows where the output key is missing in myWSU and no replacement was found. You must correct the key manually or remove the row.
+- Current keys: `Current_Input`, `Current_Output`
+- Suggested key fields (when available)
+- Decision fields
+- Formula fields: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Has_Update`
 
-5. **`One_to_Many`** – Duplicate conflicts: either one Outcomes key maps to multiple myWSU keys, or one myWSU key is used by multiple Outcomes keys. Resolve these before publishing.
+You edit decision/audit fields only. Formula fields are locked.
 
-6. **`Missing_Mappings`** – Rows that exist in Outcomes or myWSU but have no corresponding row in your translation table. Add mappings where needed.
+### Validate decision meanings
 
-7. **`QA_Checks_Validate`** – Summary of remaining issues (unresolved actions, stale-key rows without decisions, etc.). Use it to confirm nothing is left before you update the translation table.
+- `Accept`: keep current keys as final.
+- `Update Key`: apply `Suggested_Key` on the side shown by `Key_Update_Side`.
+- `Allow One-to-Many`: approve as an exception.
+- `No Change`: keep values, but do not publish as approved.
+- `No Match`: unresolved.
+- `Needs Research`: unresolved.
 
-8. **`High_Confidence_Matches`** and **`Valid_Mappings`** – Reference tabs. These contain rows that passed validation. Use them to confirm correct mappings or to copy formats.
+### What happens automatically
 
-### Action_Queue columns (human use)
+- `Valid` and `High_Confidence_Match` rows are auto-approved.
+- You do not need to approve those one by one.
+- `Approved_Mappings` updates as you review.
+- `Final_Translation_Table` is generated from approved rows.
+- `Translation_Key_Updates` shows only rows where final keys differ from current keys.
 
-#### Context and priority
+### Publish rule of thumb
 
-- **`Priority`** – Lower number = fix first. Order is: Input_Not_Found (3), Output_Not_Found_No_Replacement (4), Duplicate_Target (5), Duplicate_Source (6), Output_Not_Found_Likely_Stale_Key (7), Output_Not_Found_Ambiguous (8), Name_Mismatch (9), Ambiguous_Match (10), Missing_Mapping (11). (Missing_Input and Missing_Output are not expected for existing tables.)
-
-- **`Recommended_Action`** – Suggested next step. Examples:
-  - `Correct input key or remove row` – input key not found in Outcomes.
-  - `Update output to suggested key` – output key likely stale; a replacement is suggested.
-  - `Choose correct replacement from candidates` – ambiguous; pick one from the alternatives.
-  - `Verify output key; remove or correct manually` – no replacement found; fix or remove.
-  - `Resolve many-to-one conflict` – resolve Duplicate_Target.
-  - `Resolve duplicate source mapping` – resolve Duplicate_Source.
-  - `Add row to Translate table` – row from Missing_Mappings.
-
-- **`Error_Type`** – `Input_Not_Found`, `Output_Not_Found`, `Duplicate_Target`, `Duplicate_Source`, `Name_Mismatch`, `Ambiguous_Match`, `Missing_Mapping`.
-
-- **`Error_Subtype`** – For `Output_Not_Found`: `Output_Not_Found_Likely_Stale_Key`, `Output_Not_Found_Ambiguous_Replacement`, `Output_Not_Found_No_Replacement`. For `Missing_Mapping`: `Outcomes` or `myWSU` (indicates which source has the row).
-
-- **`Source_Sheet`** – Which sheet the row came from: `Errors_in_Translate`, `One_to_Many`, or `Missing_Mappings`.
-
-- **`Is_Stale_Key`** – 1 = likely stale key (update candidate); 0 = other. Use for filtering and QA.
-
-- **`Missing_In`**, **`Similarity`** – For rows from `Missing_Mappings` only. `Missing_In` = `Outcomes` or `myWSU`; `Similarity` = match score when name matching was used. Blank for other sources.
-
-#### Decisions and tracking
-
-- **`Decision`** – What you chose:
-  - `Accept` – keep the row as-is (e.g. valid after verification).
-  - `Update Key` – change the output key (e.g. to a suggested replacement).
-  - `No Change` – leave as-is for now (e.g. intentional or known).
-  - `Needs Research` – hold for later follow-up.
-
-- **`Owner`**, **`Status`**, **`Resolution_Note`**, **`Resolved_Date`** – Optional tracking fields for team review.
-
-### Steps to produce a clean translation table (Validate)
-
-The report does not change your translation table. You apply changes in your table file and re-validate until clean.
-
-1. **Download the report** from the app.
-2. **Open the report Excel** and your translation table (Excel, CSV, etc.) side by side.
-3. **Work through `Action_Queue`** in priority order. For each row:
-   - If `Update Key`: change the output key in your translation table to the suggested replacement.
-   - If `No Change`: leave the row as-is (or add a note).
-   - If `Needs Research`: leave it for later; do not guess.
-   - If removing a row: delete it from your translation table.
-4. **Add missing rows** from `Missing_Mappings` into your translation table (Outcomes key → myWSU key).
-5. **Resolve duplicates** from `One_to_Many`: fix many-to-one or duplicate-source mappings in your table.
-6. **Save your translation table**.
-7. **Re-run validation** in the app. Upload the updated table and download a new report.
-8. **Repeat** until `QA_Checks_Validate` shows no unresolved issues (or only intentional `Needs Research` items).
-9. **Your translation table is clean** when QA passes and you are satisfied with the decisions.
+Use `QA_Checks_Validate` before publishing.
+Publish only when gate checks are clean (`PASS`) or you intentionally accept documented exceptions.
 
 ## Workflow 2: Create a new translation table
 
-Use this when starting from Outcomes + myWSU and you need a new mapping file.
+Use this when you are starting from Outcomes + myWSU and need a new mapping table.
 
-### Files you need
+### Files required
 
 - Outcomes source file
-- myWSU table file
+- myWSU source file
 
-(Translation table is not uploaded in this workflow.)
+### Match method
 
-### Choose a match method
+- `Match by key columns`: use when both sides have reliable keys.
+- `Match by name columns`: use when key mapping is missing/unreliable.
 
-- `Match by key columns`: use when reliable key columns exist on both sides.
-- `Match by name columns`: use when key mapping is missing or unreliable.
-
-Important: In `Create + Match by name`, key selections are optional and ignored.
+Important: in Create + name mode, key radio selections are optional and ignored.
 
 ### Steps in the app
 
-1. Select `Create` mode.
+1. Select `Create`.
 2. Upload Outcomes and myWSU.
-3. Choose included columns and (optional) role mapping.
-4. Choose match method (`key` or `name`).
-5. If matching by name, select name columns and set threshold/ambiguity gap.
+3. Choose included columns and optional role mapping.
+4. Pick match method (`key` or `name`).
+5. If name mode, pick name columns and set threshold/ambiguity gap.
 6. Click `Generate Translation Table`.
-7. Open the downloaded Excel and review decisions.
+7. Open the downloaded Excel workbook.
 
-### How to review the Create Excel file
+### Create Excel review order
 
-Use this review path to get to a clean final table quickly:
+1. `Summary`
+2. `New_Translation_Candidates`
+3. `Ambiguous_Candidates`
+4. `Missing_In_myWSU`
+5. `Missing_In_Outcomes` (diagnostic)
+6. `Review_Decisions`
+7. `Final_Translation_Table`
+8. `QA_Checks`
 
-1. `Summary` - quick totals.
-2. `New_Translation_Candidates` - 1:1 proposed matches (sorted by confidence and similarity).
-3. `Ambiguous_Candidates` - rows with close competing matches.
-4. `Missing_In_myWSU` - Outcomes rows with no target candidate.
-5. `Missing_In_Outcomes` - myWSU rows with no source row (diagnostic only).
-6. `Review_Decisions` - your main working sheet.
-7. `Final_Translation_Table` - approved output built from review decisions.
-8. `QA_Checks` - unresolved/blank/duplicate checks.
+### Create decision meanings (`Review_Decisions`)
 
-### Review_Decisions sheet: what to do
+- `Accept`: keep proposed match.
+- `Choose Alternate`: pick `Alt 1/2/3`.
+- `No Match`: unresolved.
+- `Needs Research`: unresolved.
 
-Each row is one Outcomes record.
-
-- `Decision` options:
-  - `Accept`: keep the proposed match.
-  - `Choose Alternate`: select `Alt 1/2/3` when a better option exists.
-  - `No Match`: no valid mapping found.
-  - `Needs Research`: hold for follow-up.
-- Fill `Reason_Code`, `Reviewer`, `Review_Date`, and `Notes` when useful.
-- `Final_myWSU_Key` and `Final_myWSU_Name` are formula-driven from your decision.
-
-### Steps to produce a clean translation table (Create)
-
-The `Final_Translation_Table` sheet is built from your decisions. You export it when done.
-
-1. **Download the report** from the app.
-2. **Open the Excel file** and go to `Review_Decisions`.
-3. **Work through each row** in `Review_Decisions`:
-   - For 1:1 matches: choose `Accept` or `Choose Alternate` (Alt 1/2/3).
-   - For ambiguous rows: pick the correct candidate or `Needs Research`.
-   - For no match: set `No Match`.
-4. **Check `Final_Translation_Table`** – it updates as you make decisions. It contains only rows with `Accept` or `Choose Alternate`.
-5. **Check `QA_Checks`** – resolve any unresolved, blank, or duplicate rows.
-6. **Export the clean table** – copy the `Final_Translation_Table` sheet (or save it as a new file) as your translation table.
-7. **Your translation table is clean** when all rows are decided and QA passes.
+`Final_myWSU_Key` and `Final_myWSU_Name` are formula-driven from your decision.
 
 ## Practical review tips
 
-- Do not start with low-confidence rows. Start with structural/key problems first.
-- Filter by `Priority`, then by `Error_Type`.
-- In large files, review in passes (for example, 500-1000 rows per pass).
+- Review by exception, not row by row.
+- Start with high-priority structural/key issues.
+- Process in passes (for example 500 to 1000 rows at a time).
 - Use `Needs Research` instead of guessing.
-- Use `QA_Checks_Validate` (Validate) or `QA_Checks` (Create) before publishing.
+- Always check QA sheets before publish.
 
 ## Common mistakes
 
-- Wrong key column selected (creates many false errors).
-- Name matching enabled but wrong name columns selected.
-- Ignoring country/state context when matching international rows.
-- Treating `Missing_In_Outcomes` as publishable mapping rows (they are diagnostic).
+- Wrong key column selected.
+- Name comparison enabled with wrong name columns.
+- Not mapping city/state/country roles when needed.
+- Treating `Missing_In_Outcomes` as publishable rows (it is diagnostic).
 
 ## Privacy
 
-Files are processed locally in your browser by the app. The tool is designed to avoid uploading your data to a server.
+Files are processed locally in your browser by the app design.
