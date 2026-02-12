@@ -795,7 +795,16 @@ async function buildValidationExport(payload) {
     const roleMapWsu = getRoleMap('wsu_org');
     const getFallbackRoleColumn = (columns, roleName) => {
         const roleLower = roleName.toLowerCase();
-        return columns.find(col => String(col).toLowerCase().includes(roleLower)) || '';
+        const hints = roleLower === 'school'
+            ? ['school', 'descr', 'name']
+            : [roleLower];
+        for (const hint of hints) {
+            const found = columns.find(col => String(col).toLowerCase().includes(hint));
+            if (found) {
+                return found;
+            }
+        }
+        return '';
     };
     const getRoleValue = (row, roleMap, fallbackColumns, roleName, prefix) => {
         const roleColumn = roleMap[roleName] || getFallbackRoleColumn(fallbackColumns, roleName);
@@ -830,6 +839,9 @@ async function buildValidationExport(payload) {
         nameCompareConfig.outcomes &&
         nameCompareConfig.wsu
     );
+    const wsuSuggestionCityColumn = nameCompareConfig.city_wsu || roleMapWsu.City || getFallbackRoleColumn(selectedCols.wsu_org || [], 'city');
+    const wsuSuggestionStateColumn = nameCompareConfig.state_wsu || roleMapWsu.State || getFallbackRoleColumn(selectedCols.wsu_org || [], 'state');
+    const wsuSuggestionCountryColumn = nameCompareConfig.country_wsu || roleMapWsu.Country || getFallbackRoleColumn(selectedCols.wsu_org || [], 'country');
 
     const outcomesKeyCandidates = (loadedData.outcomes || [])
         .map(row => ({
@@ -853,6 +865,9 @@ async function buildValidationExport(payload) {
                 key: row[keyConfig.wsu],
                 name: row[nameCompareConfig.wsu],
                 normName: normalizeValue(row[nameCompareConfig.wsu]),
+                city: wsuSuggestionCityColumn ? (row[wsuSuggestionCityColumn] ?? '') : '',
+                state: wsuSuggestionStateColumn ? (row[wsuSuggestionStateColumn] ?? '') : '',
+                country: wsuSuggestionCountryColumn ? (row[wsuSuggestionCountryColumn] ?? '') : '',
                 row
             }))
             .filter(entry => entry.normName)
@@ -884,12 +899,36 @@ async function buildValidationExport(payload) {
                 ? calculateNameSimilarity(outcomesName, candidate.name)
                 : similarityScore(normalizeValue(outcomesName), candidate.normName);
             if (score >= minNameScore) {
-                candidates.push({ row: candidate.row, key: candidate.key, score });
+                candidates.push({
+                    row: candidate.row,
+                    key: candidate.key,
+                    name: candidate.name,
+                    city: candidate.city,
+                    state: candidate.state,
+                    country: candidate.country,
+                    score
+                });
             }
         });
         if (!candidates.length) return null;
         candidates.sort((a, b) => b.score - a.score);
         return candidates[0];
+    };
+    const applySuggestionFallbacks = (rowData, sourceRow, suggestion) => {
+        const source = sourceRow || {};
+        const candidate = suggestion || {};
+        if (!rowData.Suggested_School) {
+            rowData.Suggested_School = source.Suggested_School || candidate.name || '';
+        }
+        if (!rowData.Suggested_City) {
+            rowData.Suggested_City = source.Suggested_City || candidate.city || '';
+        }
+        if (!rowData.Suggested_State) {
+            rowData.Suggested_State = source.Suggested_State || candidate.state || '';
+        }
+        if (!rowData.Suggested_Country) {
+            rowData.Suggested_Country = source.Suggested_Country || candidate.country || '';
+        }
     };
 
     const applySuggestionColumns = (row, rowData, errorType) => {
@@ -909,6 +948,11 @@ async function buildValidationExport(payload) {
             rowData.Suggested_Country ||
             rowData.Suggestion_Score !== ''
         );
+        const hasCompletePresetSuggestion = Boolean(
+            rowData.Suggested_Key &&
+            rowData.Suggested_School &&
+            rowData.Suggestion_Score !== ''
+        );
 
         if (errorType === 'Input_Not_Found') {
             const nameSuggestion = canSuggestNames
@@ -926,12 +970,13 @@ async function buildValidationExport(payload) {
                     suggestion.key,
                     ''
                 );
+                applySuggestionFallbacks(rowData, row, suggestion);
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
             }
         } else if (errorType === 'Output_Not_Found') {
             if (
                 row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY &&
-                hasPresetSuggestion
+                hasCompletePresetSuggestion
             ) {
                 return;
             }
@@ -950,7 +995,13 @@ async function buildValidationExport(payload) {
                     suggestion.key,
                     ''
                 );
+                applySuggestionFallbacks(rowData, row, suggestion);
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
+            } else if (
+                row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY &&
+                hasPresetSuggestion
+            ) {
+                applySuggestionFallbacks(rowData, row, null);
             }
         } else if (
             errorType === 'Name_Mismatch' ||
@@ -1010,6 +1061,7 @@ async function buildValidationExport(payload) {
                         suggestion.key,
                         ''
                     );
+                    applySuggestionFallbacks(rowData, row, suggestion);
                     rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
                 }
             }
