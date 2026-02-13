@@ -46,6 +46,7 @@ function downloadSafeFileName(name, fallback) {
 }
 
 function getHeaderFill(col, style) {
+    if (col === undefined || col === null) return style.defaultHeaderColor || 'FF1E3A8A';
     if (col === 'Error_Type') return style.errorHeaderColor;
     if (col === 'Error_Subtype') return style.errorHeaderColor;
     if (col === 'Duplicate_Group') return style.groupHeaderColor;
@@ -56,10 +57,11 @@ function getHeaderFill(col, style) {
     if (col.startsWith('Suggested_') || col === 'Suggestion_Score') {
         return style.suggestionHeaderColor;
     }
-    return style.defaultHeaderColor;
+    return style.defaultHeaderColor || 'FF1E3A8A';
 }
 
 function getBodyFill(col, style) {
+    if (col === undefined || col === null) return style.defaultBodyColor || 'FFF3F4F6';
     if (col === 'Error_Type') return style.errorBodyColor;
     if (col === 'Error_Subtype') return style.errorBodyColor;
     if (col === 'Duplicate_Group') return style.groupBodyColor;
@@ -71,6 +73,14 @@ function getBodyFill(col, style) {
         return style.suggestionBodyColor;
     }
     return style.defaultBodyColor;
+}
+
+/** Ensure cell value is ExcelJS-safe (primitive or formula object). Avoids "reading '0'" from raw objects. */
+function sanitizeCellValue(v) {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+    if (v && typeof v === 'object' && 'formula' in v) return v;
+    return String(v);
 }
 
 function columnIndexToLetter(index) {
@@ -107,7 +117,8 @@ function addSheetWithRows(workbook, config) {
         };
     });
 
-    const sourceFillByColumn = outputColumns.map(col => ({ argb: getBodyFill(col, style) }));
+    const sourceFillByColumn = outputColumns.map(col => ({ argb: getBodyFill(col, style) || 'FFF3F4F6' }));
+    const defaultFill = { argb: 'FFF3F4F6' };
     let prevGroup = null;
     const groupBorderColor = 'FF9CA3AF';
 
@@ -121,18 +132,12 @@ function addSheetWithRows(workbook, config) {
             prevGroup = currentGroup;
         }
 
-        const rowData = outputColumns.map(col => {
-            const v = row[col];
-            if (v === null || v === undefined) return '';
-            if (typeof v === 'object' && !(v && v.formula)) return String(v);
-            return v;
-        });
+        const rowData = outputColumns.map(col => sanitizeCellValue(row[col]));
         const excelRow = sheet.addRow(rowData);
         excelRow.eachCell((cell, colNumber) => {
-            const fill = sourceFillByColumn[colNumber - 1] || sourceFillByColumn[0];
-            if (fill) {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fill };
-            }
+            const fill = sourceFillByColumn[colNumber - 1] ?? sourceFillByColumn[0] ?? defaultFill;
+            const argb = (fill && fill.argb) ? fill.argb : 'FFF3F4F6';
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
             if (isNewGroup) {
                 const existingBorder = cell.border || {};
                 cell.border = {
@@ -166,12 +171,13 @@ function addSheetWithRows(workbook, config) {
         to: { row: 1, column: headers.length }
     };
     sheet.columns.forEach((column, idx) => {
-        let maxLength = headers[idx].length;
+        const headerStr = String(headers[idx] != null ? headers[idx] : '');
+        let maxLength = headerStr.length;
+        const colKey = outputColumns[idx];
         rows.forEach(row => {
-            const value = String(row[outputColumns[idx]] || '');
-            if (value.length > maxLength) {
-                maxLength = value.length;
-            }
+            const val = colKey != null ? row[colKey] : '';
+            const value = String(sanitizeCellValue(val));
+            if (value.length > maxLength) maxLength = value.length;
         });
         column.width = Math.min(maxLength + 2, 70);
     });
@@ -404,7 +410,7 @@ async function buildGenerationExport(payload) {
         const sheet = workbook.addWorksheet(sheetName);
         sheet.addRow(columns.map(col => col.header));
         sheet.getRow(1).eachCell((cell, idx) => {
-            const col = columns[idx - 1];
+            const col = columns[idx - 1] || {};
             cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             cell.fill = {
                 type: 'pattern',
@@ -414,7 +420,7 @@ async function buildGenerationExport(payload) {
         });
 
         rows.forEach(row => {
-            const rowData = columns.map(col => row[col.key] ?? '');
+            const rowData = columns.map(col => sanitizeCellValue(row[col.key]));
             sheet.addRow(rowData);
         });
 
@@ -2321,8 +2327,12 @@ self.onmessage = async (event) => {
     } catch (error) {
         let msg = error?.message || String(error);
         if (msg.includes("reading '0'")) {
-            msg += ' (check for undefined arrays or object values in row data)';
+            msg += ' (cell values may contain objects; try exporting with fewer columns or check source data)';
         }
-        self.postMessage({ type: 'error', message: msg });
+        self.postMessage({
+            type: 'error',
+            message: msg,
+            stack: error?.stack || ''
+        });
     }
 };

@@ -212,7 +212,9 @@ function runExportWorkerTask(type, payload, onProgress) {
                 worker.terminate();
                 activeExportWorker = null;
                 activeExportWorkerReject = null;
-                reject(new Error(message.message));
+                const err = new Error(message.message);
+                if (message.stack) err.exportStack = message.stack;
+                reject(err);
             }
         };
         worker.onerror = (event) => {
@@ -2137,6 +2139,9 @@ function setupDownloadButton() {
 
         } catch (error) {
             console.error('Download error:', error);
+            if (error.exportStack) {
+                console.error('Export worker stack:', error.exportStack);
+            }
             alert(`Error generating Excel: ${error.message}`);
             downloadBtn.disabled = false;
             if (progressWrap) {
