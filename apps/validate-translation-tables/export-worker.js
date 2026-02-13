@@ -103,7 +103,8 @@ function addSheetWithRows(workbook, config) {
         headers,
         rowBorderByError,
         groupColumn,
-        freezeConfig
+        freezeConfig,
+        columnLayoutByKey
     } = config;
     const sheet = workbook.addWorksheet(sheetName);
     sheet.addRow(headers);
@@ -170,16 +171,25 @@ function addSheetWithRows(workbook, config) {
         from: { row: 1, column: 1 },
         to: { row: 1, column: headers.length }
     };
+    const layoutByKey = columnLayoutByKey || {};
     sheet.columns.forEach((column, idx) => {
-        const headerStr = String(headers[idx] != null ? headers[idx] : '');
-        let maxLength = headerStr.length;
         const colKey = outputColumns[idx];
-        rows.forEach(row => {
-            const val = colKey != null ? row[colKey] : '';
-            const value = String(sanitizeCellValue(val));
-            if (value.length > maxLength) maxLength = value.length;
-        });
-        column.width = Math.min(maxLength + 2, 70);
+        const layout = colKey ? layoutByKey[colKey] : null;
+        if (layout && typeof layout.width === 'number') {
+            column.width = layout.width;
+        } else {
+            const headerStr = String(headers[idx] != null ? headers[idx] : '');
+            let maxLength = headerStr.length;
+            rows.forEach(row => {
+                const val = colKey != null ? row[colKey] : '';
+                const value = String(sanitizeCellValue(val));
+                if (value.length > maxLength) maxLength = value.length;
+            });
+            column.width = Math.min(maxLength + 2, 70);
+        }
+        if (layout && Object.prototype.hasOwnProperty.call(layout, 'hidden')) {
+            column.hidden = Boolean(layout.hidden);
+        }
     });
 
     const suggestionIndex = outputColumns.indexOf('Suggestion_Score');
@@ -839,7 +849,7 @@ async function buildGenerationExport(payload) {
     });
     const reviewLastRow = Math.max(2, reviewSheet.rowCount);
     const approvedMask = `( (Review_Decisions!$${colDecision}$2:$${colDecision}$${reviewLastRow}="Accept") + (Review_Decisions!$${colDecision}$2:$${colDecision}$${reviewLastRow}="Choose Alternate") )`;
-    const approvedRelativeRows = `ROW(Review_Decisions!$${colDecision}$2:$${colDecision}$${reviewLastRow})-ROW(Review_Decisions!$${colDecision}$2)+1`;
+    const approvedRelativeRows = `(ROW(Review_Decisions!$${colDecision}$2:$${colDecision}$${reviewLastRow})-ROW(Review_Decisions!$${colDecision}$2)+1)`;
     const approvedPick = (k) => `AGGREGATE(15,6,${approvedRelativeRows}/(${approvedMask}),${k})`;
     const indexApproved = (colLetter, k) => (
         `IFERROR(INDEX(Review_Decisions!$${colLetter}$2:$${colLetter}$${reviewLastRow},${approvedPick(k)}),"")`
@@ -1930,41 +1940,85 @@ async function buildValidationExport(payload) {
     }
 
     reportProgress('Building Review_Workbench...', 82);
+    const reviewOutcomesKeyContextKey = keyLabels.outcomes ? `outcomes_${keyLabels.outcomes}` : 'outcomes_key';
+    const reviewOutcomesNameCandidates = [
+        nameCompareConfig.outcomes ? `outcomes_${nameCompareConfig.outcomes}` : '',
+        ...outcomesColumns
+    ].filter(Boolean);
+    const reviewOutcomesNameContextKey = reviewOutcomesNameCandidates.find(key => key !== reviewOutcomesKeyContextKey) || reviewOutcomesNameCandidates[0] || 'outcomes_name';
+    const reviewWsuKeyContextKey = keyLabels.wsu ? `wsu_${keyLabels.wsu}` : 'wsu_key';
+    const reviewWsuNameCandidates = [
+        nameCompareConfig.wsu ? `wsu_${nameCompareConfig.wsu}` : '',
+        ...wsuColumns
+    ].filter(Boolean);
+    const reviewWsuNameContextKey = reviewWsuNameCandidates.find(key => key !== reviewWsuKeyContextKey) || reviewWsuNameCandidates[0] || 'wsu_name';
     const reviewWorkbenchColumns = [
-        'Review_Row_ID',
-        'Priority',
+        'Decision',
         'Error_Type',
         'Error_Subtype',
+        reviewOutcomesNameContextKey,
+        reviewOutcomesKeyContextKey,
+        reviewWsuNameContextKey,
+        reviewWsuKeyContextKey,
+        'translate_input',
+        'translate_output',
+        'Suggested_Key',
+        'Suggested_School',
+        'Current_Input',
+        'Current_Output',
+        'Final_Input',
+        'Final_Output',
+        'Decision_Warning',
+        'Review_Row_ID',
+        'Priority',
         'Source_Sheet',
         'Key_Update_Side',
         'Is_Stale_Key',
         'Missing_In',
         'Similarity',
-        ...outcomesColumns,
-        'translate_input',
-        'translate_output',
-        ...wsuColumns,
         ...mappingColumns,
-        ...reviewSuggestionColumns,
         'Recommended_Action',
-        'Decision',
-        'Decision_Warning',
-        'Current_Input',
-        'Current_Output',
-        'Final_Input',
-        'Final_Output',
         'Publish_Eligible',
         'Approval_Source',
-        'Has_Update',
-        'Owner',
-        'Status',
-        'Resolution_Note',
-        'Resolved_Date',
-        'Reviewer',
-        'Review_Date',
-        'Reason_Code',
-        'Notes'
+        'Has_Update'
+        // De-duplicate to guard against rare source-column name collisions.
     ].filter((v, i, arr) => arr.indexOf(v) === i);
+    const reviewColumnWidths = {
+        Decision: 20,
+        Error_Type: 20,
+        Error_Subtype: 20,
+        translate_input: 24,
+        translate_output: 24,
+        Suggested_Key: 22,
+        Suggested_School: 28,
+        Current_Input: 24,
+        Current_Output: 24,
+        Final_Input: 24,
+        Final_Output: 24,
+        Decision_Warning: 36
+    };
+    const hiddenReviewColumns = new Set([
+        'Review_Row_ID',
+        'Priority',
+        'Source_Sheet',
+        'Key_Update_Side',
+        'Is_Stale_Key',
+        'Missing_In',
+        'Similarity',
+        'Recommended_Action',
+        'Current_Input',
+        'Current_Output',
+        'Publish_Eligible',
+        'Approval_Source',
+        'Has_Update'
+    ]);
+    const reviewColumnLayoutByKey = {};
+    reviewWorkbenchColumns.forEach(col => {
+        reviewColumnLayoutByKey[col] = {
+            width: reviewColumnWidths[col] || 22,
+            hidden: hiddenReviewColumns.has(col)
+        };
+    });
     const reviewWorkbenchHeaders = buildHeaders(reviewWorkbenchColumns, keyLabels).map((h, i) => {
         const col = reviewWorkbenchColumns[i];
         if (col === 'Review_Row_ID') return 'Review Row ID';
@@ -1980,10 +2034,13 @@ async function buildValidationExport(payload) {
         if (col === 'Approval_Source') return 'Approval Source';
         if (col === 'Has_Update') return 'Has Update (1=yes)';
         if (col === 'Decision_Warning') return 'Decision Warning';
-        if (col === 'Resolution_Note') return 'Resolution Note';
-        if (col === 'Resolved_Date') return 'Resolved Date';
-        if (col === 'Review_Date') return 'Review Date';
-        if (col === 'Reason_Code') return 'Reason Code';
+        if (col === 'Decision') return 'Decision';
+        if (col === reviewOutcomesNameContextKey) return 'Outcomes Name';
+        if (col === reviewOutcomesKeyContextKey) return 'Outcomes Key';
+        if (col === reviewWsuNameContextKey) return 'myWSU Name';
+        if (col === reviewWsuKeyContextKey) return 'myWSU Key';
+        if (col === 'Suggested_Key') return 'Suggested Key';
+        if (col === 'Suggested_School') return 'Suggested School';
         return h || col;
     });
     addSheetWithRows(workbook, {
@@ -1992,7 +2049,8 @@ async function buildValidationExport(payload) {
         rows: actionQueueRows,
         style: baseStyle,
         headers: reviewWorkbenchHeaders,
-        rowBorderByError: null
+        rowBorderByError: null,
+        columnLayoutByKey: reviewColumnLayoutByKey
     });
     const reviewSheet = workbook.getWorksheet('Review_Workbench');
     const reviewColIndex = {};
@@ -2035,7 +2093,7 @@ async function buildValidationExport(payload) {
                 formula: `IF(AND($${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Suggested_Key}${rowNum}=""),"Update Key needs Suggested_Key",IF(AND($${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Update Key needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))`
             };
         }
-        const editableCols = ['Decision', 'Owner', 'Status', 'Resolution_Note', 'Resolved_Date', 'Reviewer', 'Review_Date', 'Reason_Code', 'Notes'];
+        const editableCols = ['Decision'];
         editableCols.forEach(col => {
             const letter = reviewColLetter[col];
             if (!letter) return;
@@ -2078,12 +2136,12 @@ async function buildValidationExport(payload) {
             const ruleStale = {
                 type: 'expression',
                 formulae: ['AND($' + cfDec + '2="",$' + cfStale + '2=1)'],
-                style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } }, border: { left: { style: 'medium', color: { argb: 'FFF59E0B' } } } }
+                style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } } }
             };
             const ruleOneToMany = {
                 type: 'expression',
                 formulae: ['AND($' + cfDec + '2="",$' + cfSource + '2="One_to_Many")'],
-                style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }, border: { left: { style: 'medium', color: { argb: 'FFEAB308' } } } }
+                style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } } }
             };
             const ruleBlankDec = {
                 type: 'expression',
@@ -2190,7 +2248,7 @@ async function buildValidationExport(payload) {
     const cappedReviewFormulaRows = Math.min(reviewRowCount, MAX_VALIDATE_DYNAMIC_REVIEW_FORMULA_ROWS);
     const reviewLastRow = Math.max(2, reviewRowCount + 1);
     const reviewPublishRange = `Review_Workbench!$${reviewColLetter.Publish_Eligible}$2:$${reviewColLetter.Publish_Eligible}$${reviewLastRow}`;
-    const reviewRelativeRows = `ROW(${reviewPublishRange})-ROW(Review_Workbench!$${reviewColLetter.Publish_Eligible}$2)+1`;
+    const reviewRelativeRows = `(ROW(${reviewPublishRange})-ROW(Review_Workbench!$${reviewColLetter.Publish_Eligible}$2)+1)`;
     const reviewApprovedPick = (k) => `AGGREGATE(15,6,${reviewRelativeRows}/(${reviewPublishRange}=1),${k})`;
     const reviewIndexValue = (key, k) => {
         const letter = reviewColLetter[key];
@@ -2254,11 +2312,31 @@ async function buildValidationExport(payload) {
 
     reportProgress('Building Final_Translation_Table...', 87);
     const finalSheet = workbook.addWorksheet('Final_Translation_Table');
+    const outcomesKeyContextKey = keyLabels.outcomes ? `outcomes_${keyLabels.outcomes}` : 'outcomes_key';
+    const finalOutcomesNameCandidates = [
+        nameCompareConfig.outcomes ? `outcomes_${nameCompareConfig.outcomes}` : '',
+        ...outcomesColumns
+    ].filter(Boolean);
+    const outcomesNameContextKey = finalOutcomesNameCandidates.find(key => key !== outcomesKeyContextKey) || finalOutcomesNameCandidates[0] || 'outcomes_name';
+    const wsuKeyContextKey = keyLabels.wsu ? `wsu_${keyLabels.wsu}` : 'wsu_key';
+    const finalWsuNameCandidates = [
+        nameCompareConfig.wsu ? `wsu_${nameCompareConfig.wsu}` : '',
+        ...wsuColumns
+    ].filter(Boolean);
+    const wsuNameContextKey = finalWsuNameCandidates.find(key => key !== wsuKeyContextKey) || finalWsuNameCandidates[0] || 'wsu_name';
     const finalColumns = [
         { key: 'translate_input', header: 'Translate Input' },
         { key: 'translate_output', header: 'Translate Output' },
         { key: 'Review_Row_ID', header: 'Review Row ID' },
         { key: 'Decision', header: 'Decision' },
+        { key: 'Current_Input', header: 'Current Translate Input' },
+        { key: 'Current_Output', header: 'Current Translate Output' },
+        { key: outcomesNameContextKey, header: 'Outcomes Name' },
+        { key: outcomesKeyContextKey, header: 'Outcomes Key' },
+        { key: wsuNameContextKey, header: 'myWSU Name' },
+        { key: wsuKeyContextKey, header: 'myWSU Key' },
+        { key: 'Suggested_Key', header: 'Suggested Key' },
+        { key: 'Suggested_School', header: 'Suggested School' },
         { key: 'Source_Sheet', header: 'Source Sheet' },
         { key: 'Owner', header: 'Owner' },
         { key: 'Resolved_Date', header: 'Resolved Date' },
@@ -2266,6 +2344,14 @@ async function buildValidationExport(payload) {
         { key: '_dup_input_count', header: '_Dup Input Count' },
         { key: '_dup_output_count', header: '_Dup Output Count' }
     ];
+    const finalColIndex = {};
+    finalColumns.forEach((col, idx) => {
+        finalColIndex[col.key] = idx + 1;
+    });
+    const finalColLetter = {};
+    Object.keys(finalColIndex).forEach(key => {
+        finalColLetter[key] = columnIndexToLetter(finalColIndex[key]);
+    });
     finalSheet.addRow(finalColumns.map(col => col.header));
     finalSheet.getRow(1).eachCell(cell => {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -2273,43 +2359,57 @@ async function buildValidationExport(payload) {
     });
     const approvedFinalInputRange = `Approved_Mappings!$${approvedColLetter.Final_Input}$2:$${approvedColLetter.Final_Input}$${approvedLastRow}`;
     const approvedFinalOutputRange = `Approved_Mappings!$${approvedColLetter.Final_Output}$2:$${approvedColLetter.Final_Output}$${approvedLastRow}`;
-    const approvedRelativeRows = `ROW(${approvedFinalInputRange})-ROW(Approved_Mappings!$${approvedColLetter.Final_Input}$2)+1`;
+    const approvedRelativeRows = `(ROW(${approvedFinalInputRange})-ROW(Approved_Mappings!$${approvedColLetter.Final_Input}$2)+1)`;
     const finalMask = `((${approvedFinalInputRange}<>"")*(${approvedFinalOutputRange}<>""))`;
     const finalPick = (k) => `AGGREGATE(15,6,${approvedRelativeRows}/(${finalMask}),${k})`;
     const finalIndex = (colKey, pickRef) => (
         `IF(${pickRef}="","",INDEX(Approved_Mappings!$${approvedColLetter[colKey]}$2:$${approvedColLetter[colKey]}$${approvedLastRow},${pickRef}))`
     );
     const finalFormulaRows = Math.max(1, autoApprovedRows.length + cappedReviewFormulaRows);
-    const finalInputDuplicateCountRange = `$A$2:$A$${finalFormulaRows + 1}`;
-    const finalOutputDuplicateCountRange = `$B$2:$B$${finalFormulaRows + 1}`;
+    const finalInputDuplicateCountRange = `$${finalColLetter.translate_input}$2:$${finalColLetter.translate_input}$${finalFormulaRows + 1}`;
+    const finalOutputDuplicateCountRange = `$${finalColLetter.translate_output}$2:$${finalColLetter.translate_output}$${finalFormulaRows + 1}`;
     for (let outputIndex = 1; outputIndex <= finalFormulaRows; outputIndex += 1) {
         const rowNum = outputIndex + 1;
-        const pickRef = `$H${rowNum}`;
-        finalSheet.addRow([
-            { formula: finalIndex('Final_Input', pickRef) },
-            { formula: finalIndex('Final_Output', pickRef) },
-            { formula: finalIndex('Review_Row_ID', pickRef) },
-            { formula: finalIndex('Decision', pickRef) },
-            { formula: finalIndex('Source_Sheet', pickRef) },
-            { formula: finalIndex('Owner', pickRef) },
-            { formula: finalIndex('Resolved_Date', pickRef) },
-            { formula: `IFERROR(${finalPick(outputIndex)},"")` },
-            { formula: `IF($A${rowNum}="","",COUNTIF(${finalInputDuplicateCountRange},$A${rowNum}))` },
-            { formula: `IF($B${rowNum}="","",COUNTIF(${finalOutputDuplicateCountRange},$B${rowNum}))` }
-        ]);
+        const pickRef = `$${finalColLetter._approved_pick}${rowNum}`;
+        const rowValues = finalColumns.map(col => {
+            if (col.key === '_approved_pick') return { formula: `IFERROR(${finalPick(outputIndex)},"")` };
+            if (col.key === '_dup_input_count') {
+                return {
+                    formula: `IF($${finalColLetter.translate_input}${rowNum}="","",COUNTIF(${finalInputDuplicateCountRange},$${finalColLetter.translate_input}${rowNum}))`
+                };
+            }
+            if (col.key === '_dup_output_count') {
+                return {
+                    formula: `IF($${finalColLetter.translate_output}${rowNum}="","",COUNTIF(${finalOutputDuplicateCountRange},$${finalColLetter.translate_output}${rowNum}))`
+                };
+            }
+            const sourceColKey = col.key === 'translate_input'
+                ? 'Final_Input'
+                : col.key === 'translate_output'
+                    ? 'Final_Output'
+                    : col.key;
+            if (!approvedColLetter[sourceColKey]) return '';
+            return { formula: finalIndex(sourceColKey, pickRef) };
+        });
+        finalSheet.addRow(rowValues);
     }
-    finalSheet.columns = [
-        { width: 24 },
-        { width: 24 },
-        { width: 56 },
-        { width: 22 },
-        { width: 22 },
-        { width: 18 },
-        { width: 16 },
-        { width: 4, hidden: true },
-        { width: 4, hidden: true },
-        { width: 4, hidden: true }
-    ];
+    const finalColumnWidths = {
+        translate_input: 24,
+        translate_output: 24,
+        Review_Row_ID: 56,
+        Decision: 22,
+        Current_Input: 24,
+        Current_Output: 24,
+        Source_Sheet: 22,
+        Owner: 18,
+        Resolved_Date: 16,
+        Suggested_Key: 22,
+        Suggested_School: 28
+    };
+    finalSheet.columns = finalColumns.map(col => ({
+        width: finalColumnWidths[col.key] || 22,
+        hidden: col.key.startsWith('_')
+    }));
 
     reportProgress('Building Translation_Key_Updates...', 89);
     const updatesSheet = workbook.addWorksheet('Translation_Key_Updates');
@@ -2367,34 +2467,6 @@ async function buildValidationExport(payload) {
         { width: 4, hidden: true }
     ];
 
-    reportProgress('Building Review_Instructions...', 90);
-    const reviewInstructionsSheet = workbook.addWorksheet('Review_Instructions', { properties: { tabColor: { argb: 'FF1E3A8A' } } });
-    const instructionsRows = [
-        ['How to Review'],
-        [''],
-        ['Recommended order:'],
-        ['1. Review_Workbench - make decisions row by row (sorted by priority). This is the only editing sheet.'],
-        ['2. Final_Translation_Table - verify approved rows flowed through as expected.'],
-        ['3. QA_Checks_Validate - confirm all gate-blocking checks pass before publish.'],
-        [''],
-        ['Decision meanings:'],
-        ['- Accept: keep as-is, publish'],
-        ['- Update Key: replace key with Suggested_Key; needs non-blank Suggested_Key and valid Update Side'],
-        ['- Allow One-to-Many: allow duplicate target (intentional merge)'],
-        ['- No Change: leave as-is, do NOT publish (use Accept to publish unchanged)'],
-        ['- No Match: no valid mapping found'],
-        ['- Needs Research: hold for follow-up'],
-        [''],
-        ['Flow: Review_Workbench approved rows -> Approved_Mappings (hidden internal sheet) -> Final_Translation_Table.'],
-        ['Gate-blocking (must be zero for PASS): Unresolved, overflow, blank finals, Update Key without Suggested_Key, Update Key with invalid Update Side, One-to-many approvals missing reason code, non-allowed duplicates'],
-        ['Advisory (review but not gate-blocking): Stale-key lacking decision, One-to-many lacking decision'],
-        [''],
-        ['Publish gate shows PASS when ready to publish.']
-    ];
-    instructionsRows.forEach(row => reviewInstructionsSheet.addRow(row));
-    reviewInstructionsSheet.getCell('A1').font = { bold: true, size: 14 };
-    reviewInstructionsSheet.columns = [{ width: 70 }];
-
     reportProgress('Building QA_Checks_Validate...', 91);
     const qaValidateSheet = workbook.addWorksheet('QA_Checks_Validate');
     const decisionRange = `Review_Workbench!$${reviewColLetter.Decision}$2:$${reviewColLetter.Decision}$${reviewLastRow}`;
@@ -2405,11 +2477,10 @@ async function buildValidationExport(payload) {
     const reviewSourceRange = `Review_Workbench!$${reviewColLetter.Source_Sheet}$2:$${reviewColLetter.Source_Sheet}$${reviewLastRow}`;
     const reviewSuggestedKeyRange = `Review_Workbench!$${reviewColLetter.Suggested_Key}$2:$${reviewColLetter.Suggested_Key}$${reviewLastRow}`;
     const reviewKeyUpdateSideRange = `Review_Workbench!$${reviewColLetter.Key_Update_Side}$2:$${reviewColLetter.Key_Update_Side}$${reviewLastRow}`;
-    const reviewReasonCodeRange = `Review_Workbench!$${reviewColLetter.Reason_Code}$2:$${reviewColLetter.Reason_Code}$${reviewLastRow}`;
     const finalLastRow = Math.max(2, finalFormulaRows + 1);
-    const finalInputRange = `Final_Translation_Table!$A$2:$A$${finalLastRow}`;
-    const finalOutputRange = `Final_Translation_Table!$B$2:$B$${finalLastRow}`;
-    const finalDecisionRange = `Final_Translation_Table!$D$2:$D$${finalLastRow}`;
+    const finalInputRange = `Final_Translation_Table!$${finalColLetter.translate_input}$2:$${finalColLetter.translate_input}$${finalLastRow}`;
+    const finalOutputRange = `Final_Translation_Table!$${finalColLetter.translate_output}$2:$${finalColLetter.translate_output}$${finalLastRow}`;
+    const finalDecisionRange = `Final_Translation_Table!$${finalColLetter.Decision}$2:$${finalColLetter.Decision}$${finalLastRow}`;
     const getQAEmptyRows = (typeof ValidationExportHelpers !== 'undefined' && ValidationExportHelpers &&
         typeof ValidationExportHelpers.getQAValidateRowsForEmptyQueue === 'function')
         ? ValidationExportHelpers.getQAValidateRowsForEmptyQueue
@@ -2429,12 +2500,11 @@ async function buildValidationExport(payload) {
             ['Blank final keys on publish-eligible rows (sanity)', `=COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalInputRange},"")+COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalOutputRange},"")`, '=IF(B5=0,"PASS","FAIL")', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
             ['Update Key without Suggested_Key', `=COUNTIFS(${decisionRange},"Update Key",${reviewSuggestedKeyRange},"")`, '=IF(B6=0,"PASS","FAIL")', 'Update Key chosen but Suggested_Key blank; fix or change decision'],
             ['Update Key with invalid Update Side', `=COUNTIFS(${decisionRange},"Update Key",${reviewKeyUpdateSideRange},"None")`, '=IF(B7=0,"PASS","FAIL")', 'Update Key chosen but Key_Update_Side is None; fix or change decision'],
-            ['One-to-many approvals missing reason code', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"Allow One-to-Many",${reviewReasonCodeRange},"")`, '=IF(B8=0,"PASS","FAIL")', 'Allow One-to-Many requires Reason_Code for auditability'],
-            ['Stale-key rows lacking decision', `=COUNTIFS(${reviewStaleRange},1,${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'Likely stale key rows without decision (advisory)'],
-            ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B10=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
-            ['Duplicate final input keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B11=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
-            ['Duplicate final output keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalOutputRange},${finalOutputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B12=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
-            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B8=0,B11=0,B12=0),"PASS","HOLD")`, '', 'Final publish gate status (B9/B10 are advisory)']
+            ['Stale-key rows lacking decision', `=COUNTIFS(${reviewStaleRange},1,${decisionRange},"")`, '=IF(B8=0,"PASS","CHECK")', 'Likely stale key rows without decision (advisory)'],
+            ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
+            ['Duplicate final input keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B10=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
+            ['Duplicate final output keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalOutputRange},${finalOutputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B11=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
+            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B10=0,B11=0),"PASS","HOLD")`, '', 'Final publish gate status (B8/B9 are advisory)']
         ]
         : getQAEmptyRows();
     qaRows.forEach(row => qaValidateSheet.addRow(row));

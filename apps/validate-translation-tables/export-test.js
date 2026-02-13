@@ -466,6 +466,23 @@ async function run() {
             finalInputFormulaCell.includes('INDEX(Approved_Mappings'),
             'Final table rows should be pulled from Approved_Mappings formula pipeline'
         );
+        const outcomesNameCol = findHeaderIndex(finalSheet, 'Outcomes Name');
+        const myWsuNameCol = findHeaderIndex(finalSheet, 'myWSU Name');
+        const currentInputCol = findHeaderIndex(finalSheet, 'Current Translate Input');
+        const approvedPickCol = findHeaderIndex(finalSheet, '_Approved Pick');
+        assert.ok(outcomesNameCol > 0, 'Final table should include Outcomes Name context');
+        assert.ok(myWsuNameCol > 0, 'Final table should include myWSU Name context');
+        assert.ok(currentInputCol > 0, 'Final table should include current translate keys for reviewer context');
+        assert.ok(approvedPickCol > 0, 'Final table should include internal approved-pick helper');
+        const approvedPickFormula = finalSheet.getRow(2).getCell(approvedPickCol).value?.formula || '';
+        assert.ok(
+            approvedPickFormula.includes('AGGREGATE(15,6,(ROW('),
+            'Approved pick formula should wrap ROW math in parentheses before dividing by mask'
+        );
+        assert.ok(
+            approvedPickFormula.includes('+1)/(('),
+            'Approved pick formula should divide the full row-index expression by the eligibility mask'
+        );
     });
 
     await runCheck('buildGenerationExport includes create review guidance columns and instructions', async () => {

@@ -161,16 +161,16 @@ runCheck('filterOutputNotFoundBySubtype uses raw subtype', () => {
 
 runCheck('getQAValidateRowsForEmptyQueue returns valid structure', () => {
     const rows = helpers.getQAValidateRowsForEmptyQueue();
-    assert.equal(rows.length, 13, 'Header + 12 check rows matching non-empty QA layout');
+    assert.equal(rows.length, 12, 'Header + 11 check rows matching non-empty QA layout');
     assert.equal(rows[0][0], 'Check');
     assert.equal(rows[1][1], 0);
     assert.equal(rows[1][2], 'PASS');
     assert.equal(rows[2][2], 'PASS', 'Approved review rows status should be PASS when empty');
     assert.equal(rows[6][0], 'Update Key with invalid Update Side');
-    assert.equal(rows[7][0], 'One-to-many approvals missing reason code');
-    assert.equal(rows[12][0], 'Publish gate');
-    assert.equal(rows[12][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
-    assert.equal(rows[12][2], '', 'Empty-queue publish gate Status column C empty to match non-empty');
+    assert.equal(rows[7][0], 'Stale-key rows lacking decision');
+    assert.equal(rows[11][0], 'Publish gate');
+    assert.equal(rows[11][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
+    assert.equal(rows[11][2], '', 'Empty-queue publish gate Status column C empty to match non-empty');
 });
 
 runCheck('export-worker: Input_Not_Found uses reverse name suggestion from myWSU', () => {
@@ -205,9 +205,8 @@ runCheck('export-worker: Validate publish gate checks exist', () => {
     assert.ok(exportWorkerCode.includes('B5=0'));
     assert.ok(exportWorkerCode.includes('B6=0'));
     assert.ok(exportWorkerCode.includes('B7=0'));
-    assert.ok(exportWorkerCode.includes('B8=0'));
+    assert.ok(exportWorkerCode.includes('B10=0'));
     assert.ok(exportWorkerCode.includes('B11=0'));
-    assert.ok(exportWorkerCode.includes('B12=0'));
     assert.ok(exportWorkerCode.includes('"PASS","HOLD"'));
 });
 
@@ -229,8 +228,8 @@ runCheck('export-worker: Human review safeguards exist', () => {
     assert.ok(exportWorkerCode.includes('Update Key needs'));
     assert.ok(exportWorkerCode.includes('valid Update Side'));
     assert.ok(exportWorkerCode.includes('Update Key with invalid Update Side'));
-    assert.ok(exportWorkerCode.includes('One-to-many approvals missing reason code'));
     assert.ok(exportWorkerCode.includes('Approved but blank final'));
+    assert.ok(exportWorkerCode.includes("const editableCols = ['Decision']"));
 });
 
 runCheck('export-worker: Validate internal staging tabs are hidden', () => {
@@ -254,20 +253,32 @@ runCheck('export-worker: Create review sheet highlights unresolved manual rows',
     assert.ok(exportWorkerCode.includes('AND($${colDecision}2="",OR($${colSourceStatus}2="Ambiguous Match",$${colSourceStatus}2="Missing in myWSU"))'));
 });
 
-runCheck('export-worker: Review_Instructions sheet exists', () => {
-    assert.ok(exportWorkerCode.includes("'Review_Instructions'") || exportWorkerCode.includes('Review_Instructions'));
-    assert.ok(exportWorkerCode.includes('How to Review'));
+runCheck('export-worker: Validate workbook omits Review_Instructions tab', () => {
+    assert.ok(!exportWorkerCode.includes("addWorksheet('Review_Instructions'"));
 });
 
 runCheck('export-worker: Review_Workbench has freeze and conditional formatting', () => {
-    assert.ok(exportWorkerCode.includes('freezeConfig'));
-    assert.ok(exportWorkerCode.includes('xSplit'));
     assert.ok(exportWorkerCode.includes('addConditionalFormatting'));
+    assert.ok(exportWorkerCode.includes('hiddenReviewColumns'));
 });
 
 runCheck('export-worker: Publish_Eligible excludes No Change', () => {
     assert.ok(exportWorkerCode.includes('non-publishable') || exportWorkerCode.includes('do NOT publish'),
         'Intent to exclude No Change from publish should be documented');
+});
+
+runCheck('export-worker: Final_Translation_Table includes reviewer context and stable AGGREGATE math', () => {
+    assert.ok(exportWorkerCode.includes("header: 'Outcomes Name'"));
+    assert.ok(exportWorkerCode.includes("header: 'myWSU Name'"));
+    assert.ok(exportWorkerCode.includes("header: 'Current Translate Input'"));
+    assert.ok(
+        exportWorkerCode.includes('const approvedRelativeRows = `(ROW(${approvedFinalInputRange})-ROW(Approved_Mappings!'),
+        'Final approved row math should be wrapped in parentheses before mask division'
+    );
+    assert.ok(
+        exportWorkerCode.includes('const reviewRelativeRows = `(ROW(${reviewPublishRange})-ROW(Review_Workbench!'),
+        'Review approved row math should be wrapped in parentheses before mask division'
+    );
 });
 
 runCheck('export-worker: expression CF rules use formulae array not formula string', () => {
