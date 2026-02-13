@@ -66,6 +66,7 @@ class FakeWorksheet {
         this._rows = new Map();
         this._rowCount = 0;
         this._columns = [];
+        this.state = 'visible';
         this.views = [];
         this.autoFilter = undefined;
         this.dataValidations = {
@@ -224,6 +225,11 @@ function getRowValues(sheet, rowNumber, upToColumn) {
     return values;
 }
 
+function findHeaderIndex(sheet, headerText, scanColumns = 80) {
+    const headers = getRowValues(sheet, 1, scanColumns).map(v => String(v || ''));
+    return headers.indexOf(headerText) + 1;
+}
+
 function assertExportResult(result) {
     assert.ok(result, 'Expected result object');
     assert.equal(typeof result.filename, 'string');
@@ -365,6 +371,101 @@ async function run() {
         const workbook = harness.getLastWorkbook();
         assert.ok(workbook.getWorksheet('Review_Workbench'), 'Expected Review_Workbench worksheet');
         assert.ok(workbook.getWorksheet('QA_Checks_Validate'), 'Expected QA_Checks_Validate worksheet');
+    });
+
+    await runCheck('buildValidationExport keeps review-to-final approval flow and output-side duplicate suggestions', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Duplicate_Target',
+                    Duplicate_Group: 'G-1',
+                    translate_input: 'IN-ALPHA',
+                    translate_output: 'OUT-LEGACY',
+                    outcomes_school: 'Alpha Campus',
+                    wsu_school: 'Legacy Org'
+                }
+            ],
+            selectedCols: {
+                outcomes: ['school'],
+                wsu_org: ['school']
+            },
+            options: {
+                includeSuggestions: true,
+                nameCompareConfig: {
+                    enabled: true,
+                    outcomes: 'school',
+                    wsu: 'school',
+                    threshold: 0.8
+                }
+            },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-ALPHA', school: 'Alpha Campus' }],
+                    translate: [{ translate_input: 'IN-ALPHA', translate_output: 'OUT-LEGACY' }],
+                    wsu_org: [
+                        { key: 'OUT-LEGACY', school: 'Legacy Org' },
+                        { key: 'OUT-BETTER', school: 'Alpha Campus' }
+                    ]
+                },
+                keyConfig: {
+                    outcomes: 'key',
+                    translateInput: 'translate_input',
+                    translateOutput: 'translate_output',
+                    wsu: 'key'
+                },
+                keyLabels: {
+                    outcomes: 'key',
+                    wsu: 'key',
+                    translateInput: 'translate_input',
+                    translateOutput: 'translate_output'
+                },
+                columnRoles: {
+                    outcomes: { school: 'School' },
+                    wsu_org: { school: 'School' }
+                }
+            }
+        });
+        assertExportResult(result);
+
+        const workbook = harness.getLastWorkbook();
+        const actionQueue = workbook.getWorksheet('Action_Queue');
+        const approvedMappings = workbook.getWorksheet('Approved_Mappings');
+        const oneToMany = workbook.getWorksheet('One_to_Many');
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        const finalSheet = workbook.getWorksheet('Final_Translation_Table');
+        assert.ok(actionQueue, 'Expected Action_Queue worksheet');
+        assert.ok(approvedMappings, 'Expected Approved_Mappings worksheet');
+        assert.ok(oneToMany, 'Expected One_to_Many worksheet');
+        assert.ok(reviewSheet, 'Expected Review_Workbench worksheet');
+        assert.ok(finalSheet, 'Expected Final_Translation_Table worksheet');
+
+        assert.equal(actionQueue.state, 'hidden', 'Action_Queue should be hidden in exported workbook');
+        assert.equal(approvedMappings.state, 'hidden', 'Approved_Mappings should be hidden in exported workbook');
+
+        const reviewView = Array.isArray(reviewSheet.views) && reviewSheet.views[0] ? reviewSheet.views[0] : {};
+        assert.equal(reviewView.ySplit, 1, 'Review_Workbench should freeze header row');
+        assert.ok(!reviewView.xSplit, 'Review_Workbench should not freeze wide left pane columns');
+
+        const suggestedKeyCol = findHeaderIndex(oneToMany, 'Suggested Key');
+        assert.ok(suggestedKeyCol > 0, 'One_to_Many should include Suggested Key');
+        const suggestedKeyValue = oneToMany.getRow(2).getCell(suggestedKeyCol).value;
+        assert.equal(suggestedKeyValue, 'OUT-BETTER', 'Duplicate rows should suggest myWSU output-side key');
+
+        const reviewFinalInputCol = findHeaderIndex(reviewSheet, 'Final Translate Input');
+        const reviewPublishEligibleCol = findHeaderIndex(reviewSheet, 'Publish Eligible (1=yes)');
+        assert.ok(reviewFinalInputCol > 0, 'Review sheet should include Final Translate Input');
+        assert.ok(reviewPublishEligibleCol > 0, 'Review sheet should include Publish Eligible');
+        const finalInputFormula = reviewSheet.getRow(2).getCell(reviewFinalInputCol).value?.formula || '';
+        const publishFormula = reviewSheet.getRow(2).getCell(reviewPublishEligibleCol).value?.formula || '';
+        assert.ok(finalInputFormula.includes('"Allow One-to-Many"'), 'Final input formula should allow one-to-many approvals');
+        assert.ok(publishFormula.includes('"Allow One-to-Many"'), 'Publish eligibility should include one-to-many approvals');
+
+        const finalInputFormulaCell = finalSheet.getRow(2).getCell(1).value?.formula || '';
+        assert.ok(
+            finalInputFormulaCell.includes('INDEX(Approved_Mappings'),
+            'Final table rows should be pulled from Approved_Mappings formula pipeline'
+        );
     });
 
     await runCheck('buildGenerationExport includes create review guidance columns and instructions', async () => {

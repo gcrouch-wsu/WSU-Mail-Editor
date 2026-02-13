@@ -55,19 +55,21 @@ Use this when you already have a translation table and want to correct it.
 See the `Review_Instructions` sheet in the workbook for detailed guidance. Recommended order:
 
 1. `Review_Workbench` - main decision sheet (use this first).
-2. `Approved_Mappings` - rows currently approved for publish.
-3. `Final_Translation_Table` - final publish-ready key table.
-4. `Translation_Key_Updates` - only changed key pairs.
-5. `QA_Checks_Validate` - publish gate checks.
-6. Reference/detail tabs:
-   - `Action_Queue`
-   - `Errors_in_Translate`
-   - `Output_Not_Found_Ambiguous` (if present)
-   - `Output_Not_Found_No_Replacement` (if present)
-   - `One_to_Many`
-   - `Missing_Mappings`
-   - `High_Confidence_Matches`
-   - `Valid_Mappings`
+2. `Final_Translation_Table` - final publish-ready key table.
+3. `Translation_Key_Updates` - only changed key pairs.
+4. `QA_Checks_Validate` - publish gate checks.
+5. Reference/detail tabs:
+    - `Action_Queue`
+    - `Approved_Mappings`
+    - `Errors_in_Translate`
+    - `Output_Not_Found_Ambiguous` (if present)
+    - `Output_Not_Found_No_Replacement` (if present)
+    - `One_to_Many`
+    - `Missing_Mappings`
+    - `High_Confidence_Matches`
+    - `Valid_Mappings`
+
+Note: `Action_Queue` and `Approved_Mappings` are internal formula/staging tabs and may be hidden in the workbook.
 
 ### How `Review_Workbench` works
 
@@ -79,12 +81,13 @@ Each row has:
 - Formula fields: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Has_Update`
 
 You edit decision/audit fields only. Formula fields are locked.
+The sheet freezes the header row only, so horizontal scrolling should remain usable.
 
 ### Validate decision meanings
 
 - `Accept`: keep current keys as final.
 - `Update Key`: apply `Suggested_Key` on the side shown by `Key_Update_Side`.
-- `Allow One-to-Many`: approve as an exception.
+- `Allow One-to-Many`: approve as an exception (requires `Reason_Code`).
 - `No Change`: keep values, but do not publish as approved.
 - `No Match`: unresolved.
 - `Needs Research`: unresolved.
@@ -93,14 +96,24 @@ You edit decision/audit fields only. Formula fields are locked.
 
 - `Valid` and `High_Confidence_Match` rows are auto-approved.
 - You do not need to approve those one by one.
-- `Approved_Mappings` updates as you review.
+- Internal `Approved_Mappings` updates as you review.
 - `Final_Translation_Table` is generated from approved rows.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
+- Publish flow is: `Review_Workbench` -> `Approved_Mappings` (internal) -> `Final_Translation_Table`.
 
 ### Publish rule of thumb
 
 Use `QA_Checks_Validate` before publishing.
 Publish only when gate checks are clean (`PASS`) or you intentionally accept documented exceptions.
+Gate-blocking checks include:
+
+- unresolved actions
+- overflow beyond formula capacity
+- blank finals on publish-eligible rows
+- `Update Key` without `Suggested_Key`
+- `Update Key` with invalid `Key_Update_Side`
+- `Allow One-to-Many` approvals missing `Reason_Code`
+- duplicate final keys excluding rows intentionally approved as `Allow One-to-Many`
 
 ## Workflow 2: Create a new translation table
 
@@ -129,6 +142,8 @@ Important: in Create + name mode, key radio selections are optional and ignored.
 7. Open the downloaded Excel workbook.
 
 ### Create Excel review order
+
+See the `Review_Instructions_Create` sheet in the workbook for detailed guidance. Recommended order:
 
 1. `Summary`
 2. `New_Translation_Candidates`

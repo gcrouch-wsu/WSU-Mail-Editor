@@ -614,8 +614,9 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
 
     const guessRole = (col) => {
         const normalized = String(col || '').toLowerCase();
-        if (normalized.includes('school type')) return 'Other';
-        if (normalized.includes('name') || normalized.includes('school name')) return 'School';
+        // Do not auto-assign school type columns to Other; leave for explicit reviewer choice.
+        if (normalized.includes('school type')) return '';
+        if (normalized.includes('name')) return 'School';
         if (normalized.includes('city')) return 'City';
         if (normalized.includes('state')) return 'State';
         if (normalized.includes('country')) return 'Country';

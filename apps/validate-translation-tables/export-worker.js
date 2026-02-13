@@ -1243,26 +1243,24 @@ async function buildValidationExport(payload) {
             const outcomesName = row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '';
             const wsuName = row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '';
             if (errorType === 'Duplicate_Target' || errorType === 'Duplicate_Source') {
-                if (errorType === 'Duplicate_Target') {
-                    const outcomesKeyValue = row[`outcomes_${keyLabels.outcomes}`] || row.translate_input;
+                // One-to-many review defaults to output-side (myWSU) suggestions.
+                const outputSuggestion = canSuggestNames
+                    ? getBestNameSuggestion(outcomesName)
+                    : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+                if (outputSuggestion) {
                     fillSuggestedFields(
                         rowData,
-                        row,
-                        roleMapOutcomes,
-                        selectedCols.outcomes,
-                        outcomesKeyValue,
-                        'outcomes_'
-                    );
-                } else {
-                    const wsuKeyValue = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
-                    fillSuggestedFields(
-                        rowData,
-                        row,
+                        outputSuggestion.row,
                         roleMapWsu,
                         selectedCols.wsu_org,
-                        wsuKeyValue,
-                        'wsu_'
+                        outputSuggestion.key,
+                        ''
                     );
+                    applySuggestionFallbacks(rowData, row, outputSuggestion);
+                    rowData.Suggestion_Score = formatSuggestionScore(outputSuggestion.score);
+                } else {
+                    const currentOutputKey = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
+                    fillSuggestedFields(rowData, row, roleMapWsu, selectedCols.wsu_org, currentOutputKey, 'wsu_');
                 }
             } else if (errorType === 'High_Confidence_Match') {
                 const wsuKeyValue = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
@@ -1916,6 +1914,10 @@ async function buildValidationExport(payload) {
     });
     const colDecisionAq = columnIndexToLetter(actionQueueColumns.indexOf('Decision') + 1);
     const aqSheet = workbook.getWorksheet('Action_Queue');
+    if (aqSheet) {
+        // Internal staging sheet; keep workbook navigation focused on reviewer tabs.
+        aqSheet.state = 'hidden';
+    }
     if (aqSheet && actionQueueRows.length > 0) {
         aqSheet.dataValidations.add(
             `${colDecisionAq}2:${colDecisionAq}${actionQueueRows.length + 1}`,
@@ -1984,15 +1986,13 @@ async function buildValidationExport(payload) {
         if (col === 'Reason_Code') return 'Reason Code';
         return h || col;
     });
-    const finalOutputColIndex = reviewWorkbenchColumns.indexOf('Final_Output') + 1;
     addSheetWithRows(workbook, {
         sheetName: 'Review_Workbench',
         outputColumns: reviewWorkbenchColumns,
         rows: actionQueueRows,
         style: baseStyle,
         headers: reviewWorkbenchHeaders,
-        rowBorderByError: null,
-        freezeConfig: { xSplit: finalOutputColIndex, ySplit: 1 }
+        rowBorderByError: null
     });
     const reviewSheet = workbook.getWorksheet('Review_Workbench');
     const reviewColIndex = {};
@@ -2238,6 +2238,10 @@ async function buildValidationExport(payload) {
         rowBorderByError: null
     });
     const approvedSheet = workbook.getWorksheet('Approved_Mappings');
+    if (approvedSheet) {
+        // Internal staging sheet; keep workbook navigation focused on reviewer tabs.
+        approvedSheet.state = 'hidden';
+    }
     const approvedColIndex = {};
     approvedColumns.forEach((col, idx) => {
         approvedColIndex[col] = idx + 1;
@@ -2369,9 +2373,9 @@ async function buildValidationExport(payload) {
         ['How to Review'],
         [''],
         ['Recommended order:'],
-        ['1. Review_Workbench - make decisions row by row (sorted by priority)'],
-        ['2. Action_Queue - same data, triage/reference view'],
-        ['3. QA_Checks_Validate - confirm all checks pass before publish'],
+        ['1. Review_Workbench - make decisions row by row (sorted by priority). This is the only editing sheet.'],
+        ['2. Final_Translation_Table - verify approved rows flowed through as expected.'],
+        ['3. QA_Checks_Validate - confirm all gate-blocking checks pass before publish.'],
         [''],
         ['Decision meanings:'],
         ['- Accept: keep as-is, publish'],
@@ -2381,7 +2385,8 @@ async function buildValidationExport(payload) {
         ['- No Match: no valid mapping found'],
         ['- Needs Research: hold for follow-up'],
         [''],
-        ['Gate-blocking (must be zero for PASS): Unresolved, overflow, blank finals, Update Key without Suggested_Key, Update Key with invalid Update Side, duplicates'],
+        ['Flow: Review_Workbench approved rows -> Approved_Mappings (hidden internal sheet) -> Final_Translation_Table.'],
+        ['Gate-blocking (must be zero for PASS): Unresolved, overflow, blank finals, Update Key without Suggested_Key, Update Key with invalid Update Side, One-to-many approvals missing reason code, non-allowed duplicates'],
         ['Advisory (review but not gate-blocking): Stale-key lacking decision, One-to-many lacking decision'],
         [''],
         ['Publish gate shows PASS when ready to publish.']
@@ -2400,11 +2405,11 @@ async function buildValidationExport(payload) {
     const reviewSourceRange = `Review_Workbench!$${reviewColLetter.Source_Sheet}$2:$${reviewColLetter.Source_Sheet}$${reviewLastRow}`;
     const reviewSuggestedKeyRange = `Review_Workbench!$${reviewColLetter.Suggested_Key}$2:$${reviewColLetter.Suggested_Key}$${reviewLastRow}`;
     const reviewKeyUpdateSideRange = `Review_Workbench!$${reviewColLetter.Key_Update_Side}$2:$${reviewColLetter.Key_Update_Side}$${reviewLastRow}`;
+    const reviewReasonCodeRange = `Review_Workbench!$${reviewColLetter.Reason_Code}$2:$${reviewColLetter.Reason_Code}$${reviewLastRow}`;
     const finalLastRow = Math.max(2, finalFormulaRows + 1);
     const finalInputRange = `Final_Translation_Table!$A$2:$A$${finalLastRow}`;
     const finalOutputRange = `Final_Translation_Table!$B$2:$B$${finalLastRow}`;
-    const finalDupInputCountRange = `Final_Translation_Table!$I$2:$I$${finalLastRow}`;
-    const finalDupOutputCountRange = `Final_Translation_Table!$J$2:$J$${finalLastRow}`;
+    const finalDecisionRange = `Final_Translation_Table!$D$2:$D$${finalLastRow}`;
     const getQAEmptyRows = (typeof ValidationExportHelpers !== 'undefined' && ValidationExportHelpers &&
         typeof ValidationExportHelpers.getQAValidateRowsForEmptyQueue === 'function')
         ? ValidationExportHelpers.getQAValidateRowsForEmptyQueue
@@ -2424,11 +2429,12 @@ async function buildValidationExport(payload) {
             ['Blank final keys on publish-eligible rows (sanity)', `=COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalInputRange},"")+COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalOutputRange},"")`, '=IF(B5=0,"PASS","FAIL")', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
             ['Update Key without Suggested_Key', `=COUNTIFS(${decisionRange},"Update Key",${reviewSuggestedKeyRange},"")`, '=IF(B6=0,"PASS","FAIL")', 'Update Key chosen but Suggested_Key blank; fix or change decision'],
             ['Update Key with invalid Update Side', `=COUNTIFS(${decisionRange},"Update Key",${reviewKeyUpdateSideRange},"None")`, '=IF(B7=0,"PASS","FAIL")', 'Update Key chosen but Key_Update_Side is None; fix or change decision'],
-            ['Stale-key rows lacking decision', `=COUNTIFS(${reviewStaleRange},1,${decisionRange},"")`, '=IF(B8=0,"PASS","CHECK")', 'Likely stale key rows without decision (advisory)'],
-            ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
-            ['Duplicate final input keys', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDupInputCountRange}>1))/2`, '=IF(B10=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys'],
-            ['Duplicate final output keys', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDupOutputCountRange}>1))/2`, '=IF(B11=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys'],
-            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B10=0,B11=0),"PASS","HOLD")`, '', 'Final publish gate status (B8/B9 are advisory)']
+            ['One-to-many approvals missing reason code', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"Allow One-to-Many",${reviewReasonCodeRange},"")`, '=IF(B8=0,"PASS","FAIL")', 'Allow One-to-Many requires Reason_Code for auditability'],
+            ['Stale-key rows lacking decision', `=COUNTIFS(${reviewStaleRange},1,${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'Likely stale key rows without decision (advisory)'],
+            ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B10=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
+            ['Duplicate final input keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B11=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
+            ['Duplicate final output keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalOutputRange},${finalOutputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B12=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
+            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B8=0,B11=0,B12=0),"PASS","HOLD")`, '', 'Final publish gate status (B9/B10 are advisory)']
         ]
         : getQAEmptyRows();
     qaRows.forEach(row => qaValidateSheet.addRow(row));

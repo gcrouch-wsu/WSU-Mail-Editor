@@ -161,15 +161,16 @@ runCheck('filterOutputNotFoundBySubtype uses raw subtype', () => {
 
 runCheck('getQAValidateRowsForEmptyQueue returns valid structure', () => {
     const rows = helpers.getQAValidateRowsForEmptyQueue();
-    assert.equal(rows.length, 12, 'Header + 11 check rows matching non-empty QA layout');
+    assert.equal(rows.length, 13, 'Header + 12 check rows matching non-empty QA layout');
     assert.equal(rows[0][0], 'Check');
     assert.equal(rows[1][1], 0);
     assert.equal(rows[1][2], 'PASS');
     assert.equal(rows[2][2], 'PASS', 'Approved review rows status should be PASS when empty');
     assert.equal(rows[6][0], 'Update Key with invalid Update Side');
-    assert.equal(rows[11][0], 'Publish gate');
-    assert.equal(rows[11][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
-    assert.equal(rows[11][2], '', 'Empty-queue publish gate Status column C empty to match non-empty');
+    assert.equal(rows[7][0], 'One-to-many approvals missing reason code');
+    assert.equal(rows[12][0], 'Publish gate');
+    assert.equal(rows[12][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
+    assert.equal(rows[12][2], '', 'Empty-queue publish gate Status column C empty to match non-empty');
 });
 
 runCheck('export-worker: Input_Not_Found uses reverse name suggestion from myWSU', () => {
@@ -204,8 +205,9 @@ runCheck('export-worker: Validate publish gate checks exist', () => {
     assert.ok(exportWorkerCode.includes('B5=0'));
     assert.ok(exportWorkerCode.includes('B6=0'));
     assert.ok(exportWorkerCode.includes('B7=0'));
-    assert.ok(exportWorkerCode.includes('B10=0'));
+    assert.ok(exportWorkerCode.includes('B8=0'));
     assert.ok(exportWorkerCode.includes('B11=0'));
+    assert.ok(exportWorkerCode.includes('B12=0'));
     assert.ok(exportWorkerCode.includes('"PASS","HOLD"'));
 });
 
@@ -227,7 +229,13 @@ runCheck('export-worker: Human review safeguards exist', () => {
     assert.ok(exportWorkerCode.includes('Update Key needs'));
     assert.ok(exportWorkerCode.includes('valid Update Side'));
     assert.ok(exportWorkerCode.includes('Update Key with invalid Update Side'));
+    assert.ok(exportWorkerCode.includes('One-to-many approvals missing reason code'));
     assert.ok(exportWorkerCode.includes('Approved but blank final'));
+});
+
+runCheck('export-worker: Validate internal staging tabs are hidden', () => {
+    assert.ok(exportWorkerCode.includes("aqSheet.state = 'hidden'"));
+    assert.ok(exportWorkerCode.includes("approvedSheet.state = 'hidden'"));
 });
 
 runCheck('export-worker: Create review workflow is explicit in Excel', () => {

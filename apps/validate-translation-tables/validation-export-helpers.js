@@ -74,11 +74,12 @@
             ['Blank final keys on publish-eligible rows (sanity)', 0, 'PASS', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
             ['Update Key without Suggested_Key', 0, 'PASS', 'Update Key chosen but Suggested_Key blank; fix or change decision'],
             ['Update Key with invalid Update Side', 0, 'PASS', 'Update Key chosen but Key_Update_Side is None; fix or change decision'],
+            ['One-to-many approvals missing reason code', 0, 'PASS', 'Allow One-to-Many requires Reason_Code for auditability'],
             ['Stale-key rows lacking decision', 0, 'PASS', 'Likely stale key rows without decision (advisory)'],
             ['One-to-many rows lacking decision', 0, 'PASS', 'One-to-many rows without decision (advisory)'],
-            ['Duplicate final input keys', 0, 'PASS', 'Duplicates in Final_Translation_Table input keys'],
-            ['Duplicate final output keys', 0, 'PASS', 'Duplicates in Final_Translation_Table output keys'],
-            ['Publish gate', 'PASS', '', 'Final publish gate status (B8/B9 are advisory)']
+            ['Duplicate final input keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
+            ['Duplicate final output keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
+            ['Publish gate', 'PASS', '', 'Final publish gate status (B9/B10 are advisory)']
         ];
     }
 
