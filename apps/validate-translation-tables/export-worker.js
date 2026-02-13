@@ -121,11 +121,18 @@ function addSheetWithRows(workbook, config) {
             prevGroup = currentGroup;
         }
 
-        const rowData = outputColumns.map(col => row[col] ?? '');
+        const rowData = outputColumns.map(col => {
+            const v = row[col];
+            if (v === null || v === undefined) return '';
+            if (typeof v === 'object' && !(v && v.formula)) return String(v);
+            return v;
+        });
         const excelRow = sheet.addRow(rowData);
         excelRow.eachCell((cell, colNumber) => {
-            const fill = sourceFillByColumn[colNumber - 1];
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fill };
+            const fill = sourceFillByColumn[colNumber - 1] || sourceFillByColumn[0];
+            if (fill) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fill };
+            }
             if (isNewGroup) {
                 const existingBorder = cell.border || {};
                 cell.border = {
@@ -765,7 +772,7 @@ async function buildGenerationExport(payload) {
 }
 
 async function buildValidationExport(payload) {
-    const { validated, selectedCols, options = {}, context = {} } = payload;
+    const { validated = [], selectedCols = {}, options = {}, context = {} } = payload || {};
     const workbook = new ExcelJS.Workbook();
     const includeSuggestions = Boolean(options.includeSuggestions);
     const showMappingLogic = Boolean(options.showMappingLogic);
@@ -777,8 +784,8 @@ async function buildValidationExport(payload) {
 
     reportProgress('Building export...', 5);
 
-    const outcomesColumns = selectedCols.outcomes.map(col => `outcomes_${col}`);
-    const wsuColumns = selectedCols.wsu_org.map(col => `wsu_${col}`);
+    const outcomesColumns = (selectedCols.outcomes || []).map(col => `outcomes_${col}`);
+    const wsuColumns = (selectedCols.wsu_org || []).map(col => `wsu_${col}`);
     const mappingColumns = showMappingLogic ? ['Mapping_Logic'] : [];
     const suggestionColumns = includeSuggestions
         ? [
@@ -1225,13 +1232,14 @@ async function buildValidationExport(payload) {
         'Output key not found in myWSU': 'FFEF4444'
     };
 
-    const errorRows = validated.filter(row => (
+    const validatedList = Array.isArray(validated) ? validated : [];
+    const errorRows = validatedList.filter(row => (
         row.Error_Type !== 'Valid' && row.Error_Type !== 'High_Confidence_Match'
     ));
     const translateErrorRows = errorRows.filter(row => !['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
     const oneToManyRows = errorRows.filter(row => ['Duplicate_Target', 'Duplicate_Source'].includes(row.Error_Type));
-    const highConfidenceRows = validated.filter(row => row.Error_Type === 'High_Confidence_Match');
-    const validRows = validated.filter(row => row.Error_Type === 'Valid');
+    const highConfidenceRows = validatedList.filter(row => row.Error_Type === 'High_Confidence_Match');
+    const validRows = validatedList.filter(row => row.Error_Type === 'Valid');
 
     const errorColumns = [
         'Error_Type',
@@ -2311,9 +2319,10 @@ self.onmessage = async (event) => {
         }
         throw new Error(`Unknown export task: ${type}`);
     } catch (error) {
-        self.postMessage({
-            type: 'error',
-            message: error?.message || String(error)
-        });
+        let msg = error?.message || String(error);
+        if (msg.includes("reading '0'")) {
+            msg += ' (check for undefined arrays or object values in row data)';
+        }
+        self.postMessage({ type: 'error', message: msg });
     }
 };
