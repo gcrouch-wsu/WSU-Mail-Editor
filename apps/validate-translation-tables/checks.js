@@ -230,6 +230,22 @@ runCheck('export-worker: Human review safeguards exist', () => {
     assert.ok(exportWorkerCode.includes('Approved but blank final'));
 });
 
+runCheck('export-worker: Create review workflow is explicit in Excel', () => {
+    assert.ok(exportWorkerCode.includes("addSheetFromObjects('Ambiguous_Candidates'"));
+    assert.ok(exportWorkerCode.includes("addSheetFromObjects('Missing_In_myWSU'"));
+    assert.ok(exportWorkerCode.includes("addSheetFromObjects('Review_Decisions'"));
+    assert.ok(exportWorkerCode.includes("header: 'Resolution Type'"));
+    assert.ok(exportWorkerCode.includes("header: 'Review Path'"));
+    assert.ok(exportWorkerCode.includes("header: 'Candidate Count'"));
+    assert.ok(exportWorkerCode.includes('Review_Instructions_Create'));
+});
+
+runCheck('export-worker: Create review sheet highlights unresolved manual rows', () => {
+    assert.ok(exportWorkerCode.includes('$${colSourceStatus}2="Ambiguous Match"'));
+    assert.ok(exportWorkerCode.includes('$${colSourceStatus}2="Missing in myWSU"'));
+    assert.ok(exportWorkerCode.includes('AND($${colDecision}2="",OR($${colSourceStatus}2="Ambiguous Match",$${colSourceStatus}2="Missing in myWSU"))'));
+});
+
 runCheck('export-worker: Review_Instructions sheet exists', () => {
     assert.ok(exportWorkerCode.includes("'Review_Instructions'") || exportWorkerCode.includes('Review_Instructions'));
     assert.ok(exportWorkerCode.includes('How to Review'));
@@ -244,6 +260,24 @@ runCheck('export-worker: Review_Workbench has freeze and conditional formatting'
 runCheck('export-worker: Publish_Eligible excludes No Change', () => {
     assert.ok(exportWorkerCode.includes('non-publishable') || exportWorkerCode.includes('do NOT publish'),
         'Intent to exclude No Change from publish should be documented');
+});
+
+runCheck('export-worker: expression CF rules use formulae array not formula string', () => {
+    // ExcelJS renderExpression does model.formulae[0] without guard.
+    // Using singular `formula:` on expression rules causes TypeError.
+    const expressionBlocks = exportWorkerCode.split("type: 'expression'");
+    // First segment is before the first match, skip it
+    for (let i = 1; i < expressionBlocks.length; i += 1) {
+        const block = expressionBlocks[i].slice(0, 200);
+        assert.ok(
+            block.includes('formulae:'),
+            `expression-type CF rule #${i} must use 'formulae:' (array), not 'formula:' (string)`
+        );
+        assert.ok(
+            !block.match(/\bformula\s*:/),
+            `expression-type CF rule #${i} must not use singular 'formula:' property`
+        );
+    }
 });
 
 if (failures > 0) {

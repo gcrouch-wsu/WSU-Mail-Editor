@@ -203,9 +203,13 @@ function createHarness() {
     if (typeof vmContext.buildValidationExport !== 'function') {
         throw new Error('buildValidationExport was not loaded from export-worker.js');
     }
+    if (typeof vmContext.buildGenerationExport !== 'function') {
+        throw new Error('buildGenerationExport was not loaded from export-worker.js');
+    }
 
     return {
         buildValidationExport: (payload) => vmContext.buildValidationExport(payload),
+        buildGenerationExport: (payload) => vmContext.buildGenerationExport(payload),
         getLastWorkbook: () => lastWorkbook,
         getProgressMessages: () => progressMessages
     };
@@ -361,6 +365,158 @@ async function run() {
         const workbook = harness.getLastWorkbook();
         assert.ok(workbook.getWorksheet('Review_Workbench'), 'Expected Review_Workbench worksheet');
         assert.ok(workbook.getWorksheet('QA_Checks_Validate'), 'Expected QA_Checks_Validate worksheet');
+    });
+
+    await runCheck('buildGenerationExport includes create review guidance columns and instructions', async () => {
+        const harness = createHarness();
+        const result = await harness.buildGenerationExport({
+            cleanRows: [
+                {
+                    outcomes_row_index: 0,
+                    outcomes_record_id: 'OUT-1',
+                    outcomes_display_name: 'Alpha University',
+                    proposed_wsu_key: 'WSU-1',
+                    proposed_wsu_name: 'Alpha University',
+                    match_similarity: 97,
+                    confidence_tier: 'high',
+                    outcomes_school: 'Alpha University',
+                    wsu_school: 'Alpha University'
+                }
+            ],
+            errorRows: [
+                {
+                    outcomes_row_index: 1,
+                    outcomes_record_id: 'OUT-2',
+                    outcomes_display_name: 'Beta College',
+                    missing_in: 'Ambiguous Match',
+                    proposed_wsu_key: 'WSU-2A',
+                    proposed_wsu_name: 'Beta College Main',
+                    alternate_candidates: [
+                        { key: 'WSU-2A', name: 'Beta College Main', similarity: 94 },
+                        { key: 'WSU-2B', name: 'Beta College South', similarity: 92 }
+                    ],
+                    outcomes_school: 'Beta College',
+                    wsu_school: ''
+                },
+                {
+                    outcomes_row_index: 2,
+                    outcomes_record_id: 'OUT-3',
+                    outcomes_display_name: 'Gamma Institute',
+                    missing_in: 'myWSU',
+                    alternate_candidates: [],
+                    outcomes_school: 'Gamma Institute',
+                    wsu_school: ''
+                }
+            ],
+            selectedCols: {
+                outcomes: ['school'],
+                wsu_org: ['school']
+            },
+            generationConfig: {
+                threshold: 0.8
+            }
+        });
+        assertExportResult(result);
+
+        const workbook = harness.getLastWorkbook();
+        const ambiguousSheet = workbook.getWorksheet('Ambiguous_Candidates');
+        const missingSheet = workbook.getWorksheet('Missing_In_myWSU');
+        const reviewSheet = workbook.getWorksheet('Review_Decisions');
+        const instructionsSheet = workbook.getWorksheet('Review_Instructions_Create');
+        assert.ok(ambiguousSheet, 'Expected Ambiguous_Candidates worksheet');
+        assert.ok(missingSheet, 'Expected Missing_In_myWSU worksheet');
+        assert.ok(reviewSheet, 'Expected Review_Decisions worksheet');
+        assert.ok(instructionsSheet, 'Expected Review_Instructions_Create worksheet');
+
+        const ambiguousHeaders = getRowValues(ambiguousSheet, 1, 40).map(v => String(v || ''));
+        assert.ok(ambiguousHeaders.includes('Resolution Type'), 'Ambiguous sheet should include Resolution Type');
+        assert.ok(ambiguousHeaders.includes('Review Path'), 'Ambiguous sheet should include Review Path');
+        assert.ok(ambiguousHeaders.includes('Candidate Count'), 'Ambiguous sheet should include Candidate Count');
+        assert.ok(ambiguousHeaders.includes('Top Suggested myWSU Key'), 'Ambiguous sheet should include top suggested key');
+
+        const reviewHeaders = getRowValues(reviewSheet, 1, 40).map(v => String(v || ''));
+        assert.ok(reviewHeaders.includes('Resolution Type'), 'Review sheet should include Resolution Type');
+        assert.ok(reviewHeaders.includes('Review Path'), 'Review sheet should include Review Path');
+        assert.ok(reviewHeaders.includes('Candidate Count'), 'Review sheet should include Candidate Count');
+
+        const candidateCountIndex = ambiguousHeaders.indexOf('Candidate Count');
+        assert.ok(candidateCountIndex >= 0, 'Candidate Count column must exist');
+        const candidateCountValue = ambiguousSheet.getRow(2).getCell(candidateCountIndex + 1).value;
+        assert.equal(candidateCountValue, 2, 'Ambiguous row should expose candidate count');
+
+        const allCFRules = reviewSheet.conditionalFormatting.flatMap(cf => cf.rules || []);
+        const expressionRules = allCFRules.filter(r => r.type === 'expression');
+        assert.ok(expressionRules.length >= 3, 'Review sheet should include expression conditional formatting rules');
+        expressionRules.forEach((rule, idx) => {
+            assert.ok(Array.isArray(rule.formulae), `Create expression rule ${idx} should use formulae array`);
+            assert.equal(rule.formula, undefined, `Create expression rule ${idx} should not use singular formula`);
+        });
+    });
+
+    await runCheck('expression-type CF rules use formulae array (not formula string)', async () => {
+        const harness = createHarness();
+        await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Name_Mismatch',
+                    translate_input: 'IN-1',
+                    translate_output: 'OUT-1',
+                    outcomes_school: 'Alpha University',
+                    wsu_school: 'Alpha University',
+                    Source_Sheet: 'One_to_Many',
+                    Is_Stale_Key: 0,
+                    duplicateGroup: ''
+                }
+            ],
+            selectedCols: {
+                outcomes: ['school'],
+                wsu_org: ['school']
+            },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-1', school: 'Alpha University' }],
+                    translate: [{ translate_input: 'IN-1', translate_output: 'OUT-1' }],
+                    wsu_org: [{ key: 'OUT-1', school: 'Alpha University' }]
+                },
+                keyConfig: {
+                    outcomes: 'key',
+                    translateInput: 'translate_input',
+                    translateOutput: 'translate_output',
+                    wsu: 'key'
+                },
+                keyLabels: {
+                    outcomes: 'key',
+                    wsu: 'key',
+                    translateInput: 'translate_input',
+                    translateOutput: 'translate_output'
+                },
+                columnRoles: {
+                    outcomes: { school: 'School' },
+                    wsu_org: { school: 'School' }
+                }
+            }
+        });
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        assert.ok(reviewSheet, 'Expected Review_Workbench worksheet');
+        const allCFRules = reviewSheet.conditionalFormatting.flatMap(cf => cf.rules || []);
+        const expressionRules = allCFRules.filter(r => r.type === 'expression');
+        assert.ok(expressionRules.length > 0, 'Expected at least one expression-type CF rule');
+        expressionRules.forEach((rule, idx) => {
+            assert.ok(
+                Array.isArray(rule.formulae),
+                `Expression rule ${idx}: formulae must be an array, got ${typeof rule.formulae}`
+            );
+            assert.ok(
+                rule.formulae.length > 0,
+                `Expression rule ${idx}: formulae array must not be empty`
+            );
+            assert.equal(
+                rule.formula,
+                undefined,
+                `Expression rule ${idx}: must not have singular 'formula' property (ExcelJS requires 'formulae' array)`
+            );
+        });
     });
 
     if (failures > 0) {

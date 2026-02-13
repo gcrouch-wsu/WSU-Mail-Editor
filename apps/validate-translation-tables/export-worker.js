@@ -377,6 +377,44 @@ async function buildGenerationExport(payload) {
         }
         return '';
     };
+    const getResolutionTypeForErrorRow = (row) => {
+        if (row.missing_in === 'Ambiguous Match') return 'Ambiguous candidate set';
+        if (row.missing_in === 'myWSU') return 'Missing in myWSU';
+        if (row.missing_in === 'Outcomes') return 'Missing in Outcomes';
+        return 'Matched 1:1';
+    };
+    const getAmbiguityScope = (row) => {
+        const hasOutcomesRecord = Boolean(toText(row.outcomes_record_id));
+        const hasWsuRecord = Boolean(toText(row.wsu_record_id));
+        if (hasOutcomesRecord && !hasWsuRecord) {
+            return 'Outcomes row with multiple myWSU candidates';
+        }
+        if (!hasOutcomesRecord && hasWsuRecord) {
+            return 'myWSU row with multiple Outcomes candidates';
+        }
+        return 'Multiple plausible matches';
+    };
+    const getReviewPathForErrorRow = (row) => {
+        if (row.missing_in === 'Ambiguous Match') {
+            return 'Review Alt 1-3 and choose best candidate, or mark No Match/Needs Research';
+        }
+        if (row.missing_in === 'myWSU') {
+            return 'No myWSU candidate found. Research target key, then set Decision';
+        }
+        if (row.missing_in === 'Outcomes') {
+            return 'Reference only: no Outcomes source row for this myWSU record';
+        }
+        return 'Verify and confirm 1:1 mapping';
+    };
+    const getReviewPathForSourceStatus = (sourceStatus) => {
+        if (sourceStatus === 'Ambiguous Match') {
+            return 'Choose Alternate (Alt 1-3) or mark No Match/Needs Research';
+        }
+        if (sourceStatus === 'Missing in myWSU') {
+            return 'No candidate found. Research key, then set No Match or Needs Research until resolved';
+        }
+        return 'Verify proposed match and confirm Decision';
+    };
 
     const setSheetFormats = (sheet, columns, rows, options = {}) => {
         const freezeHeader = options.freezeHeader !== false;
@@ -455,10 +493,11 @@ async function buildGenerationExport(payload) {
     const summaryRows = [
         ['Metric', 'Count', 'Notes'],
         ['Matched 1:1 rows', cleanSorted.length, 'Rows with a single assigned match'],
-        ['Ambiguous candidates', ambiguousRows.length, 'Rows requiring manual match choice'],
-        ['Missing in myWSU', missingInMyWsuRows.length, 'Outcomes rows without a target match'],
+        ['Ambiguous candidates', ambiguousRows.length, 'Rows with multiple plausible matches; choose from Alt candidates'],
+        ['Missing in myWSU', missingInMyWsuRows.length, 'Outcomes rows with no candidate target match in myWSU'],
         ['Missing in Outcomes', missingInOutcomesRows.length, 'myWSU rows without a source row'],
-        ['Review_Decisions rows', cleanSorted.length + missingInMyWsuRows.length + ambiguousOutcomesCount, 'One row per Outcomes record']
+        ['Review_Decisions rows', cleanSorted.length + missingInMyWsuRows.length + ambiguousOutcomesCount, 'One row per Outcomes record'],
+        ['Workflow note', '', 'Use Review_Decisions for actions. Ambiguous rows need candidate selection; Missing in myWSU rows need research/manual mapping.']
     ];
     summaryRows.forEach(row => summarySheet.addRow(row));
     summarySheet.getRow(1).eachCell(cell => {
@@ -494,6 +533,12 @@ async function buildGenerationExport(payload) {
         const alt = (index) => alternates[index] || {};
         return {
             ...row,
+            resolution_type: getResolutionTypeForErrorRow(row),
+            review_path: getReviewPathForErrorRow(row),
+            ambiguity_scope: getAmbiguityScope(row),
+            candidate_count: alternates.length,
+            proposed_wsu_key: row.proposed_wsu_key || '',
+            proposed_wsu_name: row.proposed_wsu_name || '',
             Alt_1_Key: alt(0).key || '',
             Alt_1_Name: alt(0).name || '',
             Alt_1_Similarity: alt(0).similarity ?? '',
@@ -509,6 +554,12 @@ async function buildGenerationExport(payload) {
         { key: 'outcomes_record_id', header: 'Outcomes Record ID', group: 'meta' },
         { key: 'outcomes_display_name', header: 'Outcomes Name', group: 'meta' },
         { key: 'missing_in', header: 'Missing In', group: 'meta' },
+        { key: 'resolution_type', header: 'Resolution Type', group: 'meta' },
+        { key: 'review_path', header: 'Review Path', group: 'meta' },
+        { key: 'ambiguity_scope', header: 'Ambiguity Scope', group: 'meta' },
+        { key: 'candidate_count', header: 'Candidate Count', group: 'meta' },
+        { key: 'proposed_wsu_key', header: 'Top Suggested myWSU Key', group: 'decision' },
+        { key: 'proposed_wsu_name', header: 'Top Suggested myWSU Name', group: 'decision' },
         { key: 'Alt_1_Key', header: 'Alt 1 Key', group: 'decision' },
         { key: 'Alt_1_Name', header: 'Alt 1 Name', group: 'decision' },
         { key: 'Alt_1_Similarity', header: 'Alt 1 Similarity %', group: 'decision' },
@@ -528,25 +579,39 @@ async function buildGenerationExport(payload) {
     addSheetFromObjects('Ambiguous_Candidates', ambiguousColumns, ambiguousRowsMapped);
 
     reportProgress('Building missing sheets...', 46);
+    const missingInMyWsuRowsMapped = missingInMyWsuRows.map(row => ({
+        ...row,
+        resolution_type: getResolutionTypeForErrorRow(row),
+        review_path: getReviewPathForErrorRow(row)
+    }));
     const missingMyWsuColumns = [
         { key: 'outcomes_record_id', header: 'Outcomes Record ID', group: 'meta' },
         { key: 'outcomes_display_name', header: 'Outcomes Name', group: 'meta' },
-        { key: 'missing_in', header: 'Missing In', group: 'meta' }
+        { key: 'missing_in', header: 'Missing In', group: 'meta' },
+        { key: 'resolution_type', header: 'Resolution Type', group: 'meta' },
+        { key: 'review_path', header: 'Review Path', group: 'meta' }
     ];
     outcomesCols.forEach(col => {
         missingMyWsuColumns.push({ key: `outcomes_${col}`, header: `Outcomes: ${col}`, group: 'outcomes' });
     });
-    addSheetFromObjects('Missing_In_myWSU', missingMyWsuColumns, missingInMyWsuRows);
+    addSheetFromObjects('Missing_In_myWSU', missingMyWsuColumns, missingInMyWsuRowsMapped);
 
+    const missingInOutcomesRowsMapped = missingInOutcomesRows.map(row => ({
+        ...row,
+        resolution_type: getResolutionTypeForErrorRow(row),
+        review_path: getReviewPathForErrorRow(row)
+    }));
     const missingOutcomesColumns = [
         { key: 'wsu_record_id', header: 'myWSU Record ID', group: 'meta' },
         { key: 'wsu_display_name', header: 'myWSU Name', group: 'meta' },
-        { key: 'missing_in', header: 'Missing In', group: 'meta' }
+        { key: 'missing_in', header: 'Missing In', group: 'meta' },
+        { key: 'resolution_type', header: 'Resolution Type', group: 'meta' },
+        { key: 'review_path', header: 'Review Path', group: 'meta' }
     ];
     wsuCols.forEach(col => {
         missingOutcomesColumns.push({ key: `wsu_${col}`, header: `myWSU: ${col}`, group: 'wsu' });
     });
-    addSheetFromObjects('Missing_In_Outcomes', missingOutcomesColumns, missingInOutcomesRows);
+    addSheetFromObjects('Missing_In_Outcomes', missingOutcomesColumns, missingInOutcomesRowsMapped);
 
     reportProgress('Building review decisions...', 60);
     const reviewIndexMap = new Map();
@@ -559,6 +624,8 @@ async function buildGenerationExport(payload) {
         reviewIndexMap.set(idx, {
             ...row,
             source_status: 'Matched',
+            resolution_type: 'Matched 1:1',
+            review_path: getReviewPathForSourceStatus('Matched'),
             confidence_tier: normalizeTier(row)
         });
     });
@@ -573,6 +640,8 @@ async function buildGenerationExport(payload) {
         reviewIndexMap.set(idx, {
             ...row,
             source_status: row.missing_in === 'Ambiguous Match' ? 'Ambiguous Match' : 'Missing in myWSU',
+            resolution_type: getResolutionTypeForErrorRow(row),
+            review_path: getReviewPathForSourceStatus(row.missing_in === 'Ambiguous Match' ? 'Ambiguous Match' : 'Missing in myWSU'),
             confidence_tier: normalizeTier(row)
         });
     });
@@ -593,6 +662,9 @@ async function buildGenerationExport(payload) {
                 match_similarity: row.match_similarity ?? '',
                 confidence_tier: row.confidence_tier || '',
                 source_status: row.source_status || '',
+                resolution_type: row.resolution_type || '',
+                review_path: row.review_path || '',
+                candidate_count: alternates.length,
                 Alt_1_Key: alt(0).key || '',
                 Alt_1_Name: alt(0).name || '',
                 Alt_1_Similarity: alt(0).similarity ?? '',
@@ -622,6 +694,9 @@ async function buildGenerationExport(payload) {
         { key: 'match_similarity', header: 'Similarity %', group: 'meta' },
         { key: 'confidence_tier', header: 'Confidence Tier', group: 'meta' },
         { key: 'source_status', header: 'Source Status', group: 'meta' },
+        { key: 'resolution_type', header: 'Resolution Type', group: 'meta' },
+        { key: 'review_path', header: 'Review Path', group: 'meta' },
+        { key: 'candidate_count', header: 'Candidate Count', group: 'meta' },
         { key: 'Alt_1_Key', header: 'Alt 1 Key', group: 'decision' },
         { key: 'Alt_1_Name', header: 'Alt 1 Name', group: 'decision' },
         { key: 'Alt_1_Similarity', header: 'Alt 1 Similarity %', group: 'decision' },
@@ -653,6 +728,7 @@ async function buildGenerationExport(payload) {
     });
 
     const colDecision = reviewColLetterByKey.Decision;
+    const colSourceStatus = reviewColLetterByKey.source_status;
     const colAltChoice = reviewColLetterByKey.Alternate_Choice;
     const colPropKey = reviewColLetterByKey.proposed_wsu_key;
     const colPropName = reviewColLetterByKey.proposed_wsu_name;
@@ -700,6 +776,44 @@ async function buildGenerationExport(payload) {
                 formulae: ['"Alt 1,Alt 2,Alt 3"']
             }
         );
+        const reviewLastColLetter = columnIndexToLetter(reviewColumns.length);
+        const reviewDataRef = `A2:${reviewLastColLetter}${reviewSheet.rowCount}`;
+        reviewSheet.addConditionalFormatting({
+            ref: reviewDataRef,
+            rules: [
+                {
+                    type: 'expression',
+                    formulae: [`$${colSourceStatus}2="Ambiguous Match"`],
+                    style: {
+                        fill: {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFFEF3C7' }
+                        }
+                    }
+                },
+                {
+                    type: 'expression',
+                    formulae: [`$${colSourceStatus}2="Missing in myWSU"`],
+                    style: {
+                        fill: {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFFEE2E2' }
+                        }
+                    }
+                },
+                {
+                    type: 'expression',
+                    formulae: [`AND($${colDecision}2="",OR($${colSourceStatus}2="Ambiguous Match",$${colSourceStatus}2="Missing in myWSU"))`],
+                    style: {
+                        border: {
+                            left: { style: 'medium', color: { argb: 'FFF59E0B' } }
+                        }
+                    }
+                }
+            ]
+        });
     }
 
     reportProgress('Building final translation sheet...', 74);
@@ -768,7 +882,30 @@ async function buildGenerationExport(payload) {
         { width: 70 }
     ];
 
-    reportProgress('Finalizing Excel file...', 92);
+    reportProgress('Building review instructions...', 90);
+    const createInstructionsSheet = workbook.addWorksheet('Review_Instructions_Create', {
+        properties: { tabColor: { argb: 'FF1E3A8A' } }
+    });
+    const createInstructionsRows = [
+        ['Section', 'Guidance'],
+        ['Primary action sheet', 'Use Review_Decisions to set Decision values for each Outcomes row.'],
+        ['Source Status: Matched', 'Verify the proposed key/name and keep Accept unless correction is needed.'],
+        ['Source Status: Ambiguous Match', 'Use Alt 1-3 candidates and Alternate Choice to resolve low-confidence mapping.'],
+        ['Source Status: Missing in myWSU', 'No target candidate found. Research key and use Needs Research or No Match until resolved.'],
+        ['Ambiguous_Candidates tab', 'Reference tab with candidate options, ambiguity scope, and review path guidance.'],
+        ['Missing_In_myWSU tab', 'Reference tab listing Outcomes rows that currently have no myWSU target row.'],
+        ['Final_Translation_Table', 'Publishes only Accept and Choose Alternate decisions from Review_Decisions.'],
+        ['QA_Checks', 'Review unresolved count, blank finals, and duplicate final keys before publishing.']
+    ];
+    createInstructionsRows.forEach(row => createInstructionsSheet.addRow(row));
+    createInstructionsSheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerColor.meta } };
+    });
+    createInstructionsSheet.columns = [{ width: 34 }, { width: 110 }];
+    createInstructionsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    reportProgress('Finalizing Excel file...', 94);
     const buffer = toArrayBuffer(await workbook.xlsx.writeBuffer());
     reportProgress('Saving file...', 100);
     return {
@@ -1940,17 +2077,17 @@ async function buildValidationExport(payload) {
             const cfSource = reviewColLetter.Source_Sheet;
             const ruleStale = {
                 type: 'expression',
-                formula: 'AND($' + cfDec + '2="",$' + cfStale + '2=1)',
+                formulae: ['AND($' + cfDec + '2="",$' + cfStale + '2=1)'],
                 style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } }, border: { left: { style: 'medium', color: { argb: 'FFF59E0B' } } } }
             };
             const ruleOneToMany = {
                 type: 'expression',
-                formula: 'AND($' + cfDec + '2="",$' + cfSource + '2="One_to_Many")',
+                formulae: ['AND($' + cfDec + '2="",$' + cfSource + '2="One_to_Many")'],
                 style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }, border: { left: { style: 'medium', color: { argb: 'FFEAB308' } } } }
             };
             const ruleBlankDec = {
                 type: 'expression',
-                formula: '$' + cfDec + '2=""',
+                formulae: ['$' + cfDec + '2=""'],
                 style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } } }
             };
             reviewSheet.addConditionalFormatting({
