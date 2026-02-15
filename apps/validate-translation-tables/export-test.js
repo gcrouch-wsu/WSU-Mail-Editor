@@ -254,6 +254,11 @@ async function run() {
             context: {}
         });
         assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const finalSheet = workbook.getWorksheet('Final_Translation_Table');
+        const filterCell = finalSheet?.getRow(2)?.getCell(1)?.value;
+        assert.ok(filterCell?.formula, 'Empty payload should still produce FILTER formula');
+        assert.ok(!/:\$[A-Z]+\$1\b/.test(filterCell.formula), 'FILTER include range must not end at row 1 (stagingLastRow >= 2 guard)');
     });
 
     await runCheck('buildValidationExport handles missing selectedCols arrays', async () => {
@@ -388,8 +393,12 @@ async function run() {
         assert.equal(stagingInputCell, 'IN-1', 'Auto-approved rows should be written as plain values in Final_Staging');
         const filterCell = finalSheet.getRow(2).getCell(1).value;
         assert.ok(filterCell && filterCell.formula, 'Final table A2 should have FILTER formula');
+        assert.ok(!filterCell.formula.startsWith('='), 'FILTER formula must not have leading = (OOXML compliance)');
+        assert.ok(filterCell.formula.includes('_xlfn._xlws.FILTER'), 'FILTER must use future-function namespace _xlfn._xlws.FILTER');
+        assert.strictEqual(filterCell.shareType, 'array', 'FILTER must have shareType array');
+        assert.ok(filterCell.ref && /^A2:[A-Z]+\d+$/.test(filterCell.ref), 'FILTER ref must be bounded range A2:ColN');
         assert.ok(filterCell.formula.includes('Final_Staging'), 'FILTER formula should reference Final_Staging');
-        assert.ok(filterCell.formula.includes('FILTER') || filterCell.formula.includes('_xlfn'), 'FILTER formula should use FILTER function');
+        assert.ok(/\$[A-Z]+\$\d+:\$[A-Z]+\$\d+/.test(filterCell.formula), 'FILTER must use absolute ref $Col$2:$Col$N for include range');
     });
 
     await runCheck('buildValidationExport keeps review-to-final approval flow and output-side duplicate suggestions', async () => {
@@ -508,14 +517,12 @@ async function run() {
 
         const finalFilterCell = finalSheet.getRow(2).getCell(1).value;
         assert.ok(finalFilterCell?.formula, 'Final table A2 should have FILTER formula');
-        assert.ok(
-            finalFilterCell.formula.includes('Final_Staging'),
-            'Final table should pull from Final_Staging via FILTER'
-        );
-        assert.ok(
-            finalFilterCell.shareType === 'array' || finalFilterCell.formula.includes('FILTER'),
-            'FILTER should be array formula for sequential compaction'
-        );
+        assert.ok(!finalFilterCell.formula.startsWith('='), 'FILTER formula must not have leading = (OOXML compliance)');
+        assert.ok(finalFilterCell.formula.includes('_xlfn._xlws.FILTER'), 'FILTER must use future-function namespace _xlfn._xlws.FILTER');
+        assert.strictEqual(finalFilterCell.shareType, 'array', 'FILTER must have shareType array');
+        assert.ok(finalFilterCell.ref && /^A2:[A-Z]+\d+$/.test(finalFilterCell.ref), 'FILTER ref must be bounded range A2:ColN');
+        assert.ok(finalFilterCell.formula.includes('Final_Staging'), 'Final table should pull from Final_Staging via FILTER');
+        assert.ok(/\$[A-Z]+\$\d+:\$[A-Z]+\$\d+/.test(finalFilterCell.formula), 'FILTER must use absolute ref $Col$2:$Col$N for include range');
         const stagingSheet = workbook.getWorksheet('Final_Staging');
         assert.ok(stagingSheet, 'Final_Staging should exist and feed Final_Translation_Table');
         const outcomesNameCol = findHeaderIndex(finalSheet, 'Outcomes Name');

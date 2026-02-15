@@ -50,6 +50,8 @@ Use this when you already have a translation table and want to correct it.
 7. Review on-screen cards and counts.
 8. Click `Download Full Report`.
 
+**Note:** The Validate Excel file requires **Excel 365 or 2021+** to display the Final_Translation_Table correctly. Excel 2016/2019 may show errors for the compact table.
+
 ### Validate Excel review order (left to right)
 
 Recommended order:
@@ -70,6 +72,7 @@ Hidden by default (diagnostic/internal):
 - `Valid_Mappings`
 - `Action_Queue`
 - `Approved_Mappings`
+- `Final_Staging`
 
 ### How `Review_Workbench` works
 
@@ -95,14 +98,11 @@ The sheet freezes the header row only, so horizontal scrolling should remain usa
 
 - `Valid` and `High_Confidence_Match` rows are auto-approved.
 - You do not need to approve those one by one.
-- Internal `Approved_Mappings` updates as you review.
-- `Final_Translation_Table` includes:
-  - direct value rows for auto-approved mappings
-  - decision-driven rows from `Review_Workbench` when `Publish_Eligible = 1`
-  - columns: Review Row ID, Decision, Outcomes Name/State/Country, Translate Input, Translate Output, myWSU Name/City/State/Country (blanks in source appear as blank)
-- `Final_Translation_Table` opens with Excel filter enabled. Filter by non-blank Translate Input for a compact list of approved rows.
+- `Final_Translation_Table` shows approved rows only, in a compact sequential list (no empty slots).
+- Flow: `Review_Workbench` → `Final_Staging` (hidden) → `Final_Translation_Table` via FILTER formula.
+- Columns: Review Row ID, Decision, Outcomes Name/State/Country, Translate Input, Translate Output, myWSU Name/City/State/Country (blanks in source appear as blank).
+- `Final_Translation_Table` has Excel auto-filter enabled.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
-- Publish flow is: `Review_Workbench` -> `Approved_Mappings` (internal) -> `Final_Translation_Table`.
 
 ### Publish rule of thumb
 

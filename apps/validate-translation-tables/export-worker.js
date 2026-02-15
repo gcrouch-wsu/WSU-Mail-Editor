@@ -2540,15 +2540,16 @@ async function buildValidationExport(payload) {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B7285' } };
     });
-    const stagingLastRow = finalFormulaRows + 1;
+    const qaCap = 10000;
+    const stagingLastRow = Math.max(2, finalFormulaRows + 1);
+    const refLastRow = Math.max(qaCap, stagingLastRow);
     const stagingLastCol = columnIndexToLetter(finalColumns.length);
     const filterCol = finalColLetter.translate_input;
-    const qaCap = 10000;
     const filterFormula = `_xlfn._xlws.FILTER(Final_Staging!A2:${stagingLastCol}${stagingLastRow},Final_Staging!$${filterCol}$2:$${filterCol}$${stagingLastRow}<>"","")`;
     finalSheet.getCell('A2').value = {
         formula: filterFormula,
         shareType: 'array',
-        ref: `A2:${stagingLastCol}${qaCap}`
+        ref: `A2:${stagingLastCol}${refLastRow}`
     };
 
     const finalColumnWidths = {
@@ -2564,7 +2565,7 @@ async function buildValidationExport(payload) {
     }));
     finalSheet.autoFilter = {
         from: 'A1',
-        to: `${stagingLastCol}${qaCap}`
+        to: `${stagingLastCol}${refLastRow}`
     };
 
     reportProgress('Building Translation_Key_Updates...', 89);
@@ -2629,7 +2630,7 @@ async function buildValidationExport(payload) {
     const reviewSourceRange = `Review_Workbench!$${reviewColLetter.Source_Sheet}$2:$${reviewColLetter.Source_Sheet}$${reviewLastRow}`;
     const reviewSuggestedKeyRange = `Review_Workbench!$${reviewColLetter.Suggested_Key}$2:$${reviewColLetter.Suggested_Key}$${reviewLastRow}`;
     const reviewKeyUpdateSideRange = `Review_Workbench!$${reviewColLetter.Key_Update_Side}$2:$${reviewColLetter.Key_Update_Side}$${reviewLastRow}`;
-    const finalLastRow = qaCap;
+    const finalLastRow = refLastRow;
     const finalInputRange = `Final_Translation_Table!$${finalColLetter.translate_input}$2:$${finalColLetter.translate_input}$${finalLastRow}`;
     const finalOutputRange = `Final_Translation_Table!$${finalColLetter.translate_output}$2:$${finalColLetter.translate_output}$${finalLastRow}`;
     const finalDecisionRange = `Final_Translation_Table!$${finalColLetter.Decision}$2:$${finalColLetter.Decision}$${finalLastRow}`;
