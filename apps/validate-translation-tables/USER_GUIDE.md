@@ -97,12 +97,11 @@ The sheet freezes the header row only, so horizontal scrolling should remain usa
 - You do not need to approve those one by one.
 - Internal `Approved_Mappings` updates as you review.
 - `Final_Translation_Table` includes:
-  - direct value rows for auto-approved mappings
-  - decision-driven rows from `Review_Workbench` when `Publish_Eligible = 1`
+  - approved rows only, shown sequentially with no blanks (uses Excel 365 FILTER for compaction)
   - columns: Review Row ID, Decision, Outcomes Name/State/Country, Translate Input, Translate Output, myWSU Name/City/State/Country (blanks in source appear as blank)
-- `Final_Translation_Table` opens with Excel filter enabled so you can quickly filter `Translate Input` to non-blanks.
+- Requires Excel 365 for the compact sequential display. Auto-filter is enabled.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
-- Publish flow is: `Review_Workbench` -> `Approved_Mappings` (internal) -> `Final_Translation_Table`.
+- Publish flow is: `Review_Workbench` -> `Final_Staging` (internal) -> `Final_Translation_Table` (FILTER compacts approved rows).
 
 ### Publish rule of thumb
 

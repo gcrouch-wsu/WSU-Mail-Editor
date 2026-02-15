@@ -317,6 +317,7 @@ runCheck('export-worker: Human review safeguards exist', () => {
 runCheck('export-worker: Validate internal staging tabs are hidden', () => {
     assert.ok(exportWorkerCode.includes("aqSheet.state = 'hidden'"));
     assert.ok(exportWorkerCode.includes("approvedSheet.state = 'hidden'"));
+    assert.ok(exportWorkerCode.includes("stagingSheet.state = 'hidden'"));
 });
 
 runCheck('export-worker: Validate diagnostic tabs are hidden and Review_Workbench is active', () => {

@@ -18,6 +18,7 @@ const getRecommendedAction = (typeof ValidationExportHelpers !== 'undefined' && 
     ? ValidationExportHelpers.getRecommendedAction
     : () => 'Review and resolve';
 const MAX_VALIDATE_DYNAMIC_REVIEW_FORMULA_ROWS = 5000;
+const MAX_FINAL_TABLE_QA_ROWS = 10000;
 
 function reportProgress(stage, processed) {
     self.postMessage({
@@ -2458,8 +2459,7 @@ async function buildValidationExport(payload) {
         approvedSheet.state = 'hidden';
     }
 
-    reportProgress('Building Final_Translation_Table...', 87);
-    const finalSheet = workbook.addWorksheet('Final_Translation_Table');
+    reportProgress('Building Final_Staging (compact source)...', 86);
     const outcomesKeyContextKey = keyLabels.outcomes ? `outcomes_${keyLabels.outcomes}` : 'outcomes_key';
     const finalOutcomesNameCandidates = [
         nameCompareConfig.outcomes ? `outcomes_${nameCompareConfig.outcomes}` : '',
@@ -2500,11 +2500,6 @@ async function buildValidationExport(payload) {
     Object.keys(finalColIndex).forEach(key => {
         finalColLetter[key] = columnIndexToLetter(finalColIndex[key]);
     });
-    finalSheet.addRow(finalColumns.map(col => col.header));
-    finalSheet.getRow(1).eachCell(cell => {
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B7285' } };
-    });
     const mapFinalSourceKey = (finalKey) => (
         finalKey === 'translate_input'
             ? 'Final_Input'
@@ -2519,24 +2514,47 @@ async function buildValidationExport(payload) {
         return '';
     };
     const buildFinalAutoRow = (row) => finalColumns.map(col => sanitizeCellValue(getFinalValueFromRow(row, col.key)));
-    autoApprovedRows.forEach(row => {
-        finalSheet.addRow(buildFinalAutoRow(row));
-    });
     const reviewPublishedCell = (rowNum) => `${reviewPublishCellRef(rowNum)}=1`;
     const reviewFinalValueFormula = (sourceKey, rowNum) => {
         const letter = reviewColLetter[sourceKey];
         if (!letter) return '';
         return { formula: `IF(${reviewPublishedCell(rowNum)},Review_Workbench!$${letter}$${rowNum},"")` };
     };
-    const finalFormulaRows = autoApprovedRows.length + cappedReviewFormulaRows;
+    const stagingRowCount = autoApprovedRows.length + cappedReviewFormulaRows;
+    const stagingLastRow = Math.max(2, 1 + stagingRowCount);
+
+    const stagingSheet = workbook.addWorksheet('Final_Staging');
+    stagingSheet.addRow(finalColumns.map(col => col.header));
+    stagingSheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B7285' } };
+    });
+    autoApprovedRows.forEach(row => {
+        stagingSheet.addRow(buildFinalAutoRow(row));
+    });
     for (let reviewIndex = 1; reviewIndex <= cappedReviewFormulaRows; reviewIndex += 1) {
         const reviewRowNum = reviewIndex + 1;
         const rowValues = finalColumns.map(col => {
             const sourceColKey = mapFinalSourceKey(col.key);
             return reviewFinalValueFormula(sourceColKey, reviewRowNum);
         });
-        finalSheet.addRow(rowValues);
+        stagingSheet.addRow(rowValues);
     }
+    stagingSheet.state = 'hidden';
+
+    reportProgress('Building Final_Translation_Table...', 87);
+    const finalSheet = workbook.addWorksheet('Final_Translation_Table');
+    finalSheet.addRow(finalColumns.map(col => col.header));
+    finalSheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B7285' } };
+    });
+    const translateInputColIndex = finalColumns.findIndex(c => c.key === 'translate_input') + 1;
+    const translateInputColLetter = columnIndexToLetter(translateInputColIndex);
+    const filterArray = `Final_Staging!A2:${columnIndexToLetter(finalColumns.length)}${stagingLastRow}`;
+    const filterInclude = `Final_Staging!$${translateInputColLetter}$2:$${translateInputColLetter}$${stagingLastRow}<>""`;
+    const filterFormula = `=FILTER(${filterArray},${filterInclude},"")`;
+    finalSheet.getCell('A2').value = { formula: filterFormula };
     const finalColumnWidths = {
         translate_input: 24,
         translate_output: 24,
@@ -2550,7 +2568,7 @@ async function buildValidationExport(payload) {
     }));
     finalSheet.autoFilter = {
         from: 'A1',
-        to: `${columnIndexToLetter(finalColumns.length)}${Math.max(2, finalFormulaRows + 1)}`
+        to: `${columnIndexToLetter(finalColumns.length)}${MAX_FINAL_TABLE_QA_ROWS}`
     };
 
     reportProgress('Building Translation_Key_Updates...', 89);
@@ -2615,7 +2633,7 @@ async function buildValidationExport(payload) {
     const reviewSourceRange = `Review_Workbench!$${reviewColLetter.Source_Sheet}$2:$${reviewColLetter.Source_Sheet}$${reviewLastRow}`;
     const reviewSuggestedKeyRange = `Review_Workbench!$${reviewColLetter.Suggested_Key}$2:$${reviewColLetter.Suggested_Key}$${reviewLastRow}`;
     const reviewKeyUpdateSideRange = `Review_Workbench!$${reviewColLetter.Key_Update_Side}$2:$${reviewColLetter.Key_Update_Side}$${reviewLastRow}`;
-    const finalLastRow = Math.max(2, finalFormulaRows + 1);
+    const finalLastRow = Math.max(2, MAX_FINAL_TABLE_QA_ROWS);
     const finalInputRange = `Final_Translation_Table!$${finalColLetter.translate_input}$2:$${finalColLetter.translate_input}$${finalLastRow}`;
     const finalOutputRange = `Final_Translation_Table!$${finalColLetter.translate_output}$2:$${finalColLetter.translate_output}$${finalLastRow}`;
     const finalDecisionRange = `Final_Translation_Table!$${finalColLetter.Decision}$2:$${finalColLetter.Decision}$${finalLastRow}`;

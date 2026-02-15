@@ -377,16 +377,15 @@ async function run() {
         assert.ok(workbook.getWorksheet('Review_Workbench'), 'Expected Review_Workbench worksheet');
         assert.ok(workbook.getWorksheet('QA_Checks_Validate'), 'Expected QA_Checks_Validate worksheet');
         const finalSheet = workbook.getWorksheet('Final_Translation_Table');
+        const stagingSheet = workbook.getWorksheet('Final_Staging');
         assert.ok(finalSheet, 'Expected Final_Translation_Table worksheet');
-        const translateInputCol = findHeaderIndex(finalSheet, 'Translate Input');
-        assert.ok(translateInputCol > 0, 'Final table should include Translate Input');
-        const finalInputCell = finalSheet.getRow(2).getCell(translateInputCol).value;
-        assert.equal(finalInputCell, 'IN-1', 'Auto-approved rows should be written as plain values');
-        assert.equal(
-            typeof finalInputCell,
-            'string',
-            'Auto-approved final translate input cell should be string value'
-        );
+        assert.ok(stagingSheet, 'Expected Final_Staging worksheet');
+        const translateInputCol = findHeaderIndex(stagingSheet, 'Translate Input');
+        assert.ok(translateInputCol > 0, 'Final_Staging should include Translate Input');
+        const stagingInputCell = stagingSheet.getRow(2).getCell(translateInputCol).value;
+        assert.equal(stagingInputCell, 'IN-1', 'Auto-approved rows should be written as plain values in Final_Staging');
+        const filterFormula = finalSheet.getRow(2).getCell(1).value?.formula || '';
+        assert.ok(filterFormula.includes('FILTER') && filterFormula.includes('Final_Staging'), 'Final table should use FILTER to compact from Final_Staging');
     });
 
     await runCheck('buildValidationExport keeps review-to-final approval flow and output-side duplicate suggestions', async () => {
@@ -503,15 +502,13 @@ async function run() {
         assert.ok(finalInputFormula.includes('"Keep As-Is"') && finalInputFormula.includes('"Use Suggestion"'), 'Final input formula should use renamed decision values');
         assert.ok(publishFormula.includes('"Keep As-Is"') && publishFormula.includes('"Allow One-to-Many"'), 'Publish eligibility should use renamed decision values');
 
-        const finalInputFormulaCell = finalSheet.getRow(2).getCell(1).value?.formula || '';
-        assert.ok(
-            finalInputFormulaCell.includes('Review_Workbench'),
-            'Final table review rows should pull directly from Review_Workbench'
-        );
-        assert.ok(
-            finalInputFormulaCell.includes('Publish_Eligible') || finalInputFormulaCell.includes('=1'),
-            'Final table review rows should be gated by publish eligibility'
-        );
+        const filterFormula = finalSheet.getRow(2).getCell(1).value?.formula || '';
+        assert.ok(filterFormula.includes('FILTER') && filterFormula.includes('Final_Staging'), 'Final table should use FILTER to compact from Final_Staging');
+        const stagingSheet = workbook.getWorksheet('Final_Staging');
+        assert.ok(stagingSheet, 'Expected Final_Staging worksheet');
+        const stagingTranslateInputCol = findHeaderIndex(stagingSheet, 'Translate Input');
+        const stagingReviewRowFormula = stagingSheet.getRow(2).getCell(stagingTranslateInputCol).value?.formula || '';
+        assert.ok(stagingReviewRowFormula.includes('Review_Workbench'), 'Final_Staging review rows should pull from Review_Workbench');
         const outcomesNameCol = findHeaderIndex(finalSheet, 'Outcomes Name');
         const myWsuNameCol = findHeaderIndex(finalSheet, 'myWSU Name');
         const translateInputCol = findHeaderIndex(finalSheet, 'Translate Input');
