@@ -2074,14 +2074,22 @@ async function buildValidationExport(payload) {
         ...wsuColumns
     ].filter(Boolean);
     const reviewWsuNameContextKey = reviewWsuNameCandidates.find(key => key !== reviewWsuKeyContextKey) || reviewWsuNameCandidates[0] || 'wsu_name';
+    const outcomesStateKey = outcomesStateColumn ? `outcomes_${outcomesStateColumn}` : null;
+    const outcomesCountryKey = outcomesCountryColumn ? `outcomes_${outcomesCountryColumn}` : null;
+    const wsuCityKey = wsuCityColumn ? `wsu_${wsuCityColumn}` : null;
+    const wsuStateKey = wsuStateColumn ? `wsu_${wsuStateColumn}` : null;
+    const wsuCountryKey = wsuCountryColumn ? `wsu_${wsuCountryColumn}` : null;
+    const sourceContextKeys = [outcomesStateKey, outcomesCountryKey, wsuCityKey, wsuStateKey, wsuCountryKey].filter(Boolean);
     const reviewWorkbenchColumns = [
         'Decision',
         'Error_Type',
         'Error_Subtype',
         reviewOutcomesNameContextKey,
         reviewOutcomesKeyContextKey,
+        ...sourceContextKeys.filter(k => k && k.startsWith('outcomes_')),
         reviewWsuNameContextKey,
         reviewWsuKeyContextKey,
+        ...sourceContextKeys.filter(k => k && k.startsWith('wsu_')),
         'translate_input',
         'translate_output',
         'Suggested_Key',
@@ -2159,8 +2167,13 @@ async function buildValidationExport(payload) {
         if (col === 'Decision') return 'Decision';
         if (col === reviewOutcomesNameContextKey) return 'Outcomes Name';
         if (col === reviewOutcomesKeyContextKey) return 'Outcomes Key';
+        if (outcomesStateKey && col === outcomesStateKey) return 'Outcomes State';
+        if (outcomesCountryKey && col === outcomesCountryKey) return 'Outcomes Country';
         if (col === reviewWsuNameContextKey) return 'myWSU Name';
         if (col === reviewWsuKeyContextKey) return 'myWSU Key';
+        if (wsuCityKey && col === wsuCityKey) return 'myWSU City';
+        if (wsuStateKey && col === wsuStateKey) return 'myWSU State';
+        if (wsuCountryKey && col === wsuCountryKey) return 'myWSU Country';
         if (col === 'Suggested_Key') return 'Suggested Key';
         if (col === 'Suggested_School') return 'Suggested School';
         return h || col;
@@ -2450,6 +2463,13 @@ async function buildValidationExport(payload) {
         ...wsuColumns
     ].filter(Boolean);
     const wsuNameContextKey = finalWsuNameCandidates.find(key => key !== wsuKeyContextKey) || finalWsuNameCandidates[0] || 'wsu_name';
+    const finalSourceContextCols = [
+        outcomesStateKey && { key: outcomesStateKey, header: 'Outcomes State' },
+        outcomesCountryKey && { key: outcomesCountryKey, header: 'Outcomes Country' },
+        wsuCityKey && { key: wsuCityKey, header: 'myWSU City' },
+        wsuStateKey && { key: wsuStateKey, header: 'myWSU State' },
+        wsuCountryKey && { key: wsuCountryKey, header: 'myWSU Country' }
+    ].filter(Boolean);
     const finalColumns = [
         { key: 'translate_input', header: 'Translate Input' },
         { key: 'translate_output', header: 'Translate Output' },
@@ -2459,8 +2479,10 @@ async function buildValidationExport(payload) {
         { key: 'Current_Output', header: 'Current Translate Output' },
         { key: outcomesNameContextKey, header: 'Outcomes Name' },
         { key: outcomesKeyContextKey, header: 'Outcomes Key' },
+        ...finalSourceContextCols.filter(c => c.key.startsWith('outcomes_')),
         { key: wsuNameContextKey, header: 'myWSU Name' },
         { key: wsuKeyContextKey, header: 'myWSU Key' },
+        ...finalSourceContextCols.filter(c => c.key.startsWith('wsu_')),
         { key: 'Suggested_Key', header: 'Suggested Key' },
         { key: 'Suggested_School', header: 'Suggested School' },
         { key: 'Source_Sheet', header: 'Source Sheet' },
@@ -2525,6 +2547,7 @@ async function buildValidationExport(payload) {
         Suggested_Key: 22,
         Suggested_School: 28
     };
+    sourceContextKeys.forEach(k => { finalColumnWidths[k] = 18; });
     finalSheet.columns = finalColumns.map(col => ({
         width: finalColumnWidths[col.key] || 22,
         hidden: false

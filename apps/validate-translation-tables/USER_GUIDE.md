@@ -76,6 +76,7 @@ Hidden by default (diagnostic/internal):
 Each row shows reviewer context and decision outputs:
 
 - Outcomes and myWSU name/key context
+- Source location columns when selected: Outcomes State, Outcomes Country; myWSU City, myWSU State, myWSU Country (blanks in source appear as blank)
 - Current translate keys and suggested key/school
 - `Decision` (editable dropdown)
 - Formula outputs: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Decision_Warning`
@@ -98,6 +99,7 @@ The sheet freezes the header row only, so horizontal scrolling should remain usa
 - `Final_Translation_Table` includes:
   - direct value rows for auto-approved mappings
   - decision-driven rows from `Review_Workbench` when `Publish_Eligible = 1`
+  - key pairs plus source context (Outcomes Name/State/Country; myWSU Name/City/State/Country) so each row is a matched pair with full source data; blanks in source appear as blank
 - `Final_Translation_Table` opens with Excel filter enabled so you can quickly filter `Translate Input` to non-blanks.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
 - Publish flow is: `Review_Workbench` -> `Approved_Mappings` (internal) -> `Final_Translation_Table`.
