@@ -52,52 +52,53 @@ Use this when you already have a translation table and want to correct it.
 
 ### Validate Excel review order (left to right)
 
-See the `Review_Instructions` sheet in the workbook for detailed guidance. Recommended order:
+Recommended order:
 
 1. `Review_Workbench` - main decision sheet (use this first).
 2. `Final_Translation_Table` - final publish-ready key table.
 3. `Translation_Key_Updates` - only changed key pairs.
 4. `QA_Checks_Validate` - publish gate checks.
-5. Reference/detail tabs:
-    - `Action_Queue`
-    - `Approved_Mappings`
-    - `Errors_in_Translate`
-    - `Output_Not_Found_Ambiguous` (if present)
-    - `Output_Not_Found_No_Replacement` (if present)
-    - `One_to_Many`
-    - `Missing_Mappings`
-    - `High_Confidence_Matches`
-    - `Valid_Mappings`
 
-Note: `Action_Queue` and `Approved_Mappings` are internal formula/staging tabs and may be hidden in the workbook.
+Hidden by default (diagnostic/internal):
+
+- `Errors_in_Translate`
+- `Output_Not_Found_Ambiguous` (if present)
+- `Output_Not_Found_No_Replacement` (if present)
+- `One_to_Many`
+- `Missing_Mappings`
+- `High_Confidence_Matches`
+- `Valid_Mappings`
+- `Action_Queue`
+- `Approved_Mappings`
 
 ### How `Review_Workbench` works
 
-Each row has:
+Each row shows reviewer context and decision outputs:
 
-- Current keys: `Current_Input`, `Current_Output`
-- Suggested key fields (when available)
-- Decision fields
-- Formula fields: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Has_Update`
+- Outcomes and myWSU name/key context
+- Current translate keys and suggested key/school
+- `Decision` (editable dropdown)
+- Formula outputs: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Decision_Warning`
 
-You edit decision/audit fields only. Formula fields are locked.
+Only `Decision` is editable. Formula/system columns are locked.
 The sheet freezes the header row only, so horizontal scrolling should remain usable.
 
 ### Validate decision meanings
 
 - `Accept`: keep current keys as final.
 - `Update Key`: apply `Suggested_Key` on the side shown by `Key_Update_Side`.
-- `Allow One-to-Many`: approve as an exception (requires `Reason_Code`).
-- `No Change`: keep values, but do not publish as approved.
+- `Allow One-to-Many`: approve as an intentional one-to-many exception.
 - `No Match`: unresolved.
-- `Needs Research`: unresolved.
 
 ### What happens automatically
 
 - `Valid` and `High_Confidence_Match` rows are auto-approved.
 - You do not need to approve those one by one.
 - Internal `Approved_Mappings` updates as you review.
-- `Final_Translation_Table` is generated from approved rows.
+- `Final_Translation_Table` includes:
+  - direct value rows for auto-approved mappings
+  - decision-driven rows from `Review_Workbench` when `Publish_Eligible = 1`
+- `Final_Translation_Table` opens with Excel filter enabled so you can quickly filter `Translate Input` to non-blanks.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
 - Publish flow is: `Review_Workbench` -> `Approved_Mappings` (internal) -> `Final_Translation_Table`.
 
@@ -112,7 +113,6 @@ Gate-blocking checks include:
 - blank finals on publish-eligible rows
 - `Update Key` without `Suggested_Key`
 - `Update Key` with invalid `Key_Update_Side`
-- `Allow One-to-Many` approvals missing `Reason_Code`
 - duplicate final keys excluding rows intentionally approved as `Allow One-to-Many`
 
 ## Workflow 2: Create a new translation table
@@ -159,7 +159,6 @@ See the `Review_Instructions_Create` sheet in the workbook for detailed guidance
 - `Accept`: keep proposed match.
 - `Choose Alternate`: pick `Alt 1/2/3`.
 - `No Match`: unresolved.
-- `Needs Research`: unresolved.
 
 `Final_myWSU_Key` and `Final_myWSU_Name` are formula-driven from your decision.
 
@@ -168,7 +167,6 @@ See the `Review_Instructions_Create` sheet in the workbook for detailed guidance
 - Review by exception, not row by row.
 - Start with high-priority structural/key issues.
 - Process in passes (for example 500 to 1000 rows at a time).
-- Use `Needs Research` instead of guessing.
 - Always check QA sheets before publish.
 
 ## Common mistakes

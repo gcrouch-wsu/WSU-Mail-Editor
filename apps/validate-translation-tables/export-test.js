@@ -369,8 +369,22 @@ async function run() {
         assertExportResult(result);
         assert.equal(result.filename, 'Validation_Test.xlsx');
         const workbook = harness.getLastWorkbook();
+        assert.equal(
+            workbook.calcProperties && workbook.calcProperties.fullCalcOnLoad,
+            true,
+            'Validation workbook should force full recalculation on open'
+        );
         assert.ok(workbook.getWorksheet('Review_Workbench'), 'Expected Review_Workbench worksheet');
         assert.ok(workbook.getWorksheet('QA_Checks_Validate'), 'Expected QA_Checks_Validate worksheet');
+        const finalSheet = workbook.getWorksheet('Final_Translation_Table');
+        assert.ok(finalSheet, 'Expected Final_Translation_Table worksheet');
+        const finalInputCell = finalSheet.getRow(2).getCell(1).value;
+        assert.equal(finalInputCell, 'IN-1', 'Auto-approved rows should be written as plain values');
+        assert.equal(
+            typeof finalInputCell,
+            'string',
+            'Auto-approved final translate input cell should be string value'
+        );
     });
 
     await runCheck('buildValidationExport keeps review-to-final approval flow and output-side duplicate suggestions', async () => {
@@ -431,17 +445,43 @@ async function run() {
         const workbook = harness.getLastWorkbook();
         const actionQueue = workbook.getWorksheet('Action_Queue');
         const approvedMappings = workbook.getWorksheet('Approved_Mappings');
+        const errorsSheet = workbook.getWorksheet('Errors_in_Translate');
+        const ambiguousOutputSheet = workbook.getWorksheet('Output_Not_Found_Ambiguous');
+        const noReplacementOutputSheet = workbook.getWorksheet('Output_Not_Found_No_Replacement');
         const oneToMany = workbook.getWorksheet('One_to_Many');
+        const missingMappings = workbook.getWorksheet('Missing_Mappings');
+        const highConfidence = workbook.getWorksheet('High_Confidence_Matches');
+        const validMappings = workbook.getWorksheet('Valid_Mappings');
         const reviewSheet = workbook.getWorksheet('Review_Workbench');
         const finalSheet = workbook.getWorksheet('Final_Translation_Table');
         assert.ok(actionQueue, 'Expected Action_Queue worksheet');
         assert.ok(approvedMappings, 'Expected Approved_Mappings worksheet');
+        assert.ok(errorsSheet, 'Expected Errors_in_Translate worksheet');
         assert.ok(oneToMany, 'Expected One_to_Many worksheet');
+        assert.ok(missingMappings, 'Expected Missing_Mappings worksheet');
+        assert.ok(highConfidence, 'Expected High_Confidence_Matches worksheet');
+        assert.ok(validMappings, 'Expected Valid_Mappings worksheet');
         assert.ok(reviewSheet, 'Expected Review_Workbench worksheet');
         assert.ok(finalSheet, 'Expected Final_Translation_Table worksheet');
 
         assert.equal(actionQueue.state, 'hidden', 'Action_Queue should be hidden in exported workbook');
         assert.equal(approvedMappings.state, 'hidden', 'Approved_Mappings should be hidden in exported workbook');
+        assert.equal(errorsSheet.state, 'hidden', 'Errors_in_Translate should be hidden in exported workbook');
+        if (ambiguousOutputSheet) {
+            assert.equal(ambiguousOutputSheet.state, 'hidden', 'Output_Not_Found_Ambiguous should be hidden in exported workbook');
+        }
+        if (noReplacementOutputSheet) {
+            assert.equal(noReplacementOutputSheet.state, 'hidden', 'Output_Not_Found_No_Replacement should be hidden in exported workbook');
+        }
+        assert.equal(oneToMany.state, 'hidden', 'One_to_Many should be hidden in exported workbook');
+        assert.equal(missingMappings.state, 'hidden', 'Missing_Mappings should be hidden in exported workbook');
+        assert.equal(highConfidence.state, 'hidden', 'High_Confidence_Matches should be hidden in exported workbook');
+        assert.equal(validMappings.state, 'hidden', 'Valid_Mappings should be hidden in exported workbook');
+
+        const reviewSheetIndex = workbook._worksheets.findIndex(sheet => sheet && sheet.name === 'Review_Workbench');
+        assert.ok(reviewSheetIndex >= 0, 'Review_Workbench should exist in workbook order');
+        assert.equal(workbook.views?.[0]?.activeTab, reviewSheetIndex, 'Review_Workbench should be the active tab on open');
+        assert.equal(workbook.views?.[0]?.firstSheet, reviewSheetIndex, 'Review_Workbench should be the first visible tab on open');
 
         const reviewView = Array.isArray(reviewSheet.views) && reviewSheet.views[0] ? reviewSheet.views[0] : {};
         assert.equal(reviewView.ySplit, 1, 'Review_Workbench should freeze header row');
@@ -463,25 +503,34 @@ async function run() {
 
         const finalInputFormulaCell = finalSheet.getRow(2).getCell(1).value?.formula || '';
         assert.ok(
-            finalInputFormulaCell.includes('INDEX(Approved_Mappings'),
-            'Final table rows should be pulled from Approved_Mappings formula pipeline'
+            finalInputFormulaCell.includes('Review_Workbench'),
+            'Final table review rows should pull directly from Review_Workbench'
+        );
+        assert.ok(
+            finalInputFormulaCell.includes('Publish_Eligible') || finalInputFormulaCell.includes('=1'),
+            'Final table review rows should be gated by publish eligibility'
         );
         const outcomesNameCol = findHeaderIndex(finalSheet, 'Outcomes Name');
         const myWsuNameCol = findHeaderIndex(finalSheet, 'myWSU Name');
         const currentInputCol = findHeaderIndex(finalSheet, 'Current Translate Input');
-        const approvedPickCol = findHeaderIndex(finalSheet, '_Approved Pick');
         assert.ok(outcomesNameCol > 0, 'Final table should include Outcomes Name context');
         assert.ok(myWsuNameCol > 0, 'Final table should include myWSU Name context');
         assert.ok(currentInputCol > 0, 'Final table should include current translate keys for reviewer context');
-        assert.ok(approvedPickCol > 0, 'Final table should include internal approved-pick helper');
-        const approvedPickFormula = finalSheet.getRow(2).getCell(approvedPickCol).value?.formula || '';
-        assert.ok(
-            approvedPickFormula.includes('AGGREGATE(15,6,(ROW('),
-            'Approved pick formula should wrap ROW math in parentheses before dividing by mask'
+        assert.equal(
+            findHeaderIndex(finalSheet, '_Approved Pick'),
+            0,
+            'Final table should not include AGGREGATE helper columns'
         );
+        assert.ok(finalSheet.autoFilter, 'Final table should have autoFilter enabled');
+        assert.equal(finalSheet.autoFilter.from, 'A1', 'Final table autoFilter should start at A1');
+        assert.ok(String(finalSheet.autoFilter.to || '').startsWith('O'), 'Final table autoFilter should include all output columns');
+
+        const qaSheet = workbook.getWorksheet('QA_Checks_Validate');
+        assert.ok(qaSheet, 'Expected QA_Checks_Validate worksheet');
+        const publishGateDetail = qaSheet.getRow(12).getCell(4).value;
         assert.ok(
-            approvedPickFormula.includes('+1)/(('),
-            'Approved pick formula should divide the full row-index expression by the eligibility mask'
+            String(publishGateDetail || '').includes('Diagnostic tabs are hidden'),
+            'QA publish gate detail should mention hidden diagnostic tabs'
         );
     });
 
@@ -537,6 +586,11 @@ async function run() {
         assertExportResult(result);
 
         const workbook = harness.getLastWorkbook();
+        assert.equal(
+            workbook.calcProperties && workbook.calcProperties.fullCalcOnLoad,
+            true,
+            'Generation workbook should force full recalculation on open'
+        );
         const ambiguousSheet = workbook.getWorksheet('Ambiguous_Candidates');
         const missingSheet = workbook.getWorksheet('Missing_In_myWSU');
         const reviewSheet = workbook.getWorksheet('Review_Decisions');

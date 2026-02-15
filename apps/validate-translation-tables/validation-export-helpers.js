@@ -68,7 +68,7 @@
     function getQAValidateRowsForEmptyQueue() {
         return [
             ['Check', 'Count', 'Status', 'Detail'],
-            ['Unresolved actions', 0, 'PASS', 'Blank, No Match, or Needs Research'],
+            ['Unresolved actions', 0, 'PASS', 'Blank or No Match'],
             ['Approved review rows', 0, 'PASS', 'Rows approved from Review_Workbench'],
             ['Approved rows beyond formula capacity', 0, 'PASS', 'Rows above formula capacity'],
             ['Blank final keys on publish-eligible rows (sanity)', 0, 'PASS', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
@@ -78,7 +78,7 @@
             ['One-to-many rows lacking decision', 0, 'PASS', 'One-to-many rows without decision (advisory)'],
             ['Duplicate final input keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
             ['Duplicate final output keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
-            ['Publish gate', 'PASS', '', 'Final publish gate status (B8/B9 are advisory)']
+            ['Publish gate', 'PASS', '', 'Final publish gate status (B8/B9 are advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
         ];
     }
 

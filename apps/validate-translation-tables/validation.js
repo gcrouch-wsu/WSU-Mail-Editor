@@ -311,6 +311,7 @@ const NAME_TOKEN_ALIASES = {
     inst: 'institute',
     poly: 'polytechnic',
     polytech: 'polytechnic',
+    cal: 'california',
     umass: 'massachusetts',
     ucla: 'california',
     usc: 'southern',
@@ -340,6 +341,8 @@ function normalizeNameForCompare(value) {
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\buniv\b/g, 'university')
+        .replace(/\bcal\b/g, 'california')
         .replace(/\buniveristy\b/g, 'university')
         .replace(/\buniversiti\b/g, 'university')
         .replace(/\bcal state university\b/g, 'california state')
@@ -374,8 +377,8 @@ function normalizeNameForCompare(value) {
         .trim();
 }
 
-function tokenizeName(value) {
-    const normalized = normalizeNameForCompare(value);
+function tokenizeNormalizedName(normalizedValue) {
+    const normalized = String(normalizedValue || '').trim();
     if (!normalized) {
         return [];
     }
@@ -385,42 +388,179 @@ function tokenizeName(value) {
         .filter(Boolean);
 }
 
+function tokenizeName(value) {
+    return tokenizeNormalizedName(normalizeNameForCompare(value));
+}
+
+function buildTokenIDF(allNames) {
+    const names = Array.isArray(allNames) ? allNames : [];
+    const docCount = names.length;
+    if (!docCount) return {};
+    const df = {};
+    names.forEach(name => {
+        const tokens = new Set(getInformativeTokens(tokenizeName(name)));
+        tokens.forEach(token => {
+            df[token] = (df[token] || 0) + 1;
+        });
+    });
+    const idf = {};
+    Object.keys(df).forEach(token => {
+        idf[token] = Math.log((docCount + 1) / (df[token] + 1)) + 1;
+    });
+    const idfValues = Object.values(idf).sort((a, b) => a - b);
+    const medianIDF = idfValues.length
+        ? idfValues[Math.floor(idfValues.length / 2)]
+        : 0;
+    try {
+        Object.defineProperty(idf, '__median', {
+            value: medianIDF,
+            writable: true,
+            enumerable: false,
+            configurable: true
+        });
+    } catch (error) {
+        idf.__median = medianIDF;
+    }
+    return idf;
+}
+
+function getMedianIDF(idfTable) {
+    if (!idfTable || typeof idfTable !== 'object') {
+        return 0;
+    }
+    if (typeof idfTable.__median === 'number' && Number.isFinite(idfTable.__median)) {
+        return idfTable.__median;
+    }
+    const idfValues = Object.keys(idfTable)
+        .filter(key => !key.startsWith('__'))
+        .map(key => idfTable[key])
+        .filter(value => typeof value === 'number' && Number.isFinite(value))
+        .sort((a, b) => a - b);
+    const medianIDF = idfValues.length
+        ? idfValues[Math.floor(idfValues.length / 2)]
+        : 0;
+    try {
+        Object.defineProperty(idfTable, '__median', {
+            value: medianIDF,
+            writable: true,
+            enumerable: false,
+            configurable: true
+        });
+    } catch (error) {
+        idfTable.__median = medianIDF;
+    }
+    return medianIDF;
+}
+
 function getInformativeTokens(tokens) {
     return tokens.filter(token => token.length > 1 && !NAME_TOKEN_STOPWORDS.has(token));
 }
 
-function tokensMatch(token1, token2) {
-    if (token1 === token2) return true;
-    if (token1.length < 4 || token2.length < 4) return false;
-    return token1.startsWith(token2) || token2.startsWith(token1);
-}
+function jaroWinkler(value1, value2) {
+    const s1 = String(value1 || '');
+    const s2 = String(value2 || '');
+    if (s1 === s2) return 1.0;
+    const len1 = s1.length;
+    const len2 = s2.length;
+    if (!len1 || !len2) return 0.0;
 
-function tokenOverlapStats(tokens1, tokens2) {
-    if (!tokens1.length || !tokens2.length) {
-        return { score: 0, matches: 0 };
-    }
-
-    const used = new Set();
+    const matchWindow = Math.max(0, Math.floor(Math.max(len1, len2) / 2) - 1);
+    const s1Matches = new Array(len1).fill(false);
+    const s2Matches = new Array(len2).fill(false);
     let matches = 0;
 
-    for (const token1 of tokens1) {
-        let matchedIndex = -1;
-        for (let i = 0; i < tokens2.length; i++) {
-            if (used.has(i)) continue;
-            if (tokensMatch(token1, tokens2[i])) {
-                matchedIndex = i;
-                break;
-            }
-        }
-        if (matchedIndex >= 0) {
-            used.add(matchedIndex);
+    for (let i = 0; i < len1; i++) {
+        const start = Math.max(0, i - matchWindow);
+        const end = Math.min(i + matchWindow + 1, len2);
+        for (let j = start; j < end; j++) {
+            if (s2Matches[j] || s1[i] !== s2[j]) continue;
+            s1Matches[i] = true;
+            s2Matches[j] = true;
             matches += 1;
+            break;
         }
     }
 
+    if (!matches) return 0.0;
+
+    let transpositions = 0;
+    let k = 0;
+    for (let i = 0; i < len1; i++) {
+        if (!s1Matches[i]) continue;
+        while (!s2Matches[k]) k += 1;
+        if (s1[i] !== s2[k]) transpositions += 1;
+        k += 1;
+    }
+
+    const jaro = (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3;
+    let prefixLen = 0;
+    const maxPrefix = Math.min(4, len1, len2);
+    for (let i = 0; i < maxPrefix; i++) {
+        if (s1[i] !== s2[i]) break;
+        prefixLen += 1;
+    }
+    return jaro + prefixLen * 0.1 * (1 - jaro);
+}
+
+function tokenSimilarity(token1, token2) {
+    if (token1 === token2) return 1.0;
+    return jaroWinkler(token1, token2);
+}
+
+function tokensMatch(token1, token2) {
+    return tokenSimilarity(token1, token2) >= 0.8;
+}
+
+const CONTRADICTORY_NAME_PAIRS = [
+    [['dental', 'dentistry'], ['medical', 'medicine']],
+    [['dental'], ['veterinary', 'vet']],
+    [['law'], ['medical', 'business', 'engineering']],
+    [['medical'], ['law', 'business', 'engineering']],
+    [['graduate'], ['undergraduate']],
+    [['community college', 'cc'], ['university']]
+];
+
+function tokenOverlapStats(tokens1, tokens2, idfTable = null) {
+    if (!tokens1.length || !tokens2.length) {
+        return { score: 0, matches: 0, forwardBest: [], backwardBest: [] };
+    }
+
+    const mongeElkanScore = (queryTokens, targetTokens, idf = null) => {
+        let weightedSum = 0;
+        let weightSum = 0;
+        let softMatches = 0;
+        const bestByQuery = [];
+        for (const queryToken of queryTokens) {
+            let bestSimilarity = 0;
+            for (const targetToken of targetTokens) {
+                const similarity = tokenSimilarity(queryToken, targetToken);
+                if (similarity > bestSimilarity) {
+                    bestSimilarity = similarity;
+                }
+            }
+            const weight = (idf && idf[queryToken]) ? idf[queryToken] : 1;
+            weightedSum += bestSimilarity * weight;
+            weightSum += weight;
+            if (bestSimilarity >= 0.8) {
+                softMatches += 1;
+            }
+            bestByQuery.push({ token: queryToken, bestSimilarity });
+        }
+        return {
+            score: weightSum > 0 ? weightedSum / weightSum : 0,
+            matches: softMatches,
+            bestByQuery
+        };
+    };
+
+    const forward = mongeElkanScore(tokens1, tokens2, idfTable);
+    const backward = mongeElkanScore(tokens2, tokens1, idfTable);
+
     return {
-        score: matches / Math.max(tokens1.length, tokens2.length),
-        matches
+        score: Math.max(forward.score, backward.score),
+        matches: Math.max(forward.matches, backward.matches),
+        forwardBest: forward.bestByQuery,
+        backwardBest: backward.bestByQuery
     };
 }
 
@@ -653,7 +793,8 @@ function isHighConfidenceNameMatch(
     country1,
     country2,
     similarity,
-    threshold
+    threshold,
+    idfTable = null
 ) {
     if (!name1 || !name2) return false;
     const stateOkay = statesMatch(state1, state2);
@@ -666,7 +807,7 @@ function isHighConfidenceNameMatch(
 
     const tokens1 = getInformativeTokens(tokenizeName(name1));
     const tokens2 = getInformativeTokens(tokenizeName(name2));
-    const overlap = tokenOverlapStats(tokens1, tokens2);
+    const overlap = tokenOverlapStats(tokens1, tokens2, idfTable);
 
     if ((aliasParenOkay || acronymOkay || universityVariantOkay) && (countryOkay || stateOkay || cityOkay || parenOkay)) {
         return true;
@@ -690,6 +831,45 @@ function isHighConfidenceNameMatch(
     return overlap.matches >= 1;
 }
 
+function fieldEvidence(
+    name1,
+    name2,
+    state1,
+    state2,
+    city1,
+    city2,
+    country1,
+    country2,
+    code1 = '',
+    code2 = ''
+) {
+    let logOdds = 0;
+
+    if (countriesMatch(country1, country2)) {
+        logOdds += 1.5;
+    } else if (country1 && country2) {
+        logOdds -= 2.0;
+    }
+
+    if (statesMatch(state1, state2)) {
+        logOdds += 2.0;
+    } else if (hasComparableStateValues(state1, state2)) {
+        logOdds -= 1.0;
+    }
+
+    if (cityInName(name1, city2) || cityInName(name2, city1)) {
+        logOdds += 1.5;
+    }
+
+    const normalizedCode1 = normalizeKeyValue(code1);
+    const normalizedCode2 = normalizeKeyValue(code2);
+    if (normalizedCode1 && normalizedCode2 && normalizedCode1 === normalizedCode2) {
+        logOdds += 5.0;
+    }
+
+    return 1 / (1 + Math.exp(-logOdds));
+}
+
 function cityInName(nameValue, cityValue) {
     if (!nameValue || !cityValue) return false;
     const normalizedName = normalizeNameForCompare(nameValue);
@@ -701,7 +881,7 @@ function cityInName(nameValue, cityValue) {
     return tokens.every(token => normalizedName.includes(token));
 }
 
-function getTopTwoNameScores(sourceName, targetRows, targetField, threshold = 0, scoreCache = null) {
+function getTopTwoNameScores(sourceName, targetRows, targetField, threshold = 0, scoreCache = null, idfTable = null) {
     if (!sourceName) {
         return { bestScore: -1, secondBestScore: -1 };
     }
@@ -710,7 +890,7 @@ function getTopTwoNameScores(sourceName, targetRows, targetField, threshold = 0,
         return { bestScore: -1, secondBestScore: -1 };
     }
     const cacheKey = scoreCache
-        ? `${targetField}|${threshold}|${normalizedSource}`
+        ? `${targetField}|${threshold}|${normalizedSource}|${Boolean(idfTable)}`
         : '';
     if (scoreCache && scoreCache.has(cacheKey)) {
         return scoreCache.get(cacheKey);
@@ -723,7 +903,7 @@ function getTopTwoNameScores(sourceName, targetRows, targetField, threshold = 0,
         if (!targetName) {
             return;
         }
-        const score = calculateNameSimilarity(sourceName, targetName);
+        const score = calculateNameSimilarity(sourceName, targetName, idfTable);
         if (score < threshold) {
             return;
         }
@@ -749,14 +929,15 @@ function isAmbiguousNameMatch(
     threshold,
     gap = NAME_MATCH_AMBIGUITY_GAP,
     scoreCache = null,
-    mappedScoreValue = null
+    mappedScoreValue = null,
+    idfTable = null
 ) {
     if (!sourceName || !targetName) {
         return false;
     }
     const mappedScore = typeof mappedScoreValue === 'number'
         ? mappedScoreValue
-        : calculateNameSimilarity(sourceName, targetName);
+        : calculateNameSimilarity(sourceName, targetName, idfTable);
     if (mappedScore < threshold) {
         return false;
     }
@@ -765,7 +946,8 @@ function isAmbiguousNameMatch(
         targetRows,
         targetField,
         threshold,
-        scoreCache
+        scoreCache,
+        idfTable
     );
     if (bestScore < 0 || secondBestScore < 0) {
         return false;
@@ -793,6 +975,7 @@ function classifyMissingOutputReplacement(
     const gap = typeof options.ambiguityGap === 'number'
         ? Math.max(0.01, options.ambiguityGap)
         : STALE_KEY_REPLACEMENT_GAP;
+    const idfTable = options.idfTable || null;
 
     if (!sourceName || !nameField || !keyField || !Array.isArray(wsuRows) || !wsuRows.length) {
         return { subtype: OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT, bestCandidate: null };
@@ -822,7 +1005,7 @@ function classifyMissingOutputReplacement(
             return;
         }
 
-        const similarity = calculateNameSimilarity(sourceName, targetName);
+        const similarity = calculateNameSimilarity(sourceName, targetName, idfTable);
         if (!isHighConfidenceNameMatch(
             sourceName,
             targetName,
@@ -833,7 +1016,8 @@ function classifyMissingOutputReplacement(
             sourceCountry,
             targetCountry,
             similarity,
-            threshold
+            threshold,
+            idfTable
         )) {
             return;
         }
@@ -871,7 +1055,7 @@ function classifyMissingOutputReplacement(
     };
 }
 
-function calculateNameSimilarity(name1, name2) {
+function calculateNameSimilarity(name1, name2, idfTable = null) {
     if (!name1 || !name2) return 0.0;
 
     const normalized1 = normalizeNameForCompare(name1);
@@ -884,25 +1068,16 @@ function calculateNameSimilarity(name1, name2) {
         return 1.0;
     }
 
-    const informative1 = getInformativeTokens(tokenizeName(normalized1));
-    const informative2 = getInformativeTokens(tokenizeName(normalized2));
-    const tokensAll1 = tokenizeName(normalized1);
-    const tokensAll2 = tokenizeName(normalized2);
+    const tokensAll1 = tokenizeNormalizedName(normalized1);
+    const tokensAll2 = tokenizeNormalizedName(normalized2);
+    const informative1 = getInformativeTokens(tokensAll1);
+    const informative2 = getInformativeTokens(tokensAll2);
     if (!informative1.length && !informative2.length) {
         return 0.0;
     }
-    const overlap = tokenOverlapStats(informative1, informative2);
-    const tokenSimilarity = overlap.score;
+    const overlap = tokenOverlapStats(informative1, informative2, idfTable);
+    const tokenSimilarityScore = overlap.score;
     const baseSimilarity = similarityRatio(normalized1, normalized2);
-
-    const contradictoryPairs = [
-        [['dental', 'dentistry'], ['medical', 'medicine']],
-        [['dental'], ['veterinary', 'vet']],
-        [['law'], ['medical', 'business', 'engineering']],
-        [['medical'], ['law', 'business', 'engineering']],
-        [['graduate'], ['undergraduate']],
-        [['community college', 'cc'], ['university']]
-    ];
 
     const hasWord = (word, normalized, tokens) => {
         if (!word) return false;
@@ -915,7 +1090,7 @@ function calculateNameSimilarity(name1, name2) {
         return normalized.includes(word);
     };
 
-    for (const [group1, group2] of contradictoryPairs) {
+    for (const [group1, group2] of CONTRADICTORY_NAME_PAIRS) {
         const hasGroup1 = group1.some(word => hasWord(word, normalized1, tokensAll1));
         const hasGroup2 = group2.some(word => hasWord(word, normalized2, tokensAll2));
 
@@ -930,13 +1105,57 @@ function calculateNameSimilarity(name1, name2) {
     if (informative1.length >= 2 && informative2.length >= 2 && overlap.matches === 0) {
         return 0.0;
     }
-    if (informative1.length && informative2.length && tokenSimilarity === 0) {
+    if (informative1.length && informative2.length && tokenSimilarityScore === 0) {
         return Math.min(baseSimilarity * 0.6, 0.45);
     }
 
-    let score = (baseSimilarity * 0.55) + (tokenSimilarity * 0.45);
-    if (tokenSimilarity < 0.2 && baseSimilarity < 0.85) {
+    let score = (baseSimilarity * 0.55) + (tokenSimilarityScore * 0.45);
+    if (tokenSimilarityScore < 0.2 && baseSimilarity < 0.85) {
         score *= 0.85;
+    }
+    const medianIDF = idfTable ? getMedianIDF(idfTable) : 0;
+    if (idfTable && informative1.length && informative2.length) {
+        const countRareMismatches = (bestByQuery) => {
+            let mismatches = 0;
+            bestByQuery.forEach(({ token, bestSimilarity }) => {
+                if (bestSimilarity < 0.8 && (idfTable[token] || 0) >= medianIDF) {
+                    mismatches += 1;
+                }
+            });
+            return mismatches;
+        };
+        const rareMismatches = Math.max(
+            countRareMismatches(overlap.forwardBest || []),
+            countRareMismatches(overlap.backwardBest || [])
+        );
+        if (rareMismatches > 0) {
+            score -= Math.min(0.2, rareMismatches * 0.06);
+        }
+    }
+
+    const TRUNCATION_LENGTH = 30;
+    const originalLen1 = String(name1 || '').trim().length;
+    const originalLen2 = String(name2 || '').trim().length;
+    if ((originalLen1 === TRUNCATION_LENGTH || originalLen2 === TRUNCATION_LENGTH) && idfTable) {
+        const useForward = originalLen1 === TRUNCATION_LENGTH;
+        const truncTokens = useForward ? informative1 : informative2;
+        const bestMatches = useForward ? (overlap.forwardBest || []) : (overlap.backwardBest || []);
+        let containedCount = 0;
+        let hasRareAlignment = false;
+        for (const truncToken of truncTokens) {
+            const tokenMatch = bestMatches.find(entry => entry.token === truncToken);
+            const bestSimilarity = tokenMatch ? tokenMatch.bestSimilarity : 0;
+            if (bestSimilarity >= 0.8) {
+                containedCount += 1;
+                if ((idfTable[truncToken] || 0) > medianIDF) {
+                    hasRareAlignment = true;
+                }
+            }
+        }
+        const containment = truncTokens.length > 0 ? containedCount / truncTokens.length : 0;
+        if (containment >= 0.9 && hasRareAlignment) {
+            score = Math.min(1.0, score + 0.08);
+        }
     }
 
     return Math.max(0, Math.min(1, score));
@@ -1194,6 +1413,12 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
     const outcomesCountryKey = nameCompare.country_outcomes ? `outcomes_${nameCompare.country_outcomes}` : '';
     const wsuCountryKey = nameCompare.country_wsu ? `wsu_${nameCompare.country_wsu}` : '';
     const canCompareNames = nameCompareEnabled && outcomesKey && wsuKey;
+    const idfTable = canCompareNames
+        ? buildTokenIDF([
+            ...outcomes.map(row => row[outcomesColumn] || ''),
+            ...wsuOrg.map(row => row[wsuColumn] || '')
+        ].filter(Boolean))
+        : null;
     const ambiguityScoreCache = canCompareNames ? new Map() : null;
     const missingOutputReplacementCache = canCompareNames ? new Map() : null;
 
@@ -1263,6 +1488,7 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                             stateField: nameCompare.state_wsu || '',
                             cityField: nameCompare.city_wsu || '',
                             countryField: nameCompare.country_wsu || '',
+                            idfTable,
                             threshold,
                             ambiguityGap: Math.max(STALE_KEY_REPLACEMENT_GAP, ambiguityGap)
                         }
@@ -1312,15 +1538,32 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
         }
 
         if (result.Error_Type === 'Valid' && canCompareNames && row[outcomesKey] && row[wsuKey]) {
-            const similarity = calculateNameSimilarity(row[outcomesKey], row[wsuKey]);
+            const stateValue1 = outcomesStateKey ? row[outcomesStateKey] : '';
+            const stateValue2 = wsuStateKey ? row[wsuStateKey] : '';
+            const cityValue1 = outcomesCityKey ? row[outcomesCityKey] : '';
+            const cityValue2 = wsuCityKey ? row[wsuCityKey] : '';
+            const countryValue1 = outcomesCountryKey ? row[outcomesCountryKey] : '';
+            const countryValue2 = wsuCountryKey ? row[wsuCountryKey] : '';
+            const evidence = fieldEvidence(
+                row[outcomesKey],
+                row[wsuKey],
+                stateValue1,
+                stateValue2,
+                cityValue1,
+                cityValue2,
+                countryValue1,
+                countryValue2
+            );
+            const effectiveThreshold = Math.max(
+                0,
+                Math.min(
+                    1,
+                    threshold + (evidence > 0.7 ? -0.03 : evidence < 0.3 ? 0.03 : 0)
+                )
+            );
+            const similarity = calculateNameSimilarity(row[outcomesKey], row[wsuKey], idfTable);
 
-            if (similarity < threshold) {
-                const stateValue1 = outcomesStateKey ? row[outcomesStateKey] : '';
-                const stateValue2 = wsuStateKey ? row[wsuStateKey] : '';
-                const cityValue1 = outcomesCityKey ? row[outcomesCityKey] : '';
-                const cityValue2 = wsuCityKey ? row[wsuCityKey] : '';
-                const countryValue1 = outcomesCountryKey ? row[outcomesCountryKey] : '';
-                const countryValue2 = wsuCountryKey ? row[wsuCountryKey] : '';
+            if (similarity < effectiveThreshold) {
                 if (isHighConfidenceNameMatch(
                     row[outcomesKey],
                     row[wsuKey],
@@ -1331,7 +1574,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     countryValue1,
                     countryValue2,
                     similarity,
-                    threshold
+                    effectiveThreshold,
+                    idfTable
                 )) {
                     result.Error_Type = 'High_Confidence_Match';
                     result.Error_Description = 'High confidence match based on name + state';
@@ -1345,18 +1589,13 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     row[wsuKey],
                     wsuOrg,
                     wsuColumn,
-                    threshold,
+                    effectiveThreshold,
                     ambiguityGap,
                     ambiguityScoreCache,
-                    similarity
+                    similarity,
+                    idfTable
                 )
             ) {
-                const stateValue1 = outcomesStateKey ? row[outcomesStateKey] : '';
-                const stateValue2 = wsuStateKey ? row[wsuStateKey] : '';
-                const cityValue1 = outcomesCityKey ? row[outcomesCityKey] : '';
-                const cityValue2 = wsuCityKey ? row[wsuCityKey] : '';
-                const countryValue1 = outcomesCountryKey ? row[outcomesCountryKey] : '';
-                const countryValue2 = wsuCountryKey ? row[wsuCountryKey] : '';
                 if (!isHighConfidenceNameMatch(
                     row[outcomesKey],
                     row[wsuKey],
@@ -1367,7 +1606,8 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     countryValue1,
                     countryValue2,
                     similarity,
-                    threshold
+                    effectiveThreshold,
+                    idfTable
                 )) {
                     result.Error_Type = 'Ambiguous_Match';
                     result.Error_Description = `Ambiguous name match (similarity: ${Math.round(similarity * 100)}%). Another candidate is within ${Math.round(ambiguityGap * 100)}% - review alternatives`;

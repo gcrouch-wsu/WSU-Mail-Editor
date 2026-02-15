@@ -1,4 +1,4 @@
-/* global normalizeKeyValue, calculateNameSimilarity, similarityRatio */
+/* global normalizeKeyValue, calculateNameSimilarity, similarityRatio, tokenizeName, getInformativeTokens */
 importScripts('validation.js');
 importScripts('validation-export-helpers.js');
 importScripts('https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js');
@@ -274,7 +274,7 @@ function buildHeaders(outputColumns, keyLabels) {
     });
 }
 
-function buildMappingLogicRow(row, normalizedErrorType, nameCompareConfig) {
+function buildMappingLogicRow(row, normalizedErrorType, nameCompareConfig, idfTable = null) {
     const threshold = Number.isFinite(nameCompareConfig?.threshold)
         ? nameCompareConfig.threshold
         : 0.8;
@@ -283,7 +283,7 @@ function buildMappingLogicRow(row, normalizedErrorType, nameCompareConfig) {
     const outcomesName = outcomesNameKey ? (row[outcomesNameKey] || row.outcomes_name || '') : (row.outcomes_name || '');
     const wsuName = wsuNameKey ? (row[wsuNameKey] || row.wsu_Descr || '') : (row.wsu_Descr || '');
     const similarity = (outcomesName && wsuName && typeof calculateNameSimilarity === 'function')
-        ? calculateNameSimilarity(outcomesName, wsuName)
+        ? calculateNameSimilarity(outcomesName, wsuName, idfTable)
         : null;
     const similarityText = Number.isFinite(similarity) ? formatScore(similarity) : '';
     const thresholdText = formatScore(threshold);
@@ -343,6 +343,10 @@ async function buildGenerationExport(payload) {
         generationConfig = {}
     } = payload;
     const workbook = new ExcelJS.Workbook();
+    workbook.calcProperties = {
+        ...(workbook.calcProperties || {}),
+        fullCalcOnLoad: true
+    };
     const outcomesCols = selectedCols.outcomes || [];
     const wsuCols = selectedCols.wsu_org || [];
     const threshold = Number.isFinite(generationConfig.threshold)
@@ -406,7 +410,7 @@ async function buildGenerationExport(payload) {
     };
     const getReviewPathForErrorRow = (row) => {
         if (row.missing_in === 'Ambiguous Match') {
-            return 'Review Alt 1-3 and choose best candidate, or mark No Match/Needs Research';
+            return 'Review Alt 1-3 and choose best candidate, or mark No Match';
         }
         if (row.missing_in === 'myWSU') {
             return 'No myWSU candidate found. Research target key, then set Decision';
@@ -418,10 +422,10 @@ async function buildGenerationExport(payload) {
     };
     const getReviewPathForSourceStatus = (sourceStatus) => {
         if (sourceStatus === 'Ambiguous Match') {
-            return 'Choose Alternate (Alt 1-3) or mark No Match/Needs Research';
+            return 'Choose Alternate (Alt 1-3) or mark No Match';
         }
         if (sourceStatus === 'Missing in myWSU') {
-            return 'No candidate found. Research key, then set No Match or Needs Research until resolved';
+            return 'No candidate found. Research key, then set No Match until resolved';
         }
         return 'Verify proposed match and confirm Decision';
     };
@@ -775,7 +779,7 @@ async function buildGenerationExport(payload) {
             {
                 type: 'list',
                 allowBlank: true,
-                formulae: ['"Accept,Choose Alternate,No Match,Needs Research"']
+                formulae: ['"Accept,Choose Alternate,No Match"']
             }
         );
         reviewSheet.dataValidations.add(
@@ -875,7 +879,7 @@ async function buildGenerationExport(payload) {
     const reviewDupFinalKeyRange = `Review_Decisions!$${colDupFinalKeyCount}$2:$${colDupFinalKeyCount}$${reviewLastRow}`;
     const qaRows = [
         ['Check', 'Count', 'Status', 'Detail'],
-        ['Unresolved count', `=COUNTIF(${decisionRange},"")+COUNTIF(${decisionRange},"No Match")+COUNTIF(${decisionRange},"Needs Research")`, '=IF(B2=0,"PASS","CHECK")', 'Blank, No Match, or Needs Research decisions'],
+        ['Unresolved count', `=COUNTIF(${decisionRange},"")+COUNTIF(${decisionRange},"No Match")`, '=IF(B2=0,"PASS","CHECK")', 'Blank or No Match decisions'],
         ['Blank final key with approved decision', `=COUNTIFS(${decisionRange},"Accept",${reviewFinalKeyRange},"")+COUNTIFS(${decisionRange},"Choose Alternate",${reviewFinalKeyRange},"")`, '=IF(B3=0,"PASS","FAIL")', 'Approved rows should produce final keys'],
         ['Duplicate final keys (approved)', `=SUMPRODUCT(((${decisionRange}="Accept")+(${decisionRange}="Choose Alternate"))*(${reviewFinalKeyRange}<>"")*(${reviewDupFinalKeyRange}>1))/2`, '=IF(B4=0,"PASS","CHECK")', 'Duplicates among approved final keys'],
         ['Approved total', `=COUNTIF(${decisionRange},"Accept")+COUNTIF(${decisionRange},"Choose Alternate")`, '', 'Rows that will publish to final translation table']
@@ -901,7 +905,7 @@ async function buildGenerationExport(payload) {
         ['Primary action sheet', 'Use Review_Decisions to set Decision values for each Outcomes row.'],
         ['Source Status: Matched', 'Verify the proposed key/name and keep Accept unless correction is needed.'],
         ['Source Status: Ambiguous Match', 'Use Alt 1-3 candidates and Alternate Choice to resolve low-confidence mapping.'],
-        ['Source Status: Missing in myWSU', 'No target candidate found. Research key and use Needs Research or No Match until resolved.'],
+        ['Source Status: Missing in myWSU', 'No target candidate found. Research key and use No Match until resolved.'],
         ['Ambiguous_Candidates tab', 'Reference tab with candidate options, ambiguity scope, and review path guidance.'],
         ['Missing_In_myWSU tab', 'Reference tab listing Outcomes rows that currently have no myWSU target row.'],
         ['Final_Translation_Table', 'Publishes only Accept and Choose Alternate decisions from Review_Decisions.'],
@@ -927,6 +931,10 @@ async function buildGenerationExport(payload) {
 async function buildValidationExport(payload) {
     const { validated = [], selectedCols = {}, options = {}, context = {} } = payload || {};
     const workbook = new ExcelJS.Workbook();
+    workbook.calcProperties = {
+        ...(workbook.calcProperties || {}),
+        fullCalcOnLoad: true
+    };
     const includeSuggestions = Boolean(options.includeSuggestions);
     const showMappingLogic = Boolean(options.showMappingLogic);
     const nameCompareConfig = options.nameCompareConfig || {};
@@ -1031,9 +1039,77 @@ async function buildValidationExport(payload) {
             ? similarityRatio(valueA, valueB)
             : (valueA && valueB && valueA === valueB ? 1 : 0)
     );
+    const getNameTokens = (nameValue) => {
+        const raw = String(nameValue || '').trim();
+        if (!raw) return [];
+        if (typeof getInformativeTokens === 'function' && typeof tokenizeName === 'function') {
+            return getInformativeTokens(tokenizeName(raw));
+        }
+        return raw
+            .toLowerCase()
+            .split(/[^a-z0-9]+/)
+            .filter(token => token.length > 1);
+    };
+    const buildTokenIDFLocal = (allNames) => {
+        const names = Array.isArray(allNames) ? allNames : [];
+        if (!names.length) return {};
+        const df = {};
+        names.forEach(name => {
+            const tokens = new Set(getNameTokens(name));
+            tokens.forEach(token => {
+                df[token] = (df[token] || 0) + 1;
+            });
+        });
+        const idf = {};
+        const docCount = names.length;
+        Object.keys(df).forEach(token => {
+            idf[token] = Math.log((docCount + 1) / (df[token] + 1)) + 1;
+        });
+        const values = Object.values(idf).sort((a, b) => a - b);
+        const medianIDF = values.length ? values[Math.floor(values.length / 2)] : 0;
+        try {
+            Object.defineProperty(idf, '__median', {
+                value: medianIDF,
+                writable: true,
+                enumerable: false,
+                configurable: true
+            });
+        } catch (error) {
+            idf.__median = medianIDF;
+        }
+        return idf;
+    };
+    const buildTokenIndex = (candidates, idf, minIdf) => {
+        const index = {};
+        candidates.forEach((candidate, idx) => {
+            const tokens = new Set(getNameTokens(candidate.name));
+            tokens.forEach(token => {
+                if ((idf[token] || 0) >= minIdf) {
+                    if (!index[token]) {
+                        index[token] = [];
+                    }
+                    index[token].push(idx);
+                }
+            });
+        });
+        return index;
+    };
+    const getBlockedCandidateIndices = (queryName, tokenIndex, idf, minCandidates = 5, maxTokens = 3) => {
+        const queryTokens = Array.from(new Set(getNameTokens(queryName)));
+        if (!queryTokens.length) return null;
+        queryTokens.sort((a, b) => (idf[b] || 0) - (idf[a] || 0));
+        const blocked = new Set();
+        queryTokens.slice(0, maxTokens).forEach(token => {
+            (tokenIndex[token] || []).forEach(idx => blocked.add(idx));
+        });
+        if (blocked.size < minCandidates) {
+            return null;
+        }
+        return Array.from(blocked);
+    };
 
     const MIN_KEY_SUGGESTION_SCORE = 0.6;
-    const minNameScore = Number.isFinite(nameCompareConfig.threshold) ? nameCompareConfig.threshold : 0.8;
+    const MIN_NAME_SUGGESTION_DISPLAY_SCORE = 0.4;
     const canSuggestNames = Boolean(
         includeSuggestions &&
         nameCompareConfig.enabled &&
@@ -1089,6 +1165,27 @@ async function buildValidationExport(payload) {
             }))
             .filter(entry => entry.normName)
         : [];
+    const suggestionIDFTable = canSuggestNames
+        ? buildTokenIDFLocal([
+            ...wsuNameCandidates.map(candidate => candidate.name),
+            ...outcomesNameCandidates.map(candidate => candidate.name)
+        ])
+        : {};
+    const suggestionMedianIDF = typeof suggestionIDFTable.__median === 'number'
+        ? suggestionIDFTable.__median
+        : 0;
+    const wsuNameTokenIndex = canSuggestNames
+        ? buildTokenIndex(wsuNameCandidates, suggestionIDFTable, suggestionMedianIDF)
+        : {};
+    const outcomesNameTokenIndex = canSuggestNames
+        ? buildTokenIndex(outcomesNameCandidates, suggestionIDFTable, suggestionMedianIDF)
+        : {};
+    const suggestionBlockStats = {
+        forwardQueries: 0,
+        reverseQueries: 0,
+        forwardFallbacks: 0,
+        reverseFallbacks: 0
+    };
 
     const formatSuggestionScore = (score) => (
         Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null
@@ -1111,11 +1208,23 @@ async function buildValidationExport(payload) {
     const getBestNameSuggestion = (outcomesName) => {
         if (!canSuggestNames || !outcomesName) return null;
         const candidates = [];
-        wsuNameCandidates.forEach(candidate => {
+        suggestionBlockStats.forwardQueries += 1;
+        const blockedIndices = getBlockedCandidateIndices(
+            outcomesName,
+            wsuNameTokenIndex,
+            suggestionIDFTable
+        );
+        const scanCandidates = blockedIndices
+            ? blockedIndices.map(idx => wsuNameCandidates[idx]).filter(Boolean)
+            : wsuNameCandidates;
+        if (!blockedIndices) {
+            suggestionBlockStats.forwardFallbacks += 1;
+        }
+        scanCandidates.forEach(candidate => {
             const score = typeof calculateNameSimilarity === 'function'
-                ? calculateNameSimilarity(outcomesName, candidate.name)
+                ? calculateNameSimilarity(outcomesName, candidate.name, suggestionIDFTable)
                 : similarityScore(normalizeValue(outcomesName), candidate.normName);
-            if (score >= minNameScore) {
+            if (score >= MIN_NAME_SUGGESTION_DISPLAY_SCORE) {
                 candidates.push({
                     row: candidate.row,
                     key: candidate.key,
@@ -1134,11 +1243,23 @@ async function buildValidationExport(payload) {
     const getBestOutcomesNameSuggestion = (wsuName) => {
         if (!canSuggestNames || !wsuName) return null;
         const candidates = [];
-        outcomesNameCandidates.forEach(candidate => {
+        suggestionBlockStats.reverseQueries += 1;
+        const blockedIndices = getBlockedCandidateIndices(
+            wsuName,
+            outcomesNameTokenIndex,
+            suggestionIDFTable
+        );
+        const scanCandidates = blockedIndices
+            ? blockedIndices.map(idx => outcomesNameCandidates[idx]).filter(Boolean)
+            : outcomesNameCandidates;
+        if (!blockedIndices) {
+            suggestionBlockStats.reverseFallbacks += 1;
+        }
+        scanCandidates.forEach(candidate => {
             const score = typeof calculateNameSimilarity === 'function'
-                ? calculateNameSimilarity(wsuName, candidate.name)
+                ? calculateNameSimilarity(wsuName, candidate.name, suggestionIDFTable)
                 : similarityScore(normalizeValue(wsuName), candidate.normName);
-            if (score >= minNameScore) {
+            if (score >= MIN_NAME_SUGGESTION_DISPLAY_SCORE) {
                 candidates.push({
                     row: candidate.row,
                     key: candidate.key,
@@ -1283,7 +1404,7 @@ async function buildValidationExport(payload) {
                     'wsu_'
                 );
                 const similarity = typeof calculateNameSimilarity === 'function'
-                    ? calculateNameSimilarity(outcomesName, wsuName)
+                    ? calculateNameSimilarity(outcomesName, wsuName, suggestionIDFTable)
                     : null;
                 if (typeof similarity === 'number') {
                     rowData.Suggestion_Score = formatSuggestionScore(similarity);
@@ -1436,7 +1557,7 @@ async function buildValidationExport(payload) {
         rowData._rawErrorType = row.Error_Type;
         rowData._rawErrorSubtype = row.Error_Subtype;
         if (showMappingLogic) {
-            rowData.Mapping_Logic = buildMappingLogicRow(row, rowData.Error_Type, nameCompareConfig);
+            rowData.Mapping_Logic = buildMappingLogicRow(row, rowData.Error_Type, nameCompareConfig, suggestionIDFTable);
         }
         applySuggestionColumns(row, rowData, row.Error_Type);
         return rowData;
@@ -1450,7 +1571,7 @@ async function buildValidationExport(payload) {
         rowData.Error_Type = row.Error_Type;
         rowData.Duplicate_Group = row.Duplicate_Group || '';
         if (showMappingLogic) {
-            rowData.Mapping_Logic = buildMappingLogicRow(row, row.Error_Type, nameCompareConfig);
+            rowData.Mapping_Logic = buildMappingLogicRow(row, row.Error_Type, nameCompareConfig, suggestionIDFTable);
         }
         applySuggestionColumns(row, rowData, row.Error_Type);
         return rowData;
@@ -1471,7 +1592,7 @@ async function buildValidationExport(payload) {
             rowData[col] = row[col] !== undefined ? row[col] : '';
         });
         if (showMappingLogic) {
-            rowData.Mapping_Logic = buildMappingLogicRow(row, 'Valid', nameCompareConfig);
+            rowData.Mapping_Logic = buildMappingLogicRow(row, 'Valid', nameCompareConfig, suggestionIDFTable);
         }
         return rowData;
     });
@@ -1482,7 +1603,7 @@ async function buildValidationExport(payload) {
             rowData[col] = row[col] !== undefined ? row[col] : '';
         });
         if (showMappingLogic) {
-            rowData.Mapping_Logic = buildMappingLogicRow(row, 'High_Confidence_Match', nameCompareConfig);
+            rowData.Mapping_Logic = buildMappingLogicRow(row, 'High_Confidence_Match', nameCompareConfig, suggestionIDFTable);
         }
         applySuggestionColumns(row, rowData, row.Error_Type);
         return rowData;
@@ -1612,7 +1733,7 @@ async function buildValidationExport(payload) {
                 return;
             }
 
-            const similarity = calculateNameSimilarity(outcomesEntry.name, wsuEntry.name);
+            const similarity = calculateNameSimilarity(outcomesEntry.name, wsuEntry.name, suggestionIDFTable);
             const highConfidence = isHighConfidenceNameMatch(
                 outcomesEntry.name,
                 wsuEntry.name,
@@ -1623,7 +1744,8 @@ async function buildValidationExport(payload) {
                 outcomesEntry.country,
                 wsuEntry.country,
                 similarity,
-                threshold
+                threshold,
+                suggestionIDFTable
             );
             if (!highConfidence) {
                 return;
@@ -1934,7 +2056,7 @@ async function buildValidationExport(payload) {
             {
                 type: 'list',
                 allowBlank: true,
-                formulae: ['"Accept,Update Key,Allow One-to-Many,No Change,No Match,Needs Research"']
+                formulae: ['"Accept,Update Key,Allow One-to-Many,No Match"']
             }
         );
     }
@@ -2061,7 +2183,7 @@ async function buildValidationExport(payload) {
     Object.keys(reviewColIndex).forEach(key => {
         reviewColLetter[key] = columnIndexToLetter(reviewColIndex[key]);
     });
-    const decisionListFormula = '"Accept,Update Key,Allow One-to-Many,No Change,No Match,Needs Research"';
+    const decisionListFormula = '"Accept,Update Key,Allow One-to-Many,No Match"';
     if (reviewSheet && actionQueueRows.length > 0) {
         const rowEnd = actionQueueRows.length + 1;
         reviewSheet.dataValidations.add(
@@ -2074,12 +2196,11 @@ async function buildValidationExport(payload) {
         );
         for (let rowNum = 2; rowNum <= rowEnd; rowNum += 1) {
             reviewSheet.getCell(`${reviewColLetter.Final_Input}${rowNum}`).value = {
-                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many",$${reviewColLetter.Decision}${rowNum}="No Change"),$${reviewColLetter.Current_Input}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Update Key",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Input",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Input}${rowNum}),""))`
+                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Input}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Update Key",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Input",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Input}${rowNum}),""))`
             };
             reviewSheet.getCell(`${reviewColLetter.Final_Output}${rowNum}`).value = {
-                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many",$${reviewColLetter.Decision}${rowNum}="No Change"),$${reviewColLetter.Current_Output}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Update Key",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Output",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Output}${rowNum}),""))`
+                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Output}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Update Key",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Output",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Output}${rowNum}),""))`
             };
-            // "No Change" intentionally stays non-publishable; use "Accept" to publish unchanged rows.
             reviewSheet.getCell(`${reviewColLetter.Publish_Eligible}${rowNum}`).value = {
                 formula: `IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Final_Input}${rowNum}<>"",$${reviewColLetter.Final_Output}${rowNum}<>""),1,0)`
             };
@@ -2125,9 +2246,7 @@ async function buildValidationExport(payload) {
                     { type: 'containsText', operator: 'containsText', text: 'Accept', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'Update Key', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'Allow One-to-Many', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } } } },
-                    { type: 'containsText', operator: 'containsText', text: 'No Change', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } } } },
-                    { type: 'containsText', operator: 'containsText', text: 'No Match', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
-                    { type: 'containsText', operator: 'containsText', text: 'Needs Research', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEDD5' } } } }
+                    { type: 'containsText', operator: 'containsText', text: 'No Match', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } }
                 ]
             });
             const cfDec = reviewColLetter.Decision;
@@ -2166,6 +2285,23 @@ async function buildValidationExport(payload) {
             }
         }
     }
+
+    // Keep reviewer navigation focused on the primary validate workflow tabs.
+    const hideValidateSheet = (sheetName) => {
+        const sheet = workbook.getWorksheet(sheetName);
+        if (sheet) {
+            sheet.state = 'hidden';
+        }
+    };
+    [
+        'Errors_in_Translate',
+        'Output_Not_Found_Ambiguous',
+        'Output_Not_Found_No_Replacement',
+        'One_to_Many',
+        'Missing_Mappings',
+        'High_Confidence_Matches',
+        'Valid_Mappings'
+    ].forEach(hideValidateSheet);
 
     reportProgress('Building Approved_Mappings...', 84);
     const buildAutoApprovedRow = (row, sourceSheet, sourceType) => {
@@ -2247,23 +2383,22 @@ async function buildValidationExport(payload) {
     const reviewRowCount = actionQueueRows.length;
     const cappedReviewFormulaRows = Math.min(reviewRowCount, MAX_VALIDATE_DYNAMIC_REVIEW_FORMULA_ROWS);
     const reviewLastRow = Math.max(2, reviewRowCount + 1);
-    const reviewPublishRange = `Review_Workbench!$${reviewColLetter.Publish_Eligible}$2:$${reviewColLetter.Publish_Eligible}$${reviewLastRow}`;
-    const reviewRelativeRows = `(ROW(${reviewPublishRange})-ROW(Review_Workbench!$${reviewColLetter.Publish_Eligible}$2)+1)`;
-    const reviewApprovedPick = (k) => `AGGREGATE(15,6,${reviewRelativeRows}/(${reviewPublishRange}=1),${k})`;
-    const reviewIndexValue = (key, k) => {
+    const reviewPublishCellRef = (rowNum) => `Review_Workbench!$${reviewColLetter.Publish_Eligible}$${rowNum}`;
+    const reviewApprovedValue = (key, rowNum) => {
         const letter = reviewColLetter[key];
         if (!letter) return '""';
-        return `IFERROR(INDEX(Review_Workbench!$${letter}$2:$${letter}$${reviewLastRow},${reviewApprovedPick(k)}),"")`;
+        return `IF(${reviewPublishCellRef(rowNum)}=1,Review_Workbench!$${letter}$${rowNum},"")`;
     };
     for (let outputIndex = 1; outputIndex <= cappedReviewFormulaRows; outputIndex += 1) {
+        const reviewRowNum = outputIndex + 1;
         const formulaRow = {};
         approvedColumns.forEach(col => {
             if (col === 'Approval_Source') {
-                formulaRow[col] = { formula: `IF(${reviewIndexValue('Decision', outputIndex)}="","", "Review Decision")` };
+                formulaRow[col] = { formula: `IF(${reviewPublishCellRef(reviewRowNum)}=1,"Review Decision","")` };
                 return;
             }
             if (reviewColLetter[col]) {
-                formulaRow[col] = { formula: reviewIndexValue(col, outputIndex) };
+                formulaRow[col] = { formula: reviewApprovedValue(col, reviewRowNum) };
                 return;
             }
             formulaRow[col] = '';
@@ -2300,15 +2435,6 @@ async function buildValidationExport(payload) {
         // Internal staging sheet; keep workbook navigation focused on reviewer tabs.
         approvedSheet.state = 'hidden';
     }
-    const approvedColIndex = {};
-    approvedColumns.forEach((col, idx) => {
-        approvedColIndex[col] = idx + 1;
-    });
-    const approvedColLetter = {};
-    Object.keys(approvedColIndex).forEach(key => {
-        approvedColLetter[key] = columnIndexToLetter(approvedColIndex[key]);
-    });
-    const approvedLastRow = Math.max(2, approvedRows.length + 1);
 
     reportProgress('Building Final_Translation_Table...', 87);
     const finalSheet = workbook.addWorksheet('Final_Translation_Table');
@@ -2339,10 +2465,7 @@ async function buildValidationExport(payload) {
         { key: 'Suggested_School', header: 'Suggested School' },
         { key: 'Source_Sheet', header: 'Source Sheet' },
         { key: 'Owner', header: 'Owner' },
-        { key: 'Resolved_Date', header: 'Resolved Date' },
-        { key: '_approved_pick', header: '_Approved Pick' },
-        { key: '_dup_input_count', header: '_Dup Input Count' },
-        { key: '_dup_output_count', header: '_Dup Output Count' }
+        { key: 'Resolved_Date', header: 'Resolved Date' }
     ];
     const finalColIndex = {};
     finalColumns.forEach((col, idx) => {
@@ -2357,39 +2480,35 @@ async function buildValidationExport(payload) {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B7285' } };
     });
-    const approvedFinalInputRange = `Approved_Mappings!$${approvedColLetter.Final_Input}$2:$${approvedColLetter.Final_Input}$${approvedLastRow}`;
-    const approvedFinalOutputRange = `Approved_Mappings!$${approvedColLetter.Final_Output}$2:$${approvedColLetter.Final_Output}$${approvedLastRow}`;
-    const approvedRelativeRows = `(ROW(${approvedFinalInputRange})-ROW(Approved_Mappings!$${approvedColLetter.Final_Input}$2)+1)`;
-    const finalMask = `((${approvedFinalInputRange}<>"")*(${approvedFinalOutputRange}<>""))`;
-    const finalPick = (k) => `AGGREGATE(15,6,${approvedRelativeRows}/(${finalMask}),${k})`;
-    const finalIndex = (colKey, pickRef) => (
-        `IF(${pickRef}="","",INDEX(Approved_Mappings!$${approvedColLetter[colKey]}$2:$${approvedColLetter[colKey]}$${approvedLastRow},${pickRef}))`
+    const mapFinalSourceKey = (finalKey) => (
+        finalKey === 'translate_input'
+            ? 'Final_Input'
+            : finalKey === 'translate_output'
+                ? 'Final_Output'
+                : finalKey
     );
-    const finalFormulaRows = Math.max(1, autoApprovedRows.length + cappedReviewFormulaRows);
-    const finalInputDuplicateCountRange = `$${finalColLetter.translate_input}$2:$${finalColLetter.translate_input}$${finalFormulaRows + 1}`;
-    const finalOutputDuplicateCountRange = `$${finalColLetter.translate_output}$2:$${finalColLetter.translate_output}$${finalFormulaRows + 1}`;
-    for (let outputIndex = 1; outputIndex <= finalFormulaRows; outputIndex += 1) {
-        const rowNum = outputIndex + 1;
-        const pickRef = `$${finalColLetter._approved_pick}${rowNum}`;
+    const getFinalValueFromRow = (row, finalKey) => {
+        const sourceKey = mapFinalSourceKey(finalKey);
+        if (Object.prototype.hasOwnProperty.call(row, sourceKey)) return row[sourceKey] ?? '';
+        if (Object.prototype.hasOwnProperty.call(row, finalKey)) return row[finalKey] ?? '';
+        return '';
+    };
+    const buildFinalAutoRow = (row) => finalColumns.map(col => sanitizeCellValue(getFinalValueFromRow(row, col.key)));
+    autoApprovedRows.forEach(row => {
+        finalSheet.addRow(buildFinalAutoRow(row));
+    });
+    const reviewPublishedCell = (rowNum) => `${reviewPublishCellRef(rowNum)}=1`;
+    const reviewFinalValueFormula = (sourceKey, rowNum) => {
+        const letter = reviewColLetter[sourceKey];
+        if (!letter) return '';
+        return { formula: `IF(${reviewPublishedCell(rowNum)},Review_Workbench!$${letter}$${rowNum},"")` };
+    };
+    const finalFormulaRows = autoApprovedRows.length + cappedReviewFormulaRows;
+    for (let reviewIndex = 1; reviewIndex <= cappedReviewFormulaRows; reviewIndex += 1) {
+        const reviewRowNum = reviewIndex + 1;
         const rowValues = finalColumns.map(col => {
-            if (col.key === '_approved_pick') return { formula: `IFERROR(${finalPick(outputIndex)},"")` };
-            if (col.key === '_dup_input_count') {
-                return {
-                    formula: `IF($${finalColLetter.translate_input}${rowNum}="","",COUNTIF(${finalInputDuplicateCountRange},$${finalColLetter.translate_input}${rowNum}))`
-                };
-            }
-            if (col.key === '_dup_output_count') {
-                return {
-                    formula: `IF($${finalColLetter.translate_output}${rowNum}="","",COUNTIF(${finalOutputDuplicateCountRange},$${finalColLetter.translate_output}${rowNum}))`
-                };
-            }
-            const sourceColKey = col.key === 'translate_input'
-                ? 'Final_Input'
-                : col.key === 'translate_output'
-                    ? 'Final_Output'
-                    : col.key;
-            if (!approvedColLetter[sourceColKey]) return '';
-            return { formula: finalIndex(sourceColKey, pickRef) };
+            const sourceColKey = mapFinalSourceKey(col.key);
+            return reviewFinalValueFormula(sourceColKey, reviewRowNum);
         });
         finalSheet.addRow(rowValues);
     }
@@ -2408,8 +2527,12 @@ async function buildValidationExport(payload) {
     };
     finalSheet.columns = finalColumns.map(col => ({
         width: finalColumnWidths[col.key] || 22,
-        hidden: col.key.startsWith('_')
+        hidden: false
     }));
+    finalSheet.autoFilter = {
+        from: 'A1',
+        to: `${columnIndexToLetter(finalColumns.length)}${Math.max(2, finalFormulaRows + 1)}`
+    };
 
     reportProgress('Building Translation_Key_Updates...', 89);
     const updatesSheet = workbook.addWorksheet('Translation_Key_Updates');
@@ -2422,36 +2545,33 @@ async function buildValidationExport(payload) {
         { key: 'Decision', header: 'Decision' },
         { key: 'Source_Sheet', header: 'Source Sheet' },
         { key: 'Owner', header: 'Owner' },
-        { key: 'Resolution_Note', header: 'Resolution Note' },
-        { key: '_update_pick', header: '_Update Pick' }
+        { key: 'Resolution_Note', header: 'Resolution Note' }
     ];
     updatesSheet.addRow(updatesColumns.map(col => col.header));
     updatesSheet.getRow(1).eachCell(cell => {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C2D12' } };
     });
-    const approvedUpdateRange = `Approved_Mappings!$${approvedColLetter.Has_Update}$2:$${approvedColLetter.Has_Update}$${approvedLastRow}`;
-    const updateMask = `((${approvedUpdateRange}=1)*(${approvedFinalInputRange}<>"")*(${approvedFinalOutputRange}<>""))`;
-    const updatePick = (k) => `AGGREGATE(15,6,${approvedRelativeRows}/(${updateMask}),${k})`;
-    const updateIndex = (colKey, pickRef) => (
-        `IF(${pickRef}="","",INDEX(Approved_Mappings!$${approvedColLetter[colKey]}$2:$${approvedColLetter[colKey]}$${approvedLastRow},${pickRef}))`
-    );
+    const updateSourceValueFormula = (sourceKey, rowNum, includeExpr) => {
+        const letter = reviewColLetter[sourceKey];
+        if (!letter) return '';
+        return { formula: `IF(${includeExpr},Review_Workbench!$${letter}$${rowNum},"")` };
+    };
     // Has_Update is reviewer-driven; auto-approved rows are intentionally excluded (always 0).
     const updateFormulaRows = Math.max(1, cappedReviewFormulaRows);
     for (let outputIndex = 1; outputIndex <= updateFormulaRows; outputIndex += 1) {
         const rowNum = outputIndex + 1;
-        const pickRef = `$J${rowNum}`;
+        const includeExpr = `AND(${reviewPublishedCell(rowNum)},Review_Workbench!$${reviewColLetter.Has_Update}$${rowNum}=1)`;
         updatesSheet.addRow([
-            { formula: updateIndex('Review_Row_ID', pickRef) },
-            { formula: updateIndex('Current_Input', pickRef) },
-            { formula: updateIndex('Current_Output', pickRef) },
-            { formula: updateIndex('Final_Input', pickRef) },
-            { formula: updateIndex('Final_Output', pickRef) },
-            { formula: updateIndex('Decision', pickRef) },
-            { formula: updateIndex('Source_Sheet', pickRef) },
-            { formula: updateIndex('Owner', pickRef) },
-            { formula: updateIndex('Resolution_Note', pickRef) },
-            { formula: `IFERROR(${updatePick(outputIndex)},"")` }
+            updateSourceValueFormula('Review_Row_ID', rowNum, includeExpr),
+            updateSourceValueFormula('Current_Input', rowNum, includeExpr),
+            updateSourceValueFormula('Current_Output', rowNum, includeExpr),
+            updateSourceValueFormula('Final_Input', rowNum, includeExpr),
+            updateSourceValueFormula('Final_Output', rowNum, includeExpr),
+            updateSourceValueFormula('Decision', rowNum, includeExpr),
+            updateSourceValueFormula('Source_Sheet', rowNum, includeExpr),
+            updateSourceValueFormula('Owner', rowNum, includeExpr),
+            updateSourceValueFormula('Resolution_Note', rowNum, includeExpr)
         ]);
     }
     updatesSheet.columns = [
@@ -2463,8 +2583,7 @@ async function buildValidationExport(payload) {
         { width: 22 },
         { width: 22 },
         { width: 18 },
-        { width: 46 },
-        { width: 4, hidden: true }
+        { width: 46 }
     ];
 
     reportProgress('Building QA_Checks_Validate...', 91);
@@ -2494,7 +2613,7 @@ async function buildValidationExport(payload) {
     const qaRows = actionQueueRows.length > 0
         ? [
             ['Check', 'Count', 'Status', 'Detail'],
-            ['Unresolved actions', `=COUNTIF(${decisionRange},"")+COUNTIF(${decisionRange},"No Match")+COUNTIF(${decisionRange},"Needs Research")`, '=IF(B2=0,"PASS","CHECK")', 'Blank, No Match, or Needs Research'],
+            ['Unresolved actions', `=COUNTIF(${decisionRange},"")+COUNTIF(${decisionRange},"No Match")`, '=IF(B2=0,"PASS","CHECK")', 'Blank or No Match'],
             ['Approved review rows', `=COUNTIF(${decisionRange},"Accept")+COUNTIF(${decisionRange},"Update Key")+COUNTIF(${decisionRange},"Allow One-to-Many")`, '=IF(B3>0,"PASS","CHECK")', 'Rows approved from Review_Workbench'],
             ['Approved rows beyond formula capacity', `=MAX(0,B3-${cappedReviewFormulaRows})`, '=IF(B4=0,"PASS","CHECK")', `Rows above ${cappedReviewFormulaRows} approved review decisions exceed formula row capacity`],
             ['Blank final keys on publish-eligible rows (sanity)', `=COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalInputRange},"")+COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalOutputRange},"")`, '=IF(B5=0,"PASS","FAIL")', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
@@ -2504,7 +2623,7 @@ async function buildValidationExport(payload) {
             ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
             ['Duplicate final input keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B10=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
             ['Duplicate final output keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalOutputRange},${finalOutputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B11=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
-            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B10=0,B11=0),"PASS","HOLD")`, '', 'Final publish gate status (B8/B9 are advisory)']
+            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B10=0,B11=0),"PASS","HOLD")`, '', 'Final publish gate status (B8/B9 are advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
         ]
         : getQAEmptyRows();
     qaRows.forEach(row => qaValidateSheet.addRow(row));
@@ -2513,6 +2632,34 @@ async function buildValidationExport(payload) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
     });
     qaValidateSheet.columns = [{ width: 42 }, { width: 26 }, { width: 14 }, { width: 70 }];
+    if (canSuggestNames && typeof console !== 'undefined' && typeof console.log === 'function') {
+        const forwardFallbackRate = suggestionBlockStats.forwardQueries > 0
+            ? suggestionBlockStats.forwardFallbacks / suggestionBlockStats.forwardQueries
+            : 0;
+        const reverseFallbackRate = suggestionBlockStats.reverseQueries > 0
+            ? suggestionBlockStats.reverseFallbacks / suggestionBlockStats.reverseQueries
+            : 0;
+        console.log(
+            'Suggestion blocking stats:',
+            JSON.stringify({
+                forwardQueries: suggestionBlockStats.forwardQueries,
+                reverseQueries: suggestionBlockStats.reverseQueries,
+                forwardFallbacks: suggestionBlockStats.forwardFallbacks,
+                reverseFallbacks: suggestionBlockStats.reverseFallbacks,
+                forwardFallbackRate: Number(forwardFallbackRate.toFixed(4)),
+                reverseFallbackRate: Number(reverseFallbackRate.toFixed(4))
+            })
+        );
+    }
+
+    // Open workbook focused on Review_Workbench so it is the first visible reviewer tab.
+    const workbookSheets = Array.isArray(workbook.worksheets)
+        ? workbook.worksheets
+        : (Array.isArray(workbook._worksheets) ? workbook._worksheets : []);
+    const reviewSheetIndex = workbookSheets.findIndex(sheet => sheet && sheet.name === 'Review_Workbench');
+    if (reviewSheetIndex >= 0) {
+        workbook.views = [{ activeTab: reviewSheetIndex, firstSheet: reviewSheetIndex }];
+    }
 
     reportProgress('Finalizing Excel file...', 92);
     const buffer = toArrayBuffer(await workbook.xlsx.writeBuffer());

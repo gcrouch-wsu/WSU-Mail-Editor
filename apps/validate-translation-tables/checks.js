@@ -99,6 +99,71 @@ runCheck('mergeData succeeds with unique keys', () => {
     assert.equal(merged[0].wsu_school, 'Beta One');
 });
 
+runCheck('normalizeNameForCompare supports UCLA-style abbreviations', () => {
+    assert.equal(
+        context.normalizeNameForCompare('Univ of Cal, Los Angeles'),
+        'california los angeles'
+    );
+});
+
+runCheck('calculateNameSimilarity scores UCLA alias pair as high confidence', () => {
+    const score = context.calculateNameSimilarity(
+        'UNIVERSITY OF CALIFORNIA - LOS ANGELES',
+        'Univ of Cal, Los Angeles'
+    );
+    assert.ok(score >= 0.8, `Expected score >= 0.8, got ${score}`);
+});
+
+runCheck('jaroWinkler: cal/california >= 0.80', () => {
+    assert.ok(context.jaroWinkler('cal', 'california') >= 0.8);
+});
+
+runCheck('jaroWinkler: schl/school >= 0.80', () => {
+    assert.ok(context.jaroWinkler('schl', 'school') >= 0.8);
+});
+
+runCheck('jaroWinkler: mgmnt/management < 0.80 (known gap)', () => {
+    assert.ok(context.jaroWinkler('mgmnt', 'management') < 0.8);
+});
+
+runCheck('buildTokenIDF: faulkner > state in sample corpus', () => {
+    const names = [
+        'Faulkner State Community College',
+        'Walters State Community College',
+        'Florida State University',
+        'Ohio State University',
+        'Harvard University'
+    ];
+    const idf = context.buildTokenIDF(names);
+    assert.ok(idf.faulkner > idf.state, `Expected faulkner (${idf.faulkner}) > state (${idf.state})`);
+});
+
+runCheck('Faulkner/Walters false positive is prevented with IDF weighting', () => {
+    const names = [
+        'FAULKNER STATE COMMUNITY COLLEGE',
+        'WALTERS STATE COMMUNITY COLLEGE',
+        'ROANE STATE COMMUNITY COLLEGE',
+        'NASHVILLE STATE COMMUNITY COLLEGE'
+    ];
+    const idf = context.buildTokenIDF(names);
+    const score = context.calculateNameSimilarity(
+        'FAULKNER STATE COMMUNITY COLLEGE',
+        'WALTERS STATE COMMUNITY COLLEGE',
+        idf
+    );
+    assert.ok(score < 0.8, `Expected score < 0.8, got ${score}`);
+});
+
+runCheck('fieldEvidence: high when country+state agree', () => {
+    const ev = context.fieldEvidence('Test U', 'Test University', 'WA', 'WA', '', '', 'US', 'USA');
+    assert.ok(ev > 0.7, `Expected > 0.7, got ${ev}`);
+});
+
+runCheck('fieldEvidence: lower when country disagrees', () => {
+    const ev = context.fieldEvidence('Test U', 'Test University', 'WA', 'OR', '', '', 'US', 'Nigeria');
+    assert.ok(ev < 0.5, `Expected < 0.5, got ${ev}`);
+});
+
 const helpersPath = path.join(__dirname, 'validation-export-helpers.js');
 const helpersCode = fs.readFileSync(helpersPath, 'utf8');
 const helpersContext = { module: { exports: {} }, require: () => {} };
@@ -165,6 +230,7 @@ runCheck('getQAValidateRowsForEmptyQueue returns valid structure', () => {
     assert.equal(rows[0][0], 'Check');
     assert.equal(rows[1][1], 0);
     assert.equal(rows[1][2], 'PASS');
+    assert.equal(rows[1][3], 'Blank or No Match');
     assert.equal(rows[2][2], 'PASS', 'Approved review rows status should be PASS when empty');
     assert.equal(rows[6][0], 'Update Key with invalid Update Side');
     assert.equal(rows[7][0], 'Stale-key rows lacking decision');
@@ -184,10 +250,25 @@ runCheck('export-worker: Input_Not_Found uses reverse name suggestion from myWSU
     );
 });
 
+runCheck('export-worker: suggestion blocking/indexing helpers exist', () => {
+    assert.ok(exportWorkerCode.includes('buildTokenIDFLocal'));
+    assert.ok(exportWorkerCode.includes('buildTokenIndex'));
+    assert.ok(exportWorkerCode.includes('getBlockedCandidateIndices'));
+    assert.ok(exportWorkerCode.includes('suggestionBlockStats'));
+});
+
 runCheck('export-worker: Validate decision dropdown includes Allow One-to-Many', () => {
     assert.ok(
-        exportWorkerCode.includes('"Accept,Update Key,Allow One-to-Many,No Change,No Match,Needs Research"'),
+        exportWorkerCode.includes('"Accept,Update Key,Allow One-to-Many,No Match"'),
         'Expected expanded decision dropdown values'
+    );
+    assert.ok(
+        !exportWorkerCode.includes('Needs Research'),
+        'Needs Research should no longer appear in validate/create decision models'
+    );
+    assert.ok(
+        !exportWorkerCode.includes('No Change'),
+        'No Change should no longer appear in validate decision model'
     );
 });
 
@@ -208,6 +289,7 @@ runCheck('export-worker: Validate publish gate checks exist', () => {
     assert.ok(exportWorkerCode.includes('B10=0'));
     assert.ok(exportWorkerCode.includes('B11=0'));
     assert.ok(exportWorkerCode.includes('"PASS","HOLD"'));
+    assert.ok(exportWorkerCode.includes('Diagnostic tabs are hidden'));
 });
 
 runCheck('export-worker: Validate export uses capped review formula rows', () => {
@@ -237,6 +319,18 @@ runCheck('export-worker: Validate internal staging tabs are hidden', () => {
     assert.ok(exportWorkerCode.includes("approvedSheet.state = 'hidden'"));
 });
 
+runCheck('export-worker: Validate diagnostic tabs are hidden and Review_Workbench is active', () => {
+    assert.ok(exportWorkerCode.includes("const hideValidateSheet = (sheetName) =>"));
+    assert.ok(exportWorkerCode.includes("'Errors_in_Translate'"));
+    assert.ok(exportWorkerCode.includes("'Output_Not_Found_Ambiguous'"));
+    assert.ok(exportWorkerCode.includes("'Output_Not_Found_No_Replacement'"));
+    assert.ok(exportWorkerCode.includes("'One_to_Many'"));
+    assert.ok(exportWorkerCode.includes("'Missing_Mappings'"));
+    assert.ok(exportWorkerCode.includes("'High_Confidence_Matches'"));
+    assert.ok(exportWorkerCode.includes("'Valid_Mappings'"));
+    assert.ok(exportWorkerCode.includes('workbook.views = [{ activeTab: reviewSheetIndex, firstSheet: reviewSheetIndex }]'));
+});
+
 runCheck('export-worker: Create review workflow is explicit in Excel', () => {
     assert.ok(exportWorkerCode.includes("addSheetFromObjects('Ambiguous_Candidates'"));
     assert.ok(exportWorkerCode.includes("addSheetFromObjects('Missing_In_myWSU'"));
@@ -262,23 +356,30 @@ runCheck('export-worker: Review_Workbench has freeze and conditional formatting'
     assert.ok(exportWorkerCode.includes('hiddenReviewColumns'));
 });
 
-runCheck('export-worker: Publish_Eligible excludes No Change', () => {
-    assert.ok(exportWorkerCode.includes('non-publishable') || exportWorkerCode.includes('do NOT publish'),
-        'Intent to exclude No Change from publish should be documented');
-});
-
-runCheck('export-worker: Final_Translation_Table includes reviewer context and stable AGGREGATE math', () => {
+runCheck('export-worker: Final_Translation_Table includes reviewer context and direct reviewer pull-through', () => {
     assert.ok(exportWorkerCode.includes("header: 'Outcomes Name'"));
     assert.ok(exportWorkerCode.includes("header: 'myWSU Name'"));
     assert.ok(exportWorkerCode.includes("header: 'Current Translate Input'"));
     assert.ok(
-        exportWorkerCode.includes('const approvedRelativeRows = `(ROW(${approvedFinalInputRange})-ROW(Approved_Mappings!'),
-        'Final approved row math should be wrapped in parentheses before mask division'
+        exportWorkerCode.includes('const buildFinalAutoRow = (row) =>'),
+        'Final table should write auto-approved rows as direct values'
     );
     assert.ok(
-        exportWorkerCode.includes('const reviewRelativeRows = `(ROW(${reviewPublishRange})-ROW(Review_Workbench!'),
-        'Review approved row math should be wrapped in parentheses before mask division'
+        exportWorkerCode.includes('const reviewFinalValueFormula = (sourceKey, rowNum) =>'),
+        'Final table should pull review decisions directly from Review_Workbench'
     );
+    assert.ok(
+        !exportWorkerCode.includes("header: '_Approved Pick'"),
+        'Final table should not require AGGREGATE helper pick columns'
+    );
+    assert.ok(
+        exportWorkerCode.includes('finalSheet.autoFilter = {'),
+        'Final table should enable an autoFilter range'
+    );
+});
+
+runCheck('export-worker: workbook enforces recalc on open', () => {
+    assert.ok(exportWorkerCode.includes('fullCalcOnLoad: true'));
 });
 
 runCheck('export-worker: expression CF rules use formulae array not formula string', () => {
