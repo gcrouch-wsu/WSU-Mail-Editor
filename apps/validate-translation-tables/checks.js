@@ -275,6 +275,7 @@ runCheck('export-worker: Validate decision dropdown includes Allow One-to-Many',
 runCheck('export-worker: Validate review/approved/final/update sheets exist', () => {
     assert.ok(exportWorkerCode.includes("sheetName: 'Review_Workbench'"));
     assert.ok(exportWorkerCode.includes("sheetName: 'Approved_Mappings'"));
+    assert.ok(exportWorkerCode.includes("addWorksheet('Final_Staging')"));
     assert.ok(exportWorkerCode.includes("addWorksheet('Final_Translation_Table')"));
     assert.ok(exportWorkerCode.includes("addWorksheet('Translation_Key_Updates')"));
 });
@@ -317,6 +318,7 @@ runCheck('export-worker: Human review safeguards exist', () => {
 runCheck('export-worker: Validate internal staging tabs are hidden', () => {
     assert.ok(exportWorkerCode.includes("aqSheet.state = 'hidden'"));
     assert.ok(exportWorkerCode.includes("approvedSheet.state = 'hidden'"));
+    assert.ok(exportWorkerCode.includes("stagingSheet.state = 'hidden'"));
 });
 
 runCheck('export-worker: Validate diagnostic tabs are hidden and Review_Workbench is active', () => {
