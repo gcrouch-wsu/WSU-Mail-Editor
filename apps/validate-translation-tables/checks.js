@@ -230,9 +230,9 @@ runCheck('getQAValidateRowsForEmptyQueue returns valid structure', () => {
     assert.equal(rows[0][0], 'Check');
     assert.equal(rows[1][1], 0);
     assert.equal(rows[1][2], 'PASS');
-    assert.equal(rows[1][3], 'Blank or No Match');
+    assert.equal(rows[1][3], 'Blank or Ignore');
     assert.equal(rows[2][2], 'PASS', 'Approved review rows status should be PASS when empty');
-    assert.equal(rows[6][0], 'Update Key with invalid Update Side');
+    assert.equal(rows[6][0], 'Use Suggestion with invalid Update Side');
     assert.equal(rows[7][0], 'Stale-key rows lacking decision');
     assert.equal(rows[11][0], 'Publish gate');
     assert.equal(rows[11][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
@@ -259,7 +259,7 @@ runCheck('export-worker: suggestion blocking/indexing helpers exist', () => {
 
 runCheck('export-worker: Validate decision dropdown includes Allow One-to-Many', () => {
     assert.ok(
-        exportWorkerCode.includes('"Accept,Update Key,Allow One-to-Many,No Match"'),
+        exportWorkerCode.includes('"Keep As-Is,Use Suggestion,Allow One-to-Many,Ignore"'),
         'Expected expanded decision dropdown values'
     );
     assert.ok(
@@ -306,10 +306,10 @@ runCheck('export-worker: Review workbook exposes explicit current/final key colu
 
 runCheck('export-worker: Human review safeguards exist', () => {
     assert.ok(exportWorkerCode.includes('Decision_Warning'));
-    assert.ok(exportWorkerCode.includes('Update Key without Suggested_Key'));
-    assert.ok(exportWorkerCode.includes('Update Key needs'));
+    assert.ok(exportWorkerCode.includes('Use Suggestion without Suggested_Key'));
+    assert.ok(exportWorkerCode.includes('Use Suggestion needs'));
     assert.ok(exportWorkerCode.includes('valid Update Side'));
-    assert.ok(exportWorkerCode.includes('Update Key with invalid Update Side'));
+    assert.ok(exportWorkerCode.includes('Use Suggestion with invalid Update Side'));
     assert.ok(exportWorkerCode.includes('Approved but blank final'));
     assert.ok(exportWorkerCode.includes("const editableCols = ['Decision']"));
 });

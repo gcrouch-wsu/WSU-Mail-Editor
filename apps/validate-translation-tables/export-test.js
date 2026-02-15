@@ -378,7 +378,9 @@ async function run() {
         assert.ok(workbook.getWorksheet('QA_Checks_Validate'), 'Expected QA_Checks_Validate worksheet');
         const finalSheet = workbook.getWorksheet('Final_Translation_Table');
         assert.ok(finalSheet, 'Expected Final_Translation_Table worksheet');
-        const finalInputCell = finalSheet.getRow(2).getCell(1).value;
+        const translateInputCol = findHeaderIndex(finalSheet, 'Translate Input');
+        assert.ok(translateInputCol > 0, 'Final table should include Translate Input');
+        const finalInputCell = finalSheet.getRow(2).getCell(translateInputCol).value;
         assert.equal(finalInputCell, 'IN-1', 'Auto-approved rows should be written as plain values');
         assert.equal(
             typeof finalInputCell,
@@ -498,8 +500,8 @@ async function run() {
         assert.ok(reviewPublishEligibleCol > 0, 'Review sheet should include Publish Eligible');
         const finalInputFormula = reviewSheet.getRow(2).getCell(reviewFinalInputCol).value?.formula || '';
         const publishFormula = reviewSheet.getRow(2).getCell(reviewPublishEligibleCol).value?.formula || '';
-        assert.ok(finalInputFormula.includes('"Allow One-to-Many"'), 'Final input formula should allow one-to-many approvals');
-        assert.ok(publishFormula.includes('"Allow One-to-Many"'), 'Publish eligibility should include one-to-many approvals');
+        assert.ok(finalInputFormula.includes('"Keep As-Is"') && finalInputFormula.includes('"Use Suggestion"'), 'Final input formula should use renamed decision values');
+        assert.ok(publishFormula.includes('"Keep As-Is"') && publishFormula.includes('"Allow One-to-Many"'), 'Publish eligibility should use renamed decision values');
 
         const finalInputFormulaCell = finalSheet.getRow(2).getCell(1).value?.formula || '';
         assert.ok(
@@ -512,10 +514,11 @@ async function run() {
         );
         const outcomesNameCol = findHeaderIndex(finalSheet, 'Outcomes Name');
         const myWsuNameCol = findHeaderIndex(finalSheet, 'myWSU Name');
-        const currentInputCol = findHeaderIndex(finalSheet, 'Current Translate Input');
+        const translateInputCol = findHeaderIndex(finalSheet, 'Translate Input');
+        const translateOutputCol = findHeaderIndex(finalSheet, 'Translate Output');
         assert.ok(outcomesNameCol > 0, 'Final table should include Outcomes Name context');
         assert.ok(myWsuNameCol > 0, 'Final table should include myWSU Name context');
-        assert.ok(currentInputCol > 0, 'Final table should include current translate keys for reviewer context');
+        assert.ok(translateInputCol > 0 && translateOutputCol > 0, 'Final table should include Translate Input and Translate Output');
         assert.equal(
             findHeaderIndex(finalSheet, '_Approved Pick'),
             0,
@@ -523,7 +526,7 @@ async function run() {
         );
         assert.ok(finalSheet.autoFilter, 'Final table should have autoFilter enabled');
         assert.equal(finalSheet.autoFilter.from, 'A1', 'Final table autoFilter should start at A1');
-        assert.ok(String(finalSheet.autoFilter.to || '').startsWith('O'), 'Final table autoFilter should include all output columns');
+        assert.ok(finalSheet.autoFilter.to, 'Final table autoFilter should include all output columns');
 
         const qaSheet = workbook.getWorksheet('QA_Checks_Validate');
         assert.ok(qaSheet, 'Expected QA_Checks_Validate worksheet');

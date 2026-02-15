@@ -2056,7 +2056,7 @@ async function buildValidationExport(payload) {
             {
                 type: 'list',
                 allowBlank: true,
-                formulae: ['"Accept,Update Key,Allow One-to-Many,No Match"']
+                formulae: ['"Keep As-Is,Use Suggestion,Allow One-to-Many,Ignore"']
             }
         );
     }
@@ -2094,6 +2094,9 @@ async function buildValidationExport(payload) {
         'translate_output',
         'Suggested_Key',
         'Suggested_School',
+        'Suggested_City',
+        'Suggested_State',
+        'Suggested_Country',
         'Current_Input',
         'Current_Output',
         'Final_Input',
@@ -2121,6 +2124,9 @@ async function buildValidationExport(payload) {
         translate_output: 24,
         Suggested_Key: 22,
         Suggested_School: 28,
+        Suggested_City: 18,
+        Suggested_State: 14,
+        Suggested_Country: 14,
         Current_Input: 24,
         Current_Output: 24,
         Final_Input: 24,
@@ -2176,6 +2182,9 @@ async function buildValidationExport(payload) {
         if (wsuCountryKey && col === wsuCountryKey) return 'myWSU Country';
         if (col === 'Suggested_Key') return 'Suggested Key';
         if (col === 'Suggested_School') return 'Suggested School';
+        if (col === 'Suggested_City') return 'Suggested City';
+        if (col === 'Suggested_State') return 'Suggested State';
+        if (col === 'Suggested_Country') return 'Suggested Country';
         return h || col;
     });
     addSheetWithRows(workbook, {
@@ -2196,7 +2205,7 @@ async function buildValidationExport(payload) {
     Object.keys(reviewColIndex).forEach(key => {
         reviewColLetter[key] = columnIndexToLetter(reviewColIndex[key]);
     });
-    const decisionListFormula = '"Accept,Update Key,Allow One-to-Many,No Match"';
+    const decisionListFormula = '"Keep As-Is,Use Suggestion,Allow One-to-Many,Ignore"';
     if (reviewSheet && actionQueueRows.length > 0) {
         const rowEnd = actionQueueRows.length + 1;
         reviewSheet.dataValidations.add(
@@ -2209,13 +2218,13 @@ async function buildValidationExport(payload) {
         );
         for (let rowNum = 2; rowNum <= rowEnd; rowNum += 1) {
             reviewSheet.getCell(`${reviewColLetter.Final_Input}${rowNum}`).value = {
-                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Input}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Update Key",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Input",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Input}${rowNum}),""))`
+                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Input}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Use Suggestion",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Input",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Input}${rowNum}),""))`
             };
             reviewSheet.getCell(`${reviewColLetter.Final_Output}${rowNum}`).value = {
-                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Output}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Update Key",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Output",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Output}${rowNum}),""))`
+                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Output}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Use Suggestion",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Output",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Output}${rowNum}),""))`
             };
             reviewSheet.getCell(`${reviewColLetter.Publish_Eligible}${rowNum}`).value = {
-                formula: `IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Final_Input}${rowNum}<>"",$${reviewColLetter.Final_Output}${rowNum}<>""),1,0)`
+                formula: `IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Final_Input}${rowNum}<>"",$${reviewColLetter.Final_Output}${rowNum}<>""),1,0)`
             };
             reviewSheet.getCell(`${reviewColLetter.Approval_Source}${rowNum}`).value = {
                 formula: `IF($${reviewColLetter.Publish_Eligible}${rowNum}=1,"Review Decision","")`
@@ -2224,7 +2233,7 @@ async function buildValidationExport(payload) {
                 formula: `IF(OR($${reviewColLetter.Current_Input}${rowNum}<>$${reviewColLetter.Final_Input}${rowNum},$${reviewColLetter.Current_Output}${rowNum}<>$${reviewColLetter.Final_Output}${rowNum}),1,0)`
             };
             reviewSheet.getCell(`${reviewColLetter.Decision_Warning}${rowNum}`).value = {
-                formula: `IF(AND($${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Suggested_Key}${rowNum}=""),"Update Key needs Suggested_Key",IF(AND($${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Update Key needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Accept",$${reviewColLetter.Decision}${rowNum}="Update Key",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))`
+                formula: `IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Suggested_Key}${rowNum}=""),"Use Suggestion needs Suggested_Key",IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Use Suggestion needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))`
             };
         }
         const editableCols = ['Decision'];
@@ -2256,10 +2265,10 @@ async function buildValidationExport(payload) {
             reviewSheet.addConditionalFormatting({
                 ref: decRef,
                 rules: [
-                    { type: 'containsText', operator: 'containsText', text: 'Accept', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } } } },
-                    { type: 'containsText', operator: 'containsText', text: 'Update Key', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Keep As-Is', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Use Suggestion', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'Allow One-to-Many', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } } } },
-                    { type: 'containsText', operator: 'containsText', text: 'No Match', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } }
+                    { type: 'containsText', operator: 'containsText', text: 'Ignore', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } }
                 ]
             });
             const cfDec = reviewColLetter.Decision;
@@ -2287,7 +2296,7 @@ async function buildValidationExport(payload) {
             reviewSheet.addConditionalFormatting({
                 ref: `${warningCol}2:${warningCol}${rowEnd}`,
                 rules: [
-                    { type: 'containsText', operator: 'containsText', text: 'Update Key needs', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Use Suggestion needs', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'valid Update Side', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'Approved but blank', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } }
                 ]
@@ -2471,24 +2480,18 @@ async function buildValidationExport(payload) {
         wsuCountryKey && { key: wsuCountryKey, header: 'myWSU Country' }
     ].filter(Boolean);
     const finalColumns = [
-        { key: 'translate_input', header: 'Translate Input' },
-        { key: 'translate_output', header: 'Translate Output' },
         { key: 'Review_Row_ID', header: 'Review Row ID' },
         { key: 'Decision', header: 'Decision' },
-        { key: 'Current_Input', header: 'Current Translate Input' },
-        { key: 'Current_Output', header: 'Current Translate Output' },
-        { key: outcomesNameContextKey, header: 'Outcomes Name' },
-        { key: outcomesKeyContextKey, header: 'Outcomes Key' },
-        ...finalSourceContextCols.filter(c => c.key.startsWith('outcomes_')),
-        { key: wsuNameContextKey, header: 'myWSU Name' },
-        { key: wsuKeyContextKey, header: 'myWSU Key' },
-        ...finalSourceContextCols.filter(c => c.key.startsWith('wsu_')),
-        { key: 'Suggested_Key', header: 'Suggested Key' },
-        { key: 'Suggested_School', header: 'Suggested School' },
-        { key: 'Source_Sheet', header: 'Source Sheet' },
-        { key: 'Owner', header: 'Owner' },
-        { key: 'Resolved_Date', header: 'Resolved Date' }
-    ];
+        outcomesNameContextKey && { key: outcomesNameContextKey, header: 'Outcomes Name' },
+        outcomesStateKey && { key: outcomesStateKey, header: 'Outcomes State' },
+        outcomesCountryKey && { key: outcomesCountryKey, header: 'Outcomes Country' },
+        { key: 'translate_input', header: 'Translate Input' },
+        { key: 'translate_output', header: 'Translate Output' },
+        wsuNameContextKey && { key: wsuNameContextKey, header: 'myWSU Name' },
+        wsuCityKey && { key: wsuCityKey, header: 'myWSU City' },
+        wsuStateKey && { key: wsuStateKey, header: 'myWSU State' },
+        wsuCountryKey && { key: wsuCountryKey, header: 'myWSU Country' }
+    ].filter(Boolean);
     const finalColIndex = {};
     finalColumns.forEach((col, idx) => {
         finalColIndex[col.key] = idx + 1;
@@ -2538,14 +2541,7 @@ async function buildValidationExport(payload) {
         translate_input: 24,
         translate_output: 24,
         Review_Row_ID: 56,
-        Decision: 22,
-        Current_Input: 24,
-        Current_Output: 24,
-        Source_Sheet: 22,
-        Owner: 18,
-        Resolved_Date: 16,
-        Suggested_Key: 22,
-        Suggested_School: 28
+        Decision: 22
     };
     sourceContextKeys.forEach(k => { finalColumnWidths[k] = 18; });
     finalSheet.columns = finalColumns.map(col => ({
@@ -2629,19 +2625,19 @@ async function buildValidationExport(payload) {
         : () => [
             ['Check', 'Count', 'Status', 'Detail'],
             ['Unresolved actions', 0, 'PASS', 'Rows without a decision'],
-            ['Approved for update', 0, 'PASS', 'Accept or Update Key decisions'],
+            ['Approved for update', 0, 'PASS', 'Keep As-Is or Use Suggestion decisions'],
             ['Stale-key rows lacking decision', 0, 'PASS', 'Likely stale key rows without decision'],
             ['Duplicate conflict rows lacking decision', 0, 'PASS', 'One-to-many rows without decision']
         ];
     const qaRows = actionQueueRows.length > 0
         ? [
             ['Check', 'Count', 'Status', 'Detail'],
-            ['Unresolved actions', `=COUNTIF(${decisionRange},"")+COUNTIF(${decisionRange},"No Match")`, '=IF(B2=0,"PASS","CHECK")', 'Blank or No Match'],
-            ['Approved review rows', `=COUNTIF(${decisionRange},"Accept")+COUNTIF(${decisionRange},"Update Key")+COUNTIF(${decisionRange},"Allow One-to-Many")`, '=IF(B3>0,"PASS","CHECK")', 'Rows approved from Review_Workbench'],
+            ['Unresolved actions', `=COUNTIF(${decisionRange},"")+COUNTIF(${decisionRange},"Ignore")`, '=IF(B2=0,"PASS","CHECK")', 'Blank or Ignore'],
+            ['Approved review rows', `=COUNTIF(${decisionRange},"Keep As-Is")+COUNTIF(${decisionRange},"Use Suggestion")+COUNTIF(${decisionRange},"Allow One-to-Many")`, '=IF(B3>0,"PASS","CHECK")', 'Rows approved from Review_Workbench'],
             ['Approved rows beyond formula capacity', `=MAX(0,B3-${cappedReviewFormulaRows})`, '=IF(B4=0,"PASS","CHECK")', `Rows above ${cappedReviewFormulaRows} approved review decisions exceed formula row capacity`],
             ['Blank final keys on publish-eligible rows (sanity)', `=COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalInputRange},"")+COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalOutputRange},"")`, '=IF(B5=0,"PASS","FAIL")', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
-            ['Update Key without Suggested_Key', `=COUNTIFS(${decisionRange},"Update Key",${reviewSuggestedKeyRange},"")`, '=IF(B6=0,"PASS","FAIL")', 'Update Key chosen but Suggested_Key blank; fix or change decision'],
-            ['Update Key with invalid Update Side', `=COUNTIFS(${decisionRange},"Update Key",${reviewKeyUpdateSideRange},"None")`, '=IF(B7=0,"PASS","FAIL")', 'Update Key chosen but Key_Update_Side is None; fix or change decision'],
+            ['Use Suggestion without Suggested_Key', `=COUNTIFS(${decisionRange},"Use Suggestion",${reviewSuggestedKeyRange},"")`, '=IF(B6=0,"PASS","FAIL")', 'Use Suggestion chosen but Suggested_Key blank; fix or change decision'],
+            ['Use Suggestion with invalid Update Side', `=COUNTIFS(${decisionRange},"Use Suggestion",${reviewKeyUpdateSideRange},"None")`, '=IF(B7=0,"PASS","FAIL")', 'Use Suggestion chosen but Update Side is None; fix or change decision'],
             ['Stale-key rows lacking decision', `=COUNTIFS(${reviewStaleRange},1,${decisionRange},"")`, '=IF(B8=0,"PASS","CHECK")', 'Likely stale key rows without decision (advisory)'],
             ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
             ['Duplicate final input keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B10=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],

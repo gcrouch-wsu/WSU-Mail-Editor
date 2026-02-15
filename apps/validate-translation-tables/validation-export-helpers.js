@@ -68,12 +68,12 @@
     function getQAValidateRowsForEmptyQueue() {
         return [
             ['Check', 'Count', 'Status', 'Detail'],
-            ['Unresolved actions', 0, 'PASS', 'Blank or No Match'],
+            ['Unresolved actions', 0, 'PASS', 'Blank or Ignore'],
             ['Approved review rows', 0, 'PASS', 'Rows approved from Review_Workbench'],
             ['Approved rows beyond formula capacity', 0, 'PASS', 'Rows above formula capacity'],
             ['Blank final keys on publish-eligible rows (sanity)', 0, 'PASS', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
-            ['Update Key without Suggested_Key', 0, 'PASS', 'Update Key chosen but Suggested_Key blank; fix or change decision'],
-            ['Update Key with invalid Update Side', 0, 'PASS', 'Update Key chosen but Key_Update_Side is None; fix or change decision'],
+            ['Use Suggestion without Suggested_Key', 0, 'PASS', 'Use Suggestion chosen but Suggested_Key blank; fix or change decision'],
+            ['Use Suggestion with invalid Update Side', 0, 'PASS', 'Use Suggestion chosen but Update Side is None; fix or change decision'],
             ['Stale-key rows lacking decision', 0, 'PASS', 'Likely stale key rows without decision (advisory)'],
             ['One-to-many rows lacking decision', 0, 'PASS', 'One-to-many rows without decision (advisory)'],
             ['Duplicate final input keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],

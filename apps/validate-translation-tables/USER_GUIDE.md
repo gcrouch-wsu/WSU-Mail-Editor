@@ -77,7 +77,7 @@ Each row shows reviewer context and decision outputs:
 
 - Outcomes and myWSU name/key context
 - Source location columns when selected: Outcomes State, Outcomes Country; myWSU City, myWSU State, myWSU Country (blanks in source appear as blank)
-- Current translate keys and suggested key/school
+- Current translate keys and suggested key/school/city/state/country (verify suggested location before applying Use Suggestion)
 - `Decision` (editable dropdown)
 - Formula outputs: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Decision_Warning`
 
@@ -86,10 +86,10 @@ The sheet freezes the header row only, so horizontal scrolling should remain usa
 
 ### Validate decision meanings
 
-- `Accept`: keep current keys as final.
-- `Update Key`: apply `Suggested_Key` on the side shown by `Key_Update_Side`.
+- `Keep As-Is`: keep current keys as final. No changes.
+- `Use Suggestion`: apply `Suggested_Key` on the side shown by Update Side. Verify Suggested Key, School, City, State, Country before applying.
 - `Allow One-to-Many`: approve as an intentional one-to-many exception.
-- `No Match`: unresolved.
+- `Ignore`: exclude from publish. Keep unresolved for later review.
 
 ### What happens automatically
 
@@ -99,7 +99,7 @@ The sheet freezes the header row only, so horizontal scrolling should remain usa
 - `Final_Translation_Table` includes:
   - direct value rows for auto-approved mappings
   - decision-driven rows from `Review_Workbench` when `Publish_Eligible = 1`
-  - key pairs plus source context (Outcomes Name/State/Country; myWSU Name/City/State/Country) so each row is a matched pair with full source data; blanks in source appear as blank
+  - columns: Review Row ID, Decision, Outcomes Name/State/Country, Translate Input, Translate Output, myWSU Name/City/State/Country (blanks in source appear as blank)
 - `Final_Translation_Table` opens with Excel filter enabled so you can quickly filter `Translate Input` to non-blanks.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
 - Publish flow is: `Review_Workbench` -> `Approved_Mappings` (internal) -> `Final_Translation_Table`.
@@ -113,8 +113,8 @@ Gate-blocking checks include:
 - unresolved actions
 - overflow beyond formula capacity
 - blank finals on publish-eligible rows
-- `Update Key` without `Suggested_Key`
-- `Update Key` with invalid `Key_Update_Side`
+- `Use Suggestion` without `Suggested_Key`
+- `Use Suggestion` with invalid Update Side
 - duplicate final keys excluding rows intentionally approved as `Allow One-to-Many`
 
 ## Workflow 2: Create a new translation table
