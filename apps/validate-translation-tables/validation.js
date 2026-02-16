@@ -1516,7 +1516,17 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     const locationSuffix = locationParts ? ` (${locationParts})` : '';
                     result.Error_Description = `Translation output does not exist in myWSU data. Likely stale key; suggested replacement ${result.Suggested_Key}: "${result.Suggested_School}"${locationSuffix} (score: ${scorePct}%).`;
                 } else if (replacement.subtype === OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT) {
-                    result.Error_Description = 'Translation output does not exist in myWSU data. Multiple high-confidence replacement candidates were found; review manually.';
+                    if (replacement.bestCandidate) {
+                        result.Suggested_Key = replacement.bestCandidate.key || '';
+                        result.Suggested_School = replacement.bestCandidate.name || '';
+                        result.Suggested_City = replacement.bestCandidate.city || '';
+                        result.Suggested_State = replacement.bestCandidate.state || '';
+                        result.Suggested_Country = replacement.bestCandidate.country || '';
+                        result.Suggestion_Score = replacement.bestCandidate.score;
+                        result.Error_Description = 'Translation output does not exist in myWSU data. Multiple high-confidence replacement candidates were found; top candidate pre-filled for Use Suggestion.';
+                    } else {
+                        result.Error_Description = 'Translation output does not exist in myWSU data. Multiple high-confidence replacement candidates were found; review manually.';
+                    }
                 } else {
                     result.Error_Description = 'Translation output does not exist in myWSU data. No high-confidence replacement candidate was found.';
                 }

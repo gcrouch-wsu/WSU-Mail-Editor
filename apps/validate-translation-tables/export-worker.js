@@ -2543,21 +2543,30 @@ async function buildValidationExport(payload) {
         const sideLetter = reviewColLetter.Key_Update_Side;
         if (!letter) return '';
         const valueExpr = (decLetter && sideLetter && sugLetter)
-            ? `IF(AND($${decLetter}$${rowNum}="Use Suggestion",OR($${sideLetter}$${rowNum}="${suggestionWhenSide}",$${sideLetter}$${rowNum}="Both")),Review_Workbench!$${sugLetter}$${rowNum},Review_Workbench!$${letter}$${rowNum})`
+            ? `IF(AND(Review_Workbench!$${decLetter}$${rowNum}="Use Suggestion",OR(Review_Workbench!$${sideLetter}$${rowNum}="${suggestionWhenSide}",Review_Workbench!$${sideLetter}$${rowNum}="Both")),Review_Workbench!$${sugLetter}$${rowNum},Review_Workbench!$${letter}$${rowNum})`
             : `Review_Workbench!$${letter}$${rowNum}`;
         return { formula: `IF(${reviewPublishedCell(rowNum)},${valueExpr},"")` };
     };
-    const outcomesContextFallbacks = {
-        [outcomesNameContextKey]: ['Suggested_School', 'Input'],
-        [outcomesStateKey]: ['Suggested_State', 'Input'],
-        [outcomesCountryKey]: ['Suggested_Country', 'Input']
+    const roleToSuggestion = { School: 'Suggested_School', City: 'Suggested_City', State: 'Suggested_State', Country: 'Suggested_Country' };
+    const buildContextFallbacksForCols = (cols, rolesKey, prefix, side) => {
+        const fallbacks = {};
+        const roles = columnRoles[rolesKey] || {};
+        cols.forEach(col => {
+            const baseCol = col.key.replace(new RegExp(`^${prefix}_`), '');
+            const role = roles[baseCol];
+            const sugKey = role && roleToSuggestion[role];
+            if (sugKey) fallbacks[col.key] = [sugKey, side];
+        });
+        return fallbacks;
     };
-    const wsuContextFallbacks = {
-        [wsuNameContextKey]: ['Suggested_School', 'Output'],
-        [wsuCityKey]: ['Suggested_City', 'Output'],
-        [wsuStateKey]: ['Suggested_State', 'Output'],
-        [wsuCountryKey]: ['Suggested_Country', 'Output']
-    };
+    const outcomesContextFallbacks = buildContextFallbacksForCols(finalOutcomesCols, 'outcomes', 'outcomes', 'Input');
+    const wsuContextFallbacks = buildContextFallbacksForCols(finalWsuCols, 'wsu_org', 'wsu', 'Output');
+    if (outcomesNameContextKey && !outcomesContextFallbacks[outcomesNameContextKey]) {
+        outcomesContextFallbacks[outcomesNameContextKey] = ['Suggested_School', 'Input'];
+    }
+    if (wsuNameContextKey && !wsuContextFallbacks[wsuNameContextKey]) {
+        wsuContextFallbacks[wsuNameContextKey] = ['Suggested_School', 'Output'];
+    }
     const contextFallbacks = { ...outcomesContextFallbacks, ...wsuContextFallbacks };
     const finalFormulaRows = autoApprovedRows.length + cappedReviewFormulaRows;
 
