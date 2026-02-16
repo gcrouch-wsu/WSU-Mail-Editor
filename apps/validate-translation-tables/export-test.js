@@ -735,6 +735,268 @@ async function run() {
         assert.equal(missingMappingCount, 0, 'Missing_Mapping should be dropped when error has stronger suggestion');
     });
 
+    await runCheck('buildValidationExport dedupes Output_Not_Found vs Duplicate_Target when same final pair', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Output_Not_Found',
+                    _rawErrorType: 'Output_Not_Found',
+                    Error_Subtype: 'Output_Not_Found_Likely_Stale_Key',
+                    _rawErrorSubtype: 'Output_Not_Found_Likely_Stale_Key',
+                    translate_input: 'OUT-1',
+                    translate_output: 'WSU-STALE',
+                    Suggested_Key: 'WSU-1',
+                    Suggested_School: 'UH Maui',
+                    Suggestion_Score: 0.9,
+                    outcomes_school: 'UH Maui',
+                    wsu_school: ''
+                },
+                {
+                    Error_Type: 'Duplicate_Target',
+                    _rawErrorType: 'Duplicate_Target',
+                    translate_input: 'OUT-1',
+                    translate_output: 'WSU-OLD',
+                    Suggested_Key: 'WSU-1',
+                    Suggested_School: 'UH Maui',
+                    Suggestion_Score: 0.85,
+                    Duplicate_Group: 'G-1',
+                    outcomes_school: 'UH Maui',
+                    wsu_school: 'Legacy Org'
+                }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            options: { includeSuggestions: true, nameCompareConfig: { enabled: true, outcomes: 'school', wsu: 'school', threshold: 0.8 } },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'UH Maui' }],
+                    translate: [
+                        { translate_input: 'OUT-1', translate_output: 'WSU-STALE' },
+                        { translate_input: 'OUT-1', translate_output: 'WSU-OLD' }
+                    ],
+                    wsu_org: [
+                        { key: 'WSU-1', school: 'UH Maui' },
+                        { key: 'WSU-OLD', school: 'Legacy Org' }
+                    ]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        assert.ok(reviewSheet, 'Expected Review_Workbench');
+        const errorTypeCol = findHeaderIndex(reviewSheet, 'Error Type');
+        assert.ok(errorTypeCol > 0, 'Review sheet should have Error Type column');
+        const rowCount = reviewSheet.rowCount || 0;
+        let outputNotFoundCount = 0;
+        let duplicateTargetCount = 0;
+        for (let r = 2; r <= rowCount; r += 1) {
+            const val = String(reviewSheet.getRow(r).getCell(errorTypeCol).value || '');
+            if (val === 'Output key not found in myWSU') outputNotFoundCount += 1;
+            if (val === 'Duplicate_Target') duplicateTargetCount += 1;
+        }
+        assert.equal(outputNotFoundCount, 1, 'Output_Not_Found row should be kept');
+        assert.equal(duplicateTargetCount, 0, 'Duplicate_Target row should be deduped when same final pair as Output_Not_Found');
+    });
+
+    await runCheck('buildValidationExport keeps both Input_Not_Found and Duplicate_Source (regression: no incorrect dedupe)', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Input_Not_Found',
+                    _rawErrorType: 'Input_Not_Found',
+                    translate_input: 'BAD-KEY',
+                    translate_output: 'WSU-1',
+                    Suggested_Key: 'OUT-1',
+                    Suggested_School: 'UH Maui',
+                    Suggestion_Score: 0.9,
+                    outcomes_school: '',
+                    wsu_school: 'UH Maui'
+                },
+                {
+                    Error_Type: 'Duplicate_Source',
+                    _rawErrorType: 'Duplicate_Source',
+                    translate_input: 'OUT-1',
+                    translate_output: 'WSU-1',
+                    Duplicate_Group: 'G-1',
+                    outcomes_school: 'UH Maui',
+                    wsu_school: 'UH Maui'
+                }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            options: { includeSuggestions: true, nameCompareConfig: { enabled: true, outcomes: 'school', wsu: 'school', threshold: 0.8 } },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'UH Maui' }],
+                    translate: [
+                        { translate_input: 'BAD-KEY', translate_output: 'WSU-1' },
+                        { translate_input: 'OUT-1', translate_output: 'WSU-1' }
+                    ],
+                    wsu_org: [{ key: 'WSU-1', school: 'UH Maui' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        assert.ok(reviewSheet, 'Expected Review_Workbench');
+        const errorTypeCol = findHeaderIndex(reviewSheet, 'Error Type');
+        const suggestedKeyCol = findHeaderIndex(reviewSheet, 'Suggested Key');
+        const decisionCol = findHeaderIndex(reviewSheet, 'Decision');
+        assert.ok(errorTypeCol > 0, 'Review sheet should have Error Type column');
+        assert.ok(suggestedKeyCol > 0, 'Review sheet should have Suggested Key column');
+        assert.ok(decisionCol > 0, 'Review sheet should have Decision column');
+        const rowCount = reviewSheet.rowCount || 0;
+        let inputNotFoundCount = 0;
+        let duplicateSourceCount = 0;
+        let inputNotFoundDecision = '';
+        let duplicateSourceSuggestedKey = '';
+        let duplicateSourceDecision = '';
+        for (let r = 2; r <= rowCount; r += 1) {
+            const val = String(reviewSheet.getRow(r).getCell(errorTypeCol).value || '');
+            if (val === 'Input key not found in Outcomes') {
+                inputNotFoundCount += 1;
+                inputNotFoundDecision = String(reviewSheet.getRow(r).getCell(decisionCol).value || '');
+            }
+            if (val === 'Duplicate_Source') {
+                duplicateSourceCount += 1;
+                duplicateSourceSuggestedKey = String(reviewSheet.getRow(r).getCell(suggestedKeyCol).value || '');
+                duplicateSourceDecision = String(reviewSheet.getRow(r).getCell(decisionCol).value || '');
+            }
+        }
+        assert.equal(inputNotFoundCount, 1, 'Input_Not_Found row should remain');
+        assert.equal(duplicateSourceCount, 1, 'Duplicate_Source row should remain (regression: do not dedupe)');
+        assert.equal(
+            inputNotFoundDecision,
+            'Use Suggestion',
+            `Input_Not_Found Decision (got: ${JSON.stringify(inputNotFoundDecision)}); canonical pair (OUT-1, WSU-1)`
+        );
+        assert.equal(
+            duplicateSourceSuggestedKey,
+            'WSU-1',
+            `Duplicate_Source Suggested_Key (got: ${JSON.stringify(duplicateSourceSuggestedKey)}); canonical pair (${duplicateSourceSuggestedKey}, WSU-1) vs Input_Not_Found (OUT-1, WSU-1)`
+        );
+        assert.equal(
+            duplicateSourceDecision,
+            'Use Suggestion',
+            `Duplicate_Source Decision (got: ${JSON.stringify(duplicateSourceDecision)}); canonical pair (${duplicateSourceSuggestedKey}, WSU-1)`
+        );
+    });
+
+    await runCheck('buildValidationExport does not dedupe Error vs Duplicate when Error does not default to Use Suggestion', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Output_Not_Found',
+                    _rawErrorType: 'Output_Not_Found',
+                    translate_input: 'OUT-1',
+                    translate_output: 'WSU-STALE',
+                    Suggested_Key: 'WSU-1',
+                    Suggested_School: 'UH Maui',
+                    Suggestion_Score: 0.9,
+                    outcomes_school: 'UH Maui',
+                    wsu_school: ''
+                },
+                {
+                    Error_Type: 'Duplicate_Target',
+                    _rawErrorType: 'Duplicate_Target',
+                    translate_input: 'OUT-1',
+                    translate_output: 'WSU-OLD',
+                    Suggested_Key: 'WSU-1',
+                    Suggested_School: 'UH Maui',
+                    Suggestion_Score: 0.85,
+                    Duplicate_Group: 'G-1',
+                    outcomes_school: 'UH Maui',
+                    wsu_school: 'Legacy Org'
+                }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            options: { includeSuggestions: true, nameCompareConfig: { enabled: true, outcomes: 'school', wsu: 'school', threshold: 0.8 } },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'UH Maui' }],
+                    translate: [
+                        { translate_input: 'OUT-1', translate_output: 'WSU-STALE' },
+                        { translate_input: 'OUT-1', translate_output: 'WSU-OLD' }
+                    ],
+                    wsu_org: [
+                        { key: 'WSU-1', school: 'UH Maui' },
+                        { key: 'WSU-OLD', school: 'Legacy Org' }
+                    ]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        assert.ok(reviewSheet, 'Expected Review_Workbench');
+        const errorTypeCol = findHeaderIndex(reviewSheet, 'Error Type');
+        assert.ok(errorTypeCol > 0, 'Review sheet should have Error Type column');
+        const rowCount = reviewSheet.rowCount || 0;
+        let outputNotFoundCount = 0;
+        let duplicateTargetCount = 0;
+        for (let r = 2; r <= rowCount; r += 1) {
+            const val = String(reviewSheet.getRow(r).getCell(errorTypeCol).value || '');
+            if (val === 'Output key not found in myWSU') outputNotFoundCount += 1;
+            if (val === 'Duplicate_Target') duplicateTargetCount += 1;
+        }
+        assert.equal(outputNotFoundCount, 1, 'Output_Not_Found row should be kept when no dedupe');
+        assert.equal(duplicateTargetCount, 1, 'Duplicate_Target row should remain when Error does not default to Use Suggestion');
+    });
+
+    await runCheck('buildValidationExport uses Output Key_Update_Side for Duplicate_Target', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Duplicate_Target',
+                    _rawErrorType: 'Duplicate_Target',
+                    translate_input: 'IN-ALPHA',
+                    translate_output: 'OUT-LEGACY',
+                    Suggested_Key: 'OUT-BETTER',
+                    Suggested_School: 'Alpha Campus',
+                    Suggestion_Score: 0.9,
+                    Duplicate_Group: 'G-1',
+                    outcomes_school: 'Alpha Campus',
+                    wsu_school: 'Legacy Org'
+                }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            options: { includeSuggestions: true, nameCompareConfig: { enabled: true, outcomes: 'school', wsu: 'school', threshold: 0.8 } },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-ALPHA', school: 'Alpha Campus' }],
+                    translate: [{ translate_input: 'IN-ALPHA', translate_output: 'OUT-LEGACY' }],
+                    wsu_org: [
+                        { key: 'OUT-LEGACY', school: 'Legacy Org' },
+                        { key: 'OUT-BETTER', school: 'Alpha Campus' }
+                    ]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        const keyUpdateSideCol = findHeaderIndex(reviewSheet, 'Update Side');
+        assert.ok(keyUpdateSideCol > 0, 'Review sheet should have Update Side column');
+        const keyUpdateSideValue = String(reviewSheet.getRow(2).getCell(keyUpdateSideCol).value || '');
+        assert.equal(keyUpdateSideValue, 'Output', 'Duplicate_Target should have Key_Update_Side=Output');
+    });
+
     await runCheck('buildGenerationExport includes create review guidance columns and instructions', async () => {
         const harness = createHarness();
         const result = await harness.buildGenerationExport({

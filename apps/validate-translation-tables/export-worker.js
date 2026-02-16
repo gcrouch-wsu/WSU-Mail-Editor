@@ -2019,7 +2019,30 @@ async function buildValidationExport(payload) {
         return !errorRowsToDrop.has(row);
     });
     const filteredMissing = actionQueueFromMissing.filter((row) => !missingRowsToDrop.has(row));
-    const actionQueueRowsUnstable = [...filteredErrors, ...actionQueueFromOneToMany, ...filteredMissing]
+    const getDuplicateCanonicalPair = (row) => {
+        const raw = row._rawErrorType || row.Error_Type || '';
+        const sug = normKey(row.Suggested_Key);
+        if (!sug) return null;
+        if (raw === 'Duplicate_Target') return [normKey(row.translate_input), sug];
+        if (raw === 'Duplicate_Source') return [sug, normKey(row.translate_output)];
+        return null;
+    };
+    const errorPairKeys = new Set();
+    filteredErrors.forEach((row) => {
+        if (row.Decision !== 'Use Suggestion') return;
+        const pair = getErrorCanonicalPair(row);
+        if (pair) errorPairKeys.add(`${pair[0]}\t${pair[1]}`);
+    });
+    const duplicateRowsToDrop = new Set();
+    actionQueueFromOneToMany.forEach((row) => {
+        if (row.Decision !== 'Use Suggestion') return;
+        const pair = getDuplicateCanonicalPair(row);
+        if (!pair) return;
+        const key = `${pair[0]}\t${pair[1]}`;
+        if (errorPairKeys.has(key)) duplicateRowsToDrop.add(row);
+    });
+    const filteredOneToMany = actionQueueFromOneToMany.filter((row) => !duplicateRowsToDrop.has(row));
+    const actionQueueRowsUnstable = [...filteredErrors, ...filteredOneToMany, ...filteredMissing]
         .sort((a, b) => {
             const pa = a.Priority ?? 99;
             const pb = b.Priority ?? 99;
@@ -2051,8 +2074,8 @@ async function buildValidationExport(payload) {
             if (missing.includes('Input')) return 'Input';
             if (missing.includes('Output')) return 'Output';
         }
-        if (rawType === 'Duplicate_Source') return 'Output';
-        if (rawType === 'Duplicate_Target') return 'Input';
+        if (rawType === 'Duplicate_Source') return 'Input';
+        if (rawType === 'Duplicate_Target') return 'Output';
         return 'None';
     };
     const sanitizeIdPart = (value) => String(normalizeValue(value || '')).replace(/\|/g, '/');
@@ -2332,27 +2355,7 @@ async function buildValidationExport(payload) {
                 formula: `IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Suggested_Key}${rowNum}=""),"Use Suggestion needs Suggested_Key",IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Use Suggestion needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))`
             };
         }
-        const editableCols = ['Decision'];
-        editableCols.forEach(col => {
-            const letter = reviewColLetter[col];
-            if (!letter) return;
-            for (let rowNum = 2; rowNum <= rowEnd; rowNum += 1) {
-                reviewSheet.getCell(`${letter}${rowNum}`).protection = { locked: false };
-            }
-        });
-        try {
-            await reviewSheet.protect('', {
-                selectLockedCells: true,
-                selectUnlockedCells: true,
-                sort: true,
-                autoFilter: true
-            });
-        } catch (error) {
-            // Protection is best-effort; continue export if the runtime lacks support.
-            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-                console.warn('Review_Workbench protection skipped:', error?.message || String(error));
-            }
-        }
+        // Workbook left unprotected so sort/filter work without restriction.
         const decCol = reviewColLetter.Decision;
         const decRef = `${decCol}2:${decCol}${rowEnd}`;
         const fullDataRef = `A2:${columnIndexToLetter(reviewWorkbenchColumns.length)}${rowEnd}`;

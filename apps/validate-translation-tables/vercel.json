@@ -1,9 +1,7 @@
 {
   "version": 2,
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/user-guide.html", "destination": "/user-guide.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -56,7 +56,7 @@ Use this when you already have a translation table and want to correct it.
 
 Recommended order:
 
-1. `Review_Workbench` - main decision sheet (use this first).
+1. `Review_Workbench` - main decision sheet (use this first). Sortable and filterable.
 2. `Final_Translation_Table` - final publish-ready key table.
 3. `Translation_Key_Updates` - only changed key pairs.
 4. `QA_Checks_Validate` - publish gate checks.
@@ -86,6 +86,7 @@ Each row shows reviewer context and decision outputs:
 
 Only `Decision` is editable. Formula/system columns are locked.
 The sheet freezes the header row only, so horizontal scrolling should remain usable.
+**Review_Workbench is sortable and filterable**—use the header dropdowns to sort or filter rows as you work.
 
 ### Validate decision meanings
 
@@ -102,8 +103,12 @@ The sheet freezes the header row only, so horizontal scrolling should remain usa
 - `Final_Translation_Table` shows approved rows only, in a compact sequential list (no empty slots).
 - Flow: `Review_Workbench` → `Final_Staging` (hidden) → `Final_Translation_Table` via FILTER formula.
 - Columns: Review Row ID, all your selected Outcomes columns, Translate Input, Translate Output, all your selected myWSU columns. The Decision column is hidden but still used for QA.
-- `Final_Translation_Table` has Excel auto-filter enabled.
+- **`Final_Translation_Table` is not sortable** (it is formula-driven). When you are finished reviewing, **copy and paste values into a new sheet** if you need to sort or filter the final translation table.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
+
+### Workflow when finished
+
+When you are done reviewing and the QA gate passes, **copy and paste the Final_Translation_Table values into a new sheet** if you need to sort or filter the final data. The Final_Translation_Table is formula-driven and cannot be sorted directly.
 
 ### Publish rule of thumb
 

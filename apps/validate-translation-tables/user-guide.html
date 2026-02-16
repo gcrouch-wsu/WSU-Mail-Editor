@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validate Translation Tables - User Guide</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; font-size: 10pt; line-height: 1.35; color: #1f2937; max-width: 8.5in; margin: 0 auto; padding: 0.5in; }
+        h1 { font-size: 14pt; color: #981e32; margin: 0 0 0.25em; border-bottom: 2px solid #981e32; }
+        h2 { font-size: 11pt; margin: 0.6em 0 0.25em; color: #374151; }
+        p, li { margin: 0.2em 0; }
+        ul { margin: 0.25em 0; padding-left: 1.2em; }
+        .print-note { font-size: 9pt; color: #6b7280; margin-bottom: 0.5em; }
+        .section { margin-bottom: 0.4em; }
+        table { font-size: 9pt; border-collapse: collapse; width: 100%; margin: 0.25em 0; }
+        th, td { border: 1px solid #d1d5db; padding: 2px 6px; text-align: left; }
+        th { background: #f3f4f6; font-weight: 600; }
+        @media print {
+            @page { size: letter; margin: 0.5in; }
+            body { padding: 0; font-size: 8.5pt; line-height: 1.3; }
+            .print-note { display: none; }
+            h1 { font-size: 11pt; margin-bottom: 0.2em; }
+            h2 { font-size: 9pt; margin: 0.4em 0 0.15em; }
+            .section { margin-bottom: 0.3em; }
+        }
+    </style>
+</head>
+<body>
+    <p class="print-note">Print this page (Ctrl+P) and choose &ldquo;Save as PDF&rdquo; for a PDF copy.</p>
+    <h1>Validate Translation Tables &ndash; User Guide</h1>
+    <p><strong>What it does:</strong> Two workflows &mdash; <strong>Validate</strong> (check/fix existing table) and <strong>Create</strong> (build new from Outcomes + myWSU). Requires Excel 365 or 2021+ for Validate export.</p>
+
+    <h2>Validate workflow</h2>
+    <div class="section">
+        <p><strong>1. Upload</strong> Outcomes source, Translation table, and myWSU. <strong>2. Match Options</strong> &rarr; pick key columns (Translation input/output), validation mode (Key only or Key + name). <strong>3. Name comparison</strong> (if used): pick Outcomes/myWSU name columns, threshold (default 0.8), ambiguity gap (0.03). <strong>4. Select Columns, Keys, and Roles</strong> &rarr; pick included columns, key columns, optional role mapping (School, City, State, Country). Include City/State for high-confidence matching. <strong>5. Validate Mappings</strong> &rarr; review cards &rarr; <strong>Download Full Report</strong>.</p>
+    </div>
+
+    <h2>Excel review order</h2>
+    <div class="section">
+        <p><strong>1. Review_Workbench</strong> (sortable/filterable) &rarr; main decision sheet. Only <em>Decision</em> is editable. Decisions: Keep As-Is, Use Suggestion, Allow One-to-Many, Ignore. <strong>2. Final_Translation_Table</strong> &rarr; publish-ready. <em>Not sortable</em> &mdash; when finished, copy-paste values into a new sheet to sort/filter. <strong>3. Translation_Key_Updates</strong> &rarr; changed keys only. <strong>4. QA_Checks_Validate</strong> &rarr; pass before publish.</p>
+    </div>
+
+    <h2>Create workflow</h2>
+    <div class="section">
+        <p><strong>1. Upload</strong> Outcomes and myWSU. <strong>2. Match method</strong>: key or name (key optional in name mode). <strong>3. Select columns</strong> &rarr; include columns, optional roles. <strong>4. Generate Translation Table</strong> &rarr; download Excel. See Review_Instructions_Create in workbook.</p>
+    </div>
+
+    <h2>Tips</h2>
+    <div class="section">
+        <p>Review by exception. Check QA before publish. Use Suggestion: verify Suggested Key/School/City/State/Country first. Privacy: all processing is local in your browser.</p>
+    </div>
+</body>
+</html>

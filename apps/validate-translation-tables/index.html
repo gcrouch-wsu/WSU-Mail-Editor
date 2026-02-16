@@ -62,26 +62,27 @@
                 </div>
                 <div class="ml-3">
                     <h3 class="text-sm font-medium text-blue-800">How to use this tool</h3>
+                    <p class="mt-1">
+                        <a href="user-guide.html" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 underline font-medium">User Guide (one page)</a>
+                        <span class="text-blue-600"> — Open in new tab; use Print → Save as PDF for a PDF copy.</span>
+                    </p>
                     <div class="mt-2 text-sm text-blue-700">
                         <div id="instructions-validate">
-                            <p>1. Upload the Outcomes source, Translation table, and myWSU table</p>
-                            <p>2. In the column list, pick the key columns and the columns to include (include City/State to enable high-confidence matching)</p>
-                            <p>3. Choose validation mode: key-only, or key + name comparison</p>
-                            <p>4. If using name comparison, pick name columns and adjust threshold/ambiguity gap</p>
-                            <p>5. (Optional) Map roles (School/City/State/Country) to improve suggestions</p>
-                            <p>6. System check confirms Translate is loaded, shows row count, verifies no blank input/output key cells, and checks for duplicate keys in Outcomes/myWSU</p>
-                            <p>7. Click "Validate Mappings" to run key lookups and matching checks</p>
-                            <p>8. Review errors: "blank key" means empty Translate cell; "not found" means key value exists but is absent in Outcomes/myWSU</p>
-                            <p>9. Download the Excel report (includes One_to_Many, High_Confidence_Matches, and Missing_Mappings)</p>
+                            <p>1. Upload Outcomes source, Translation table, and myWSU</p>
+                            <p>2. <strong>Match Options:</strong> Pick Translation input/output columns. Choose validation mode: Key only, or Key + name comparison</p>
+                            <p>3. <strong>Name comparison</strong> (if used): Pick Outcomes and myWSU name columns; set threshold (default 0.8) and ambiguity gap (0.03)</p>
+                            <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; mark key columns for Outcomes and myWSU; optionally map roles (School, City, State, Country). Include City/State for high-confidence matching</p>
+                            <p>5. Optional: Include name-match suggestions; Show mapping logic</p>
+                            <p>6. Click <strong>Validate Mappings</strong> → review cards → <strong>Download Full Report</strong></p>
+                            <p>7. Excel requires 365 or 2021+. Review_Workbench is sortable/filterable. Final_Translation_Table is not sortable—copy-paste values into a new sheet when finished</p>
                         </div>
                         <div id="instructions-create" class="hidden">
-                            <p>1. Upload the Outcomes source and myWSU table</p>
-                            <p>2. In the column list, pick columns to include; key columns are required only for key matching.</p>
-                            <p>3. Choose match method: key or name</p>
-                            <p>4. If matching by name, pick name columns and adjust threshold/ambiguity gap (key selection is optional and ignored)</p>
-                            <p>5. (Optional) Map roles (School/City/State/Country) to improve suggestions</p>
-                            <p>6. Click "Generate Translation Table" to create a clean Input/Output table</p>
-                            <p>7. Review the missing-value report and download the Excel output</p>
+                            <p>1. Upload Outcomes source and myWSU</p>
+                            <p>2. <strong>Match method:</strong> Key columns or Name columns (key optional in name mode)</p>
+                            <p>3. <strong>Name comparison</strong> (if used): Pick name columns; set threshold and ambiguity gap</p>
+                            <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; optionally map roles. Key columns required only for key matching</p>
+                            <p>5. Click <strong>Generate Translation Table</strong> → download Excel</p>
+                            <p>6. See Review_Instructions_Create sheet in the workbook</p>
                         </div>
                         <p class="mt-2 font-semibold">Privacy: All files are processed locally in your browser. No data is uploaded to any server.</p>
                     </div>
