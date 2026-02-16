@@ -1945,7 +1945,81 @@ async function buildValidationExport(payload) {
         Missing_In: row.Missing_In ?? '',
         Similarity: row.Similarity ?? row.Suggestion_Score ?? ''
     }));
-    const actionQueueRowsUnstable = [...actionQueueFromErrorsWithMissing, ...actionQueueFromOneToMany, ...actionQueueFromMissing]
+    const normKey = (k) => String(k || '').trim();
+    const isCandidateErrorRow = (row) => {
+        const raw = row._rawErrorType || row.Error_Type || '';
+        return raw === 'Input_Not_Found' || raw === 'Output_Not_Found';
+    };
+    const getErrorCanonicalPair = (row) => {
+        const raw = row._rawErrorType || row.Error_Type || '';
+        const sug = normKey(row.Suggested_Key);
+        if (!sug) return null;
+        if (raw === 'Input_Not_Found') return [sug, normKey(row.translate_output)];
+        if (raw === 'Output_Not_Found') return [normKey(row.translate_input), sug];
+        return null;
+    };
+    const getMissingCanonicalPair = (row) => {
+        const inp = normKey(row.translate_input);
+        const out = normKey(row.translate_output);
+        if (!inp || !out) return null;
+        return [inp, out];
+    };
+    const parseScore = (v) => {
+        if (Number.isFinite(v)) return v;
+        if (typeof v === 'string') return parseFloat(v) || 0;
+        return 0;
+    };
+    const missingPairs = new Map();
+    actionQueueFromMissing.forEach((row, idx) => {
+        const pair = getMissingCanonicalPair(row);
+        if (!pair) return;
+        const key = `${pair[0]}\t${pair[1]}`;
+        const existing = missingPairs.get(key);
+        const score = parseScore(row.Similarity);
+        if (!existing || score > parseScore(existing.row.Similarity)) {
+            missingPairs.set(key, { row, idx, pair });
+        } else if (score === parseScore(existing.row.Similarity)) {
+            const tiA = String(row.translate_input || '');
+            const tiB = String(existing.row.translate_input || '');
+            if (tiA !== tiB ? tiA < tiB : String(row.translate_output || '') < String(existing.row.translate_output || '')) {
+                missingPairs.set(key, { row, idx, pair });
+            }
+        }
+    });
+    const candidateErrors = actionQueueFromErrorsWithMissing.filter(isCandidateErrorRow);
+    const hasCandidates = candidateErrors.length > 0;
+    const hasMissing = actionQueueFromMissing.length > 0;
+    const errorRowsToDrop = new Set();
+    const missingRowsToDrop = new Set();
+    if (hasCandidates && hasMissing) {
+        candidateErrors.forEach((errRow) => {
+            const pair = getErrorCanonicalPair(errRow);
+            if (!pair) return;
+            const [inp, out] = pair;
+            const key = `${inp}\t${out}`;
+            const missingEntry = missingPairs.get(key);
+            if (!missingEntry) return;
+            const missingRow = missingEntry.row;
+            const missingScore = parseScore(missingRow.Similarity);
+            const errScore = parseScore(errRow.Suggestion_Score);
+            const missingHasConfidence = missingScore > 0 || String(missingRow.Similarity || '').trim() !== '';
+            const errHasSuggestion = normKey(errRow.Suggested_Key) !== '';
+            if (!errHasSuggestion) return;
+            if (missingHasConfidence && missingScore >= errScore) {
+                errorRowsToDrop.add(errRow);
+                if (!missingRow.Merged_Sources) missingRow.Merged_Sources = [];
+                missingRow.Merged_Sources.push(errRow._rawErrorType || errRow.Error_Type || '');
+            } else if (errScore > missingScore) {
+                missingRowsToDrop.add(missingRow);
+            }
+        });
+    }
+    const filteredErrors = actionQueueFromErrorsWithMissing.filter((row) => {
+        if (!isCandidateErrorRow(row)) return true;
+        return !errorRowsToDrop.has(row);
+    });
+    const filteredMissing = actionQueueFromMissing.filter((row) => !missingRowsToDrop.has(row));
+    const actionQueueRowsUnstable = [...filteredErrors, ...actionQueueFromOneToMany, ...filteredMissing]
         .sort((a, b) => {
             const pa = a.Priority ?? 99;
             const pb = b.Priority ?? 99;
@@ -2269,7 +2343,9 @@ async function buildValidationExport(payload) {
         try {
             await reviewSheet.protect('', {
                 selectLockedCells: true,
-                selectUnlockedCells: true
+                selectUnlockedCells: true,
+                sort: true,
+                autoFilter: true
             });
         } catch (error) {
             // Protection is best-effort; continue export if the runtime lacks support.

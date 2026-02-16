@@ -550,6 +550,191 @@ async function run() {
         );
     });
 
+    await runCheck('buildValidationExport dedupes Input_Not_Found vs Missing_Mapping overlap', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Input_Not_Found',
+                    _rawErrorType: 'Input_Not_Found',
+                    translate_input: 'BAD-KEY',
+                    translate_output: 'WSU-1',
+                    Suggested_Key: 'OUT-1',
+                    Suggested_School: 'UH Maui',
+                    Suggestion_Score: 0.9,
+                    outcomes_school: '',
+                    wsu_school: 'UH Maui'
+                }
+            ],
+            selectedCols: { outcomes: ['school', 'state'], wsu_org: ['school', 'state'] },
+            options: { includeSuggestions: true, nameCompareConfig: { enabled: true, outcomes: 'school', wsu: 'school', threshold: 0.8 } },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'UH Maui', state: 'HI' }],
+                    translate: [{ translate_input: 'BAD-KEY', translate_output: 'WSU-1' }],
+                    wsu_org: [{ key: 'WSU-1', school: 'UH Maui', state: 'HI' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        assert.ok(reviewSheet, 'Expected Review_Workbench');
+        const errorTypeCol = findHeaderIndex(reviewSheet, 'Error Type');
+        assert.ok(errorTypeCol > 0, 'Review sheet should have Error Type column');
+        const rowCount = reviewSheet.rowCount || 0;
+        let inputNotFoundCount = 0;
+        let missingMappingCount = 0;
+        for (let r = 2; r <= rowCount; r += 1) {
+            const val = String(reviewSheet.getRow(r).getCell(errorTypeCol).value || '');
+            if (val === 'Input key not found in Outcomes') inputNotFoundCount += 1;
+            if (val === 'Missing_Mapping') missingMappingCount += 1;
+        }
+        assert.equal(missingMappingCount, 1, 'Missing_Mapping row should be kept');
+        assert.equal(inputNotFoundCount, 0, 'Input_Not_Found row should be deduped (dropped)');
+    });
+
+    await runCheck('buildValidationExport keeps Input_Not_Found when no Missing_Mapping overlap', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Input_Not_Found',
+                    _rawErrorType: 'Input_Not_Found',
+                    translate_input: 'ORPHAN-KEY',
+                    translate_output: 'WSU-ORPHAN',
+                    Suggested_Key: 'OUT-ORPHAN',
+                    Suggested_School: 'Hanoi University',
+                    Suggestion_Score: 0.85,
+                    outcomes_school: '',
+                    wsu_school: 'Hanoi University'
+                }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            options: { includeSuggestions: true },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'UH Maui' }],
+                    translate: [{ translate_input: 'ORPHAN-KEY', translate_output: 'WSU-ORPHAN' }],
+                    wsu_org: [
+                        { key: 'WSU-1', school: 'UH Maui' },
+                        { key: 'WSU-ORPHAN', school: 'Hanoi University' }
+                    ]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        const errorTypeCol = findHeaderIndex(reviewSheet, 'Error Type');
+        let inputNotFoundCount = 0;
+        for (let r = 2; r <= (reviewSheet.rowCount || 0); r += 1) {
+            if (String(reviewSheet.getRow(r).getCell(errorTypeCol).value || '') === 'Input key not found in Outcomes') {
+                inputNotFoundCount += 1;
+            }
+        }
+        assert.equal(inputNotFoundCount, 1, 'Input_Not_Found with no overlap should remain');
+    });
+
+    await runCheck('buildValidationExport dedupes Output_Not_Found vs Missing_Mapping overlap', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Output_Not_Found',
+                    _rawErrorType: 'Output_Not_Found',
+                    translate_input: 'OUT-1',
+                    translate_output: 'WSU-STALE',
+                    Suggested_Key: 'WSU-1',
+                    Suggested_School: 'UH Maui',
+                    Suggestion_Score: 0.9,
+                    outcomes_school: 'UH Maui',
+                    wsu_school: ''
+                }
+            ],
+            selectedCols: { outcomes: ['school', 'state'], wsu_org: ['school', 'state'] },
+            options: { includeSuggestions: true, nameCompareConfig: { enabled: true, outcomes: 'school', wsu: 'school', threshold: 0.8 } },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'UH Maui', state: 'HI' }],
+                    translate: [{ translate_input: 'OUT-1', translate_output: 'WSU-STALE' }],
+                    wsu_org: [{ key: 'WSU-1', school: 'UH Maui', state: 'HI' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        assert.ok(reviewSheet, 'Expected Review_Workbench');
+        const errorTypeCol = findHeaderIndex(reviewSheet, 'Error Type');
+        assert.ok(errorTypeCol > 0, 'Review sheet should have Error Type column');
+        const rowCount = reviewSheet.rowCount || 0;
+        let outputNotFoundCount = 0;
+        let missingMappingCount = 0;
+        for (let r = 2; r <= rowCount; r += 1) {
+            const val = String(reviewSheet.getRow(r).getCell(errorTypeCol).value || '');
+            if (val === 'Output key not found in myWSU') outputNotFoundCount += 1;
+            if (val === 'Missing_Mapping') missingMappingCount += 1;
+        }
+        assert.equal(missingMappingCount, 1, 'Missing_Mapping row should be kept');
+        assert.equal(outputNotFoundCount, 0, 'Output_Not_Found row should be deduped (dropped)');
+    });
+
+    await runCheck('buildValidationExport keeps error row when error score exceeds Missing_Mapping score', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Input_Not_Found',
+                    _rawErrorType: 'Input_Not_Found',
+                    translate_input: 'BAD-KEY',
+                    translate_output: 'WSU-1',
+                    Suggested_Key: 'OUT-1',
+                    Suggested_School: 'Alpha Beta Gamma',
+                    Suggestion_Score: 0.95,
+                    outcomes_school: '',
+                    wsu_school: 'Alpha Beta Gamma'
+                }
+            ],
+            selectedCols: { outcomes: ['school', 'state'], wsu_org: ['school', 'state'] },
+            options: { includeSuggestions: true, nameCompareConfig: { enabled: true, outcomes: 'school', wsu: 'school', threshold: 0.75 } },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'Alpha Beta Gamma', state: 'HI' }],
+                    translate: [{ translate_input: 'BAD-KEY', translate_output: 'WSU-1' }],
+                    wsu_org: [{ key: 'WSU-1', school: 'Alpha Beta', state: 'HI' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        assert.ok(reviewSheet, 'Expected Review_Workbench');
+        const errorTypeCol = findHeaderIndex(reviewSheet, 'Error Type');
+        const rowCount = reviewSheet.rowCount || 0;
+        let inputNotFoundCount = 0;
+        let missingMappingCount = 0;
+        for (let r = 2; r <= rowCount; r += 1) {
+            const val = String(reviewSheet.getRow(r).getCell(errorTypeCol).value || '');
+            if (val === 'Input key not found in Outcomes') inputNotFoundCount += 1;
+            if (val === 'Missing_Mapping') missingMappingCount += 1;
+        }
+        assert.equal(inputNotFoundCount, 1, 'Input_Not_Found should be kept when error score > Missing_Mapping score');
+        assert.equal(missingMappingCount, 0, 'Missing_Mapping should be dropped when error has stronger suggestion');
+    });
+
     await runCheck('buildGenerationExport includes create review guidance columns and instructions', async () => {
         const harness = createHarness();
         const result = await harness.buildGenerationExport({
