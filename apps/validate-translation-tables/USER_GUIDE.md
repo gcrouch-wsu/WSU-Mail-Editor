@@ -98,9 +98,10 @@ The sheet freezes the header row only, so horizontal scrolling should remain usa
 
 - `Valid` and `High_Confidence_Match` rows are auto-approved.
 - You do not need to approve those one by one.
+- **Default decisions** are pre-populated when the best choice is obvious (e.g. Name_Mismatch with good score → Keep As-Is; Output_Not_Found with no replacement → Ignore). You can still change any decision.
 - `Final_Translation_Table` shows approved rows only, in a compact sequential list (no empty slots).
 - Flow: `Review_Workbench` → `Final_Staging` (hidden) → `Final_Translation_Table` via FILTER formula.
-- Columns: Review Row ID, Decision, Outcomes Name/State/Country, Translate Input, Translate Output, myWSU Name/City/State/Country (blanks in source appear as blank).
+- Columns: Review Row ID, all your selected Outcomes columns, Translate Input, Translate Output, all your selected myWSU columns. The Decision column is hidden but still used for QA.
 - `Final_Translation_Table` has Excel auto-filter enabled.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
 

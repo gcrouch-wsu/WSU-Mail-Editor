@@ -359,10 +359,14 @@ runCheck('export-worker: Review_Workbench has freeze and conditional formatting'
 });
 
 runCheck('export-worker: Final_Translation_Table includes reviewer context and direct reviewer pull-through', () => {
-    assert.ok(exportWorkerCode.includes("header: 'Outcomes Name'"));
-    assert.ok(exportWorkerCode.includes("header: 'myWSU Name'"));
-    assert.ok(exportWorkerCode.includes("header: 'Outcomes State'"));
-    assert.ok(exportWorkerCode.includes("header: 'myWSU City'"));
+    assert.ok(
+        exportWorkerCode.includes('finalOutcomesCols') || exportWorkerCode.includes("header: 'Outcomes Name'"),
+        'Final table should include outcomes context columns'
+    );
+    assert.ok(
+        exportWorkerCode.includes('finalWsuCols') || exportWorkerCode.includes("header: 'myWSU Name'"),
+        'Final table should include myWSU context columns'
+    );
     assert.ok(exportWorkerCode.includes("header: 'Current Translate Input'"));
     assert.ok(
         exportWorkerCode.includes('const buildFinalAutoRow = (row) =>'),

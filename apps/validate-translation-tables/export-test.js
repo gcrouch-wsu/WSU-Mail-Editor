@@ -321,8 +321,8 @@ async function run() {
         const validSheet = workbook.getWorksheet('Valid_Mappings');
         assert.ok(validSheet, 'Expected Valid_Mappings worksheet');
         const headerValues = getRowValues(validSheet, 1, 12).map(v => String(v || ''));
-        const outcomesSchoolIndex = headerValues.indexOf('outcomes_school');
-        assert.ok(outcomesSchoolIndex >= 0, 'Expected outcomes_school column header');
+        const outcomesSchoolIndex = headerValues.indexOf('Outcomes Name');
+        assert.ok(outcomesSchoolIndex >= 0, 'Expected Outcomes Name column header');
         const dataCell = validSheet.getRow(2).getCell(outcomesSchoolIndex + 1).value;
         assert.equal(typeof dataCell, 'string');
         assert.equal(dataCell, '[object Object]');
