@@ -312,7 +312,22 @@ runCheck('export-worker: Human review safeguards exist', () => {
     assert.ok(exportWorkerCode.includes('valid Update Side'));
     assert.ok(exportWorkerCode.includes('Use Suggestion with invalid Update Side'));
     assert.ok(exportWorkerCode.includes('Approved but blank final'));
-    assert.ok(exportWorkerCode.includes("const editableCols = ['Decision']"));
+});
+
+runCheck('export-worker: Review_Workbench remains intentionally unprotected', () => {
+    const match = exportWorkerCode.match(
+        /async function buildValidationExport[\s\S]*?(?=self\.onmessage\s*=)/
+    );
+    assert.ok(match, 'Could not locate buildValidationExport block');
+    const validateBlock = match[0];
+    assert.ok(
+        validateBlock.includes('Workbook left unprotected so sort/filter work without restriction.'),
+        'Validate export should document unprotected Review_Workbench behavior'
+    );
+    assert.ok(
+        !/reviewSheet\.protect\s*\(/.test(validateBlock),
+        'Review_Workbench should remain unprotected in validate export'
+    );
 });
 
 runCheck('export-worker: Validate internal staging tabs are hidden', () => {

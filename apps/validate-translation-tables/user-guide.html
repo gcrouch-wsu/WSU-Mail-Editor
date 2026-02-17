@@ -33,14 +33,42 @@
 
     <h2>Validate workflow</h2>
     <div class="section">
-        <p><strong>1. Upload</strong> Outcomes source, Translation table, and myWSU. <strong>2. Match Options</strong> &rarr; pick key columns (Translation input/output), validation mode (Key only or Key + name). <strong>3. Name comparison</strong> (if used): pick Outcomes/myWSU name columns, threshold (default 0.8), ambiguity gap (0.03). <strong>4. Select Columns, Keys, and Roles</strong> &rarr; pick included columns, key columns, optional role mapping (School, City, State, Country). Include City/State for high-confidence matching. <strong>5. Validate Mappings</strong> &rarr; review cards &rarr; <strong>Download Full Report</strong>.</p>
+        <p><strong>1. Upload</strong> Outcomes source, Translation table, and myWSU.</p>
+        <p><strong>2. Match Options</strong> &rarr; pick key columns (Translation input/output), validation mode (Key only or Key + name).</p>
+        <p><strong>3. Name comparison</strong> (if used): pick Outcomes/myWSU name columns, threshold (default 0.8), ambiguity gap (0.03).</p>
+        <p><strong>4. Select Columns, Keys, and Roles</strong> &rarr; pick included columns, key columns, optional role mapping (School, City, State, Country). Include City/State for high-confidence matching.</p>
+        <p><strong>5. Validate Mappings</strong> &rarr; review cards &rarr; <strong>Download Full Report</strong>.</p>
+    </div>
+    <h2>What the Excel file contains</h2>
+    <div class="section">
+        <p>The Final_Translation_Table includes both:</p>
+        <ul>
+            <li><strong>Auto-matched rows</strong> (Valid and High_Confidence_Match).</li>
+            <li><strong>Rows you approve in Review_Workbench</strong> (errors, mismatches, duplicates, and missing mappings).</li>
+        </ul>
+        <p><strong>You must use Review_Workbench</strong> to decide which review rows are copied into the final table.</p>
     </div>
 
     <h2>Excel review order</h2>
     <div class="section">
-        <p><strong>1. Review_Workbench</strong> (sortable/filterable) &rarr; main decision sheet. Only <em>Decision</em> is editable. Decisions: Keep As-Is, Use Suggestion, Allow One-to-Many, Ignore. <strong>2. Final_Translation_Table</strong> &rarr; publish-ready. <em>Not sortable</em> &mdash; when finished, copy-paste values into a new sheet to sort/filter. <strong>3. Translation_Key_Updates</strong> &rarr; changed keys only. <strong>4. QA_Checks_Validate</strong> &rarr; pass before publish.</p>
+        <p><strong>1. Review_Workbench</strong> (main decision sheet; sortable/filterable). Edit only <em>Decision</em>.</p>
+        <ul>
+            <li><strong>Keep As-Is:</strong> copy current keys to final.</li>
+            <li><strong>Use Suggestion:</strong> copy with Suggested Key.</li>
+            <li><strong>Allow One-to-Many:</strong> copy as approved exception.</li>
+            <li><strong>Ignore:</strong> do not copy to final.</li>
+        </ul>
+        <p><strong>2. Final_Translation_Table:</strong> auto-matched rows + approved review rows (not sortable directly).</p>
+        <p><strong>3. Translation_Key_Updates:</strong> changed keys only.</p>
+        <p><strong>4. QA_Checks_Validate:</strong> all blocking checks must pass before publish.</p>
+        <p><strong>Final step before updating Outcomes Translation Table:</strong></p>
+        <ol>
+            <li>Copy Final_Translation_Table.</li>
+            <li>Paste as <strong>values only</strong> into a new sheet.</li>
+            <li>Sort and double-check the pasted values.</li>
+            <li>Only then update the Outcomes Translation Table.</li>
+        </ol>
     </div>
-
     <h2>Create workflow</h2>
     <div class="section">
         <p><strong>1. Upload</strong> Outcomes and myWSU. <strong>2. Match method</strong>: key or name (key optional in name mode). <strong>3. Select columns</strong> &rarr; include columns, optional roles. <strong>4. Generate Translation Table</strong> &rarr; download Excel. See Review_Instructions_Create in workbook.</p>

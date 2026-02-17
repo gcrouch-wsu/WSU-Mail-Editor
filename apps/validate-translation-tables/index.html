@@ -31,7 +31,7 @@
     <header class="bg-wsu-crimson text-white shadow-lg">
         <div class="container mx-auto px-4 py-6">
             <h1 class="text-3xl font-bold">Validate Translation Tables</h1>
-            <p class="text-gray-200 mt-2">Outcomes ↔ myWSU Translation Verification</p>
+            <p class="text-gray-200 mt-2">Outcomes <-> myWSU Translation Verification</p>
                     </div>
     </header>
 
@@ -64,7 +64,7 @@
                     <h3 class="text-sm font-medium text-blue-800">How to use this tool</h3>
                     <p class="mt-1">
                         <a href="user-guide.html" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 underline font-medium">User Guide (one page)</a>
-                        <span class="text-blue-600"> — Open in new tab; use Print → Save as PDF for a PDF copy.</span>
+                        <span class="text-blue-600"> - Open in new tab; use Print -> Save as PDF for a PDF copy.</span>
                     </p>
                     <div class="mt-2 text-sm text-blue-700">
                         <div id="instructions-validate">
@@ -73,15 +73,16 @@
                             <p>3. <strong>Name comparison</strong> (if used): Pick Outcomes and myWSU name columns; set threshold (default 0.8) and ambiguity gap (0.03)</p>
                             <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; mark key columns for Outcomes and myWSU; optionally map roles (School, City, State, Country). Include City/State for high-confidence matching</p>
                             <p>5. Optional: Include name-match suggestions; Show mapping logic</p>
-                            <p>6. Click <strong>Validate Mappings</strong> → review cards → <strong>Download Full Report</strong></p>
-                            <p>7. Excel requires 365 or 2021+. Review_Workbench is sortable/filterable. Final_Translation_Table is not sortable—copy-paste values into a new sheet when finished</p>
+                            <p>6. Click <strong>Validate Mappings</strong> -> review cards -> <strong>Download Full Report</strong></p>
+                            <p>7. The Final_Translation_Table has <strong>auto-matched row pairs</strong> (Valid + High_Confidence_Match). You must use <strong>Review_Workbench</strong> to set decisions for rows needing review. Edit only the <strong>Decision</strong> column: Keep As-Is, Use Suggestion, Allow One-to-Many, or Ignore. Your decisions control which rows are copied to the Final_Translation_Table. If you use Use Suggestion, Suggested Key must exist and Update Side must be Input/Output/Both.</p>
+                            <p>8. Excel requires 365 or 2021+. Before updating the Outcomes Translation Table: copy Final_Translation_Table → paste as <strong>values only</strong> into a new sheet → sort and double-check → only then update. Publish only after QA_Checks_Validate blocking checks pass.</p>
                         </div>
                         <div id="instructions-create" class="hidden">
                             <p>1. Upload Outcomes source and myWSU</p>
                             <p>2. <strong>Match method:</strong> Key columns or Name columns (key optional in name mode)</p>
                             <p>3. <strong>Name comparison</strong> (if used): Pick name columns; set threshold and ambiguity gap</p>
                             <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; optionally map roles. Key columns required only for key matching</p>
-                            <p>5. Click <strong>Generate Translation Table</strong> → download Excel</p>
+                            <p>5. Click <strong>Generate Translation Table</strong> -> download Excel</p>
                             <p>6. See Review_Instructions_Create sheet in the workbook</p>
                         </div>
                         <p class="mt-2 font-semibold">Privacy: All files are processed locally in your browser. No data is uploaded to any server.</p>
@@ -600,7 +601,7 @@
                 </div>
                 <div id="matching-rules-panel" class="hidden">
                     <div class="text-sm text-gray-700 space-y-2">
-                        <p><strong>Abbreviations/aliases:</strong> Common short forms are expanded (e.g., U → University, CC → Community College, Cal State → California State).</p>
+                        <p><strong>Abbreviations/aliases:</strong> Common short forms are expanded (e.g., U -> University, CC -> Community College, Cal State -> California State).</p>
                         <p><strong>Location evidence:</strong> City/state/country fields, city-in-name, and parenthetical or hyphen suffix location tokens are used to confirm matches.</p>
                         <p><strong>High-confidence override:</strong> If location rules confirm a match, it can be accepted even when similarity is below threshold.</p>
                     </div>

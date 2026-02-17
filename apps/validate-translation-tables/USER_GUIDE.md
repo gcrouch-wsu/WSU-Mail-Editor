@@ -52,12 +52,21 @@ Use this when you already have a translation table and want to correct it.
 
 **Note:** The Validate Excel file requires **Excel 365 or 2021+** to display the Final_Translation_Table correctly. Excel 2016/2019 may show errors for the compact table.
 
+### What the Excel file contains
+
+The downloaded Excel file includes:
+
+- **Auto-matched rows** - rows classified as `Valid` or `High_Confidence_Match` are already approved and appear in `Final_Translation_Table` automatically.
+- **Rows needing your decision** - errors, mismatches, duplicates, and missing mappings appear in `Review_Workbench`. You must choose a Decision for each of these before the final table is complete.
+
+**You must use Review_Workbench** to resolve all rows that need a decision. The Final_Translation_Table is built from your decisions plus the auto-matched rows.
+
 ### Validate Excel review order (left to right)
 
 Recommended order:
 
 1. `Review_Workbench` - main decision sheet (use this first). Sortable and filterable.
-2. `Final_Translation_Table` - final publish-ready key table.
+2. `Final_Translation_Table` - final publish-ready key table (auto-matched + your approved decisions).
 3. `Translation_Key_Updates` - only changed key pairs.
 4. `QA_Checks_Validate` - publish gate checks.
 
@@ -76,39 +85,63 @@ Hidden by default (diagnostic/internal):
 
 ### How `Review_Workbench` works
 
-Each row shows reviewer context and decision outputs:
+**Your decisions here control which rows appear in the Final_Translation_Table.** Each row needing review shows:
 
 - Outcomes and myWSU name/key context
 - Source location columns when selected: Outcomes State, Outcomes Country; myWSU City, myWSU State, myWSU Country (blanks in source appear as blank)
 - Current translate keys and suggested key/school/city/state/country (verify suggested location before applying Use Suggestion)
-- `Decision` (editable dropdown)
-- Formula outputs: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Decision_Warning`
+- `Decision` (editable dropdown) - **this determines whether the row is copied to the Final_Translation_Table**
+- Formula outputs: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Decision_Warning` (these show whether the row is ready to publish)
 
-Only `Decision` is editable. Formula/system columns are locked.
+Only `Decision` should be edited. The sheet is intentionally unprotected so sort/filter works reliably, so avoid editing formula/system columns.
 The sheet freezes the header row only, so horizontal scrolling should remain usable.
-**Review_Workbench is sortable and filterable**—use the header dropdowns to sort or filter rows as you work.
+**Review_Workbench is sortable and filterable** - use the header dropdowns to sort or filter rows as you work.
 
-### Validate decision meanings
+### Validate decision options (Review_Workbench)
 
-- `Keep As-Is`: keep current keys as final. No changes.
-- `Use Suggestion`: apply `Suggested_Key` on the side shown by Update Side. Verify Suggested Key, School, City, State, Country before applying.
-- `Allow One-to-Many`: approve as an intentional one-to-many exception.
-- `Ignore`: exclude from publish. Keep unresolved for later review.
+Each decision determines whether the row is included in the Final_Translation_Table:
+
+| Decision | Effect |
+|----------|--------|
+| **Keep As-Is** | Row is copied to Final_Translation_Table with current keys. No changes. |
+| **Use Suggestion** | Row is copied to Final_Translation_Table with `Suggested_Key` applied on the side shown by Update Side. Verify Suggested Key, School, City, State, Country before applying. |
+| **Allow One-to-Many** | Row is copied to Final_Translation_Table as an intentional one-to-many exception. |
+| **Ignore** | Row is **not** copied to Final_Translation_Table. Kept unresolved for later review. |
+
+### How to edit rows to get a clean final table
+
+1. Go to `Review_Workbench`.
+2. Work top to bottom, or filter to rows where `Decision` is blank.
+3. For each row, choose one Decision from the table above.
+4. If you choose `Use Suggestion`, confirm:
+   - `Suggested_Key` is filled.
+   - `Update Side` is `Input`, `Output`, or `Both` (not `None`).
+5. Check the same row:
+   - `Decision_Warning` should be blank.
+   - `Final_Input` and `Final_Output` should be filled for rows you want to publish.
+6. Verify outputs:
+   - `Final_Translation_Table` shows approved rows.
+   - `Translation_Key_Updates` shows only changed keys.
+   - `QA_Checks_Validate` has no blocking checks.
 
 ### What happens automatically
 
-- `Valid` and `High_Confidence_Match` rows are auto-approved.
-- You do not need to approve those one by one.
-- **Default decisions** are pre-populated when the best choice is obvious (e.g. Name_Mismatch with good score → Keep As-Is; Output_Not_Found with no replacement → Ignore). You can still change any decision.
-- `Final_Translation_Table` shows approved rows only, in a compact sequential list (no empty slots).
-- Flow: `Review_Workbench` → `Final_Staging` (hidden) → `Final_Translation_Table` via FILTER formula.
-- Columns: Review Row ID, all your selected Outcomes columns, Translate Input, Translate Output, all your selected myWSU columns. The Decision column is hidden but still used for QA.
-- **`Final_Translation_Table` is not sortable** (it is formula-driven). When you are finished reviewing, **copy and paste values into a new sheet** if you need to sort or filter the final translation table.
+- `Valid` and `High_Confidence_Match` rows are **auto-matched** and appear in `Final_Translation_Table` without any decision from you.
+- For rows that need review, **default decisions** are pre-populated when the best choice is obvious (for example, Name_Mismatch with good score -> Keep As-Is; Output_Not_Found with no replacement -> Ignore). You can still change any decision.
+- `Final_Translation_Table` = auto-matched rows + rows where your Review_Workbench decision is Keep As-Is, Use Suggestion, or Allow One-to-Many (not Ignore).
+- Columns: Review Row ID, your selected Outcomes columns, Translate Input, Translate Output, your selected myWSU columns.
 - `Translation_Key_Updates` shows only rows where final keys differ from current keys.
 
-### Workflow when finished
+### Final step before updating Outcomes Translation Table
 
-When you are done reviewing and the QA gate passes, **copy and paste the Final_Translation_Table values into a new sheet** if you need to sort or filter the final data. The Final_Translation_Table is formula-driven and cannot be sorted directly.
+When you are done reviewing and the QA gate passes:
+
+1. **Copy the Final_Translation_Table** - select all data rows and copy.
+2. **Paste as values only** into a new sheet (Paste Special -> Values). The Final_Translation_Table is formula-driven and cannot be sorted directly.
+3. **Sort and double-check** the pasted values in the new sheet.
+4. **Only then** update the Outcomes Translation Table with the verified data.
+
+Do not update the Outcomes Translation Table until you have completed these steps.
 
 ### Publish rule of thumb
 

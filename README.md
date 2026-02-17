@@ -28,6 +28,84 @@ https://validate-outcomes-translation-table.vercel.app/
 Process WordPress WXR exports and generate HTML blocks for factsheets.  
 https://wsu-factsheet-editor-q.vercel.app/
 
+## Validate App (Technical Overview)
+
+Path: `apps/validate-translation-tables`
+
+This app validates translation mappings between Outcomes and myWSU and produces a reviewer-friendly Excel workbook.
+It supports two workflows:
+
+1. `Validate` - audit and repair an existing translation table.
+2. `Create` - generate a new translation table from Outcomes + myWSU.
+
+### Runtime architecture
+
+- Static app (`index.html`, `app.js`, `styles.css`) with no framework build step.
+- Processing is offloaded to Web Workers:
+  - `worker.js` handles merge + validation
+  - `export-worker.js` builds Excel exports
+- Core algorithms live in `validation.js`.
+- Shared export constants/rules live in `validation-export-helpers.js`.
+
+### Validate inputs
+
+- Outcomes source file
+- Translation table file (`translate_input` -> `translate_output`)
+- myWSU source file
+- User-selected key columns and optional role mappings (`School`, `City`, `State`, `Country`)
+
+### Name matching (technical)
+
+The validator uses a multi-signal matcher, not exact string equality:
+
+- text normalization and alias expansion (`univ -> university`, `cal -> california`, `cc -> community college`, etc.)
+- token similarity using Jaro-Winkler
+- IDF-weighted token overlap (rare terms contribute more than common terms)
+- blended final score from character similarity + token similarity
+- rare-token mismatch penalties and truncation-aware boosts
+- location/context evidence (city/state/country) for confidence gating
+- ambiguity detection based on threshold + ambiguity gap
+
+### Validate Excel output model
+
+Primary reviewer tabs:
+
+1. `Review_Workbench`
+2. `Final_Translation_Table`
+3. `Translation_Key_Updates`
+4. `QA_Checks_Validate`
+
+Technical notes:
+
+- `Review_Workbench` is intentionally unprotected so sort/filter works in Excel.
+- `Final_Translation_Table` is built from hidden staging sheets via Excel `FILTER` (compact approved rows).
+- Final table is formula-driven; copy/paste values to a new sheet if sorting is needed.
+- Hidden diagnostic/staging tabs are included for traceability and QA.
+
+### Validate decision model
+
+- `Keep As-Is`
+- `Use Suggestion`
+- `Allow One-to-Many`
+- `Ignore`
+
+`Use Suggestion` applies `Suggested_Key` according to `Update Side` (`Input`, `Output`, or `Both`).
+
+### QA publish gate
+
+`QA_Checks_Validate` enforces blocking checks for unresolved actions, invalid suggestion states, blank finals on publishable rows, formula-cap overflow, and duplicate final keys (excluding approved one-to-many exceptions).
+
+### Key files
+
+- `apps/validate-translation-tables/app.js`
+- `apps/validate-translation-tables/worker.js`
+- `apps/validate-translation-tables/validation.js`
+- `apps/validate-translation-tables/export-worker.js`
+- `apps/validate-translation-tables/validation-export-helpers.js`
+- `apps/validate-translation-tables/export-test.js`
+- `apps/validate-translation-tables/checks.js`
+- `apps/validate-translation-tables/USER_GUIDE.md`
+
 ## Requirements
 
 - Node.js 18+ (20+ recommended)
@@ -100,6 +178,7 @@ Other:
 - `npm run lint`
 - `npm run format`
 - `npm run checkfmt`
+- `npm run check:validate-translation` - validate app regression checks (`checks.js` + `export-test.js`)
 
 ## Deployment (Vercel)
 
