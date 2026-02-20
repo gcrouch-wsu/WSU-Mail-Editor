@@ -33,10 +33,11 @@ https://wsu-factsheet-editor-q.vercel.app/
 Path: `apps/validate-translation-tables`
 
 This app validates translation mappings between Outcomes and myWSU and produces a reviewer-friendly Excel workbook.
-It supports two workflows:
+It supports three workflows:
 
 1. `Validate` - audit and repair an existing translation table.
 2. `Create` - generate a new translation table from Outcomes + myWSU.
+3. `Join Preview` - join a translation table with Outcomes and myWSU source data for visual verification before publish.
 
 ### Runtime architecture
 

@@ -78,7 +78,8 @@
             ['One-to-many rows lacking decision', 0, 'PASS', 'One-to-many rows without decision (advisory)'],
             ['Duplicate final input keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
             ['Duplicate final output keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
-            ['Publish gate', 'PASS', '', 'Final publish gate status (B8/B9 are advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
+            ['Duplicate (input, output) pairs in Final_Translation_Table', 0, 'PASS', 'Duplicate (input,output) pairs; set one to Ignore before publish'],
+            ['Publish gate', 'PASS', '', 'Final publish gate (B8/B9 advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
         ];
     }
 

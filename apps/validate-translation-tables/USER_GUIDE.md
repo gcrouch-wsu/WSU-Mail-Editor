@@ -4,16 +4,17 @@ This guide explains how to use the app without technical jargon.
 
 ## What this tool does
 
-The app supports 2 workflows:
+The app supports 3 workflows:
 
 1. `Validate` - check an existing translation table and fix errors.
 2. `Create` - build a new translation table from Outcomes and myWSU.
+3. `Join Preview` - join your translation table with Outcomes and myWSU source data for visual verification before publish.
 
 A translation table maps one Outcomes key (`translate_input`) to one myWSU key (`translate_output`).
 
 ## Basic terms
 
-- `Workflow`: either Validate or Create.
+- `Workflow`: Validate, Create, or Join Preview.
 - `Sheet`: a tab in the Excel file.
 - `Key`: unique ID column used for mapping.
 - `Name matching`: uses school names (and location context) when key matching is not enough.
@@ -202,6 +203,32 @@ See the `Review_Instructions_Create` sheet in the workbook for detailed guidance
 - `No Match`: unresolved.
 
 `Final_myWSU_Key` and `Final_myWSU_Name` are formula-driven from your decision.
+
+## Workflow 3: Join Preview
+
+Use this when you have updated a translation table (via Validate or manually) and want a final visual check before publishing to Outcomes. Join Preview produces a single flat table showing Outcomes data, translate keys, and myWSU data side by side—no validation logic, no decisions.
+
+### Files required
+
+- Outcomes source file
+- Translation table file
+- myWSU source file
+
+### Steps in the app
+
+1. Select `Join Preview`.
+2. Upload all 3 files.
+3. In `Select Columns, Keys, and Roles`:
+   - Pick key columns for Outcomes, Translation input/output, and myWSU.
+   - Pick which Outcomes and myWSU columns to include (e.g., name, state, country).
+4. Click `Generate Join Preview`.
+5. Download the Excel file.
+
+### What the Join Preview Excel contains
+
+- **Join_Preview** sheet: one row per translate row, with Outcomes columns | translate_input, translate_output | myWSU columns.
+- Key-only matching. If a key has no match, that side's columns are blank.
+- Scan the table to confirm Outcomes and myWSU data align correctly before you update the Outcomes Translation Table.
 
 ## Practical review tips
 

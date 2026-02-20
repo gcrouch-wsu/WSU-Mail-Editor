@@ -112,6 +112,7 @@ function applyPrimaryActionDisabledState(button, disabled) {
 function setPrimaryActionsBusy(isBusy) {
     applyPrimaryActionDisabledState(document.getElementById('validate-btn'), isBusy);
     applyPrimaryActionDisabledState(document.getElementById('generate-btn'), isBusy);
+    applyPrimaryActionDisabledState(document.getElementById('join-preview-btn'), isBusy);
 }
 
 function setRunLock(isLocked) {
@@ -125,6 +126,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupColumnSelection();
     setupValidateButton();
     setupGenerateButton();
+    setupJoinPreviewButton();
     setupMatchMethodControls();
     setupValidateNameModeControls();
     setupDebugToggle();
@@ -244,16 +246,21 @@ function downloadArrayBuffer(buffer, filename) {
 function setupModeSelector() {
     const validateRadio = document.getElementById('mode-validate');
     const createRadio = document.getElementById('mode-create');
+    const joinPreviewRadio = document.getElementById('mode-join-preview');
     if (!validateRadio || !createRadio) return;
 
     const handleModeChange = () => {
-        currentMode = validateRadio.checked ? 'validate' : 'create';
+        if (validateRadio.checked) currentMode = 'validate';
+        else if (createRadio.checked) currentMode = 'create';
+        else if (joinPreviewRadio && joinPreviewRadio.checked) currentMode = 'join-preview';
+        else currentMode = 'validate';
         updateModeUI();
         processAvailableFiles();
     };
 
     validateRadio.addEventListener('change', handleModeChange);
     createRadio.addEventListener('change', handleModeChange);
+    if (joinPreviewRadio) joinPreviewRadio.addEventListener('change', handleModeChange);
 }
 
 function updateModeUI() {
@@ -261,12 +268,15 @@ function updateModeUI() {
     const outcomesCard = document.getElementById('outcomes-upload-card');
     const validateAction = document.getElementById('validate-action');
     const generateAction = document.getElementById('generate-action');
+    const joinPreviewAction = document.getElementById('join-preview-action');
     const instructionsValidate = document.getElementById('instructions-validate');
     const instructionsCreate = document.getElementById('instructions-create');
+    const instructionsJoinPreview = document.getElementById('instructions-join-preview');
     const columnSelection = document.getElementById('column-selection');
     const nameCompare = document.getElementById('name-compare');
     const matchMethodSection = document.getElementById('match-method');
     const validateNameModeSection = document.getElementById('validate-name-mode');
+    const validationOptions = document.getElementById('validation-options');
     const toggleColumns = document.getElementById('toggle-columns');
     const columnCheckboxes = document.getElementById('column-checkboxes');
     const translateInputGroup = document.getElementById('translate-input-group');
@@ -280,14 +290,25 @@ function updateModeUI() {
         outcomesCard.classList.remove('hidden');
     }
     if (validateAction) {
-        validateAction.classList.toggle('hidden', currentMode === 'create');
+        validateAction.classList.toggle('hidden', currentMode !== 'validate');
     }
     if (generateAction) {
-        generateAction.classList.toggle('hidden', currentMode === 'validate');
+        generateAction.classList.toggle('hidden', currentMode !== 'create');
     }
-    if (instructionsValidate && instructionsCreate) {
-        instructionsValidate.classList.toggle('hidden', currentMode === 'create');
-        instructionsCreate.classList.toggle('hidden', currentMode === 'validate');
+    if (joinPreviewAction) {
+        joinPreviewAction.classList.toggle('hidden', currentMode !== 'join-preview');
+    }
+    if (instructionsValidate && instructionsCreate && instructionsJoinPreview) {
+        instructionsValidate.classList.toggle('hidden', currentMode !== 'validate');
+        instructionsCreate.classList.toggle('hidden', currentMode !== 'create');
+        instructionsJoinPreview.classList.toggle('hidden', currentMode !== 'join-preview');
+    }
+    if (validationOptions) {
+        validationOptions.classList.toggle('hidden', currentMode === 'join-preview');
+    }
+    const columnCheckboxesEl = document.getElementById('column-checkboxes');
+    if (columnCheckboxesEl) {
+        columnCheckboxesEl.classList.toggle('join-preview-mode', currentMode === 'join-preview');
     }
     if (columnSelection) {
         if (currentMode === 'create') {
@@ -295,7 +316,7 @@ function updateModeUI() {
         }
     }
     if (nameCompare) {
-        nameCompare.classList.remove('hidden');
+        nameCompare.classList.toggle('hidden', currentMode === 'join-preview');
     }
     if (matchMethodSection) {
         matchMethodSection.classList.toggle('hidden', currentMode !== 'create');
@@ -311,8 +332,8 @@ function updateModeUI() {
     }
     if (toggleColumns) toggleColumns.classList.remove('hidden');
     if (columnCheckboxes) columnCheckboxes.classList.remove('hidden');
-    if (keyMatchFields && currentMode !== 'create') {
-        keyMatchFields.classList.remove('hidden');
+    if (keyMatchFields) {
+        keyMatchFields.classList.toggle('hidden', currentMode === 'create');
     }
     updateMatchMethodUI();
     updateValidateNameModeUI();
@@ -545,6 +566,24 @@ function processAvailableFiles() {
                 : 'Switch to Create mode to generate a translation table.';
         }
 
+        const joinPreviewBtn = document.getElementById('join-preview-btn');
+        const joinPreviewMessage = document.getElementById('join-preview-message');
+        if (joinPreviewBtn && joinPreviewMessage) {
+            if (currentMode === 'join-preview' && outcomesReady && translateReady && wsuReady) {
+                joinPreviewBtn.disabled = false;
+                joinPreviewBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                joinPreviewBtn.classList.add('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+                joinPreviewMessage.textContent = 'Ready to generate join preview.';
+            } else {
+                joinPreviewBtn.disabled = true;
+                joinPreviewBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+                joinPreviewBtn.classList.remove('bg-wsu-crimson', 'hover:bg-red-800', 'cursor-pointer');
+                joinPreviewMessage.textContent = currentMode === 'join-preview'
+                    ? 'Upload Outcomes, Translation table, and myWSU to generate join preview.'
+                    : 'Switch to Join Preview mode.';
+            }
+        }
+
         if (pageBusy || runLocked) {
             setPrimaryActionsBusy(true);
             if (validateMessage && currentMode === 'validate') {
@@ -552,6 +591,9 @@ function processAvailableFiles() {
             }
             if (generateMessage && currentMode === 'create') {
                 generateMessage.textContent = 'Generation is running. Please wait...';
+            }
+            if (joinPreviewMessage && currentMode === 'join-preview') {
+                joinPreviewMessage.textContent = 'Join preview is running. Please wait...';
             }
         }
 
@@ -672,7 +714,7 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
             const roleSelect = document.createElement('select');
             roleSelect.name = 'outcomes-role';
             roleSelect.dataset.col = col;
-            roleSelect.className = 'w-full border border-gray-300 rounded-md p-1 text-xs';
+            roleSelect.className = 'w-full border border-gray-300 rounded-md p-1 text-xs role-col';
             roleOptions.forEach(optionData => {
                 const option = document.createElement('option');
                 option.value = optionData.value;
@@ -736,7 +778,7 @@ function populateColumnSelection(outcomesColumns, wsuOrgColumns) {
             const roleSelect = document.createElement('select');
             roleSelect.name = 'wsu-role';
             roleSelect.dataset.col = col;
-            roleSelect.className = 'w-full border border-gray-300 rounded-md p-1 text-xs';
+            roleSelect.className = 'w-full border border-gray-300 rounded-md p-1 text-xs role-col';
             roleOptions.forEach(optionData => {
                 const option = document.createElement('option');
                 option.value = optionData.value;
@@ -1116,6 +1158,58 @@ function setupGenerateButton() {
     const generateBtn = document.getElementById('generate-btn');
     if (!generateBtn) return;
     generateBtn.addEventListener('click', runGeneration);
+}
+
+function setupJoinPreviewButton() {
+    const joinPreviewBtn = document.getElementById('join-preview-btn');
+    if (!joinPreviewBtn) return;
+    joinPreviewBtn.addEventListener('click', runJoinPreview);
+}
+
+async function runJoinPreview() {
+    if (runLocked) return;
+    if (currentMode !== 'join-preview') {
+        alert('Switch to Join Preview mode to run.');
+        return;
+    }
+    updateKeyConfig();
+    if (!keyConfig.outcomes || !keyConfig.translateInput || !keyConfig.translateOutput || !keyConfig.wsu) {
+        alert('Select Outcomes key, Translation input/output columns, and myWSU key before generating.');
+        return;
+    }
+    setRunLock(true);
+    try {
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('results').classList.add('hidden');
+        document.getElementById('loading-message').textContent = 'Building join preview...';
+        const progressWrap = document.getElementById('loading-progress');
+        if (progressWrap) progressWrap.classList.add('hidden');
+
+        const result = await runExportWorkerTask(
+            'build_join_preview_export',
+            {
+                selectedCols: {
+                    outcomes: selectedColumns.outcomes || [],
+                    wsu_org: selectedColumns.wsu_org || []
+                },
+                options: { fileName: '' },
+                context: {
+                    loadedData,
+                    columnRoles,
+                    keyConfig,
+                    keyLabels
+                }
+            }
+        );
+        downloadArrayBuffer(result.buffer, result.filename || 'WSU_Join_Preview.xlsx');
+        document.getElementById('loading').classList.add('hidden');
+    } catch (error) {
+        console.error('Join preview error:', error);
+        alert('Join preview failed: ' + (error?.message || String(error)));
+        document.getElementById('loading').classList.add('hidden');
+    } finally {
+        setRunLock(false);
+    }
 }
 
 function setupMatchMethodControls() {

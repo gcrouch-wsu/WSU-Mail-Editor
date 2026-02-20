@@ -1496,10 +1496,15 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     missingOutputReplacementCache.set(cacheKey, replacement);
                 }
 
-                result.Error_Subtype = replacement.subtype || OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT;
+                const suggestedKeyNorm = replacement.bestCandidate
+                    ? normalizeKeyValue(replacement.bestCandidate.key || '')
+                    : '';
+                const sameAsCurrent = suggestedKeyNorm && row.translate_output_norm && suggestedKeyNorm === row.translate_output_norm;
+                result.Error_Subtype = (sameAsCurrent ? OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT : replacement.subtype) || OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT;
                 if (
                     replacement.subtype === OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY &&
-                    replacement.bestCandidate
+                    replacement.bestCandidate &&
+                    !sameAsCurrent
                 ) {
                     result.Suggested_Key = replacement.bestCandidate.key || '';
                     result.Suggested_School = replacement.bestCandidate.name || '';
@@ -1516,7 +1521,7 @@ function validateMappings(merged, translate, outcomes, wsuOrg, keyConfig, nameCo
                     const locationSuffix = locationParts ? ` (${locationParts})` : '';
                     result.Error_Description = `Translation output does not exist in myWSU data. Likely stale key; suggested replacement ${result.Suggested_Key}: "${result.Suggested_School}"${locationSuffix} (score: ${scorePct}%).`;
                 } else if (replacement.subtype === OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT) {
-                    if (replacement.bestCandidate) {
+                    if (replacement.bestCandidate && !sameAsCurrent) {
                         result.Suggested_Key = replacement.bestCandidate.key || '';
                         result.Suggested_School = replacement.bestCandidate.name || '';
                         result.Suggested_City = replacement.bestCandidate.city || '';

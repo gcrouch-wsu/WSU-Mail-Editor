@@ -39,7 +39,7 @@
 
         <div class="bg-white rounded-lg shadow-md p-6 mb-8">
             <h2 class="text-lg font-semibold text-gray-800 mb-4">Choose a workflow</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <label class="border-2 rounded-lg p-4 cursor-pointer hover:border-wsu-crimson transition-colors">
                     <input id="mode-validate" type="radio" name="workflow-mode" value="validate" class="mr-2" checked>
                     <span class="font-semibold text-gray-800">Validate translation table</span>
@@ -49,6 +49,11 @@
                     <input id="mode-create" type="radio" name="workflow-mode" value="create" class="mr-2">
                     <span class="font-semibold text-gray-800">Create translation table</span>
                     <p class="text-sm text-gray-600 mt-1">Generate a clean table from Outcomes + myWSU.</p>
+                </label>
+                <label class="border-2 rounded-lg p-4 cursor-pointer hover:border-wsu-crimson transition-colors">
+                    <input id="mode-join-preview" type="radio" name="workflow-mode" value="join-preview" class="mr-2">
+                    <span class="font-semibold text-gray-800">Join Preview</span>
+                    <p class="text-sm text-gray-600 mt-1">Join translation table with Outcomes + myWSU for visual verification.</p>
                 </label>
             </div>
         </div>
@@ -84,6 +89,13 @@
                             <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; optionally map roles. Key columns required only for key matching</p>
                             <p>5. Click <strong>Generate Translation Table</strong> -> download Excel</p>
                             <p>6. See Review_Instructions_Create sheet in the workbook</p>
+                        </div>
+                        <div id="instructions-join-preview" class="hidden">
+                            <p>1. Upload Outcomes source, Translation table, and myWSU</p>
+                            <p>2. <strong>Key selection:</strong> Pick Outcomes key, Translation input/output columns, and myWSU key</p>
+                            <p>3. <strong>Select Columns:</strong> Pick which Outcomes and myWSU columns to include (e.g., name, state, country)</p>
+                            <p>4. Click <strong>Generate Join Preview</strong> -> download Excel</p>
+                            <p>5. Review the joined table to verify Outcomes and myWSU data align correctly before publish</p>
                         </div>
                         <p class="mt-2 font-semibold">Privacy: All files are processed locally in your browser. No data is uploaded to any server.</p>
                     </div>
@@ -346,7 +358,7 @@
             </button>
 
             <div id="column-checkboxes" class="mt-4">
-                <div class="mb-4">
+                <div id="validation-options" class="mb-4">
                     <label class="flex items-center text-sm text-gray-700">
                         <input id="include-suggestions" type="checkbox" class="mr-2" checked>
                         Include name-match suggestions in validation error sheets (optional)
@@ -371,7 +383,7 @@
                             <span>Column</span>
                             <span>Include</span>
                             <span>Key</span>
-                            <span>Role</span>
+                            <span class="role-col">Role</span>
                         </div>
                         <div id="outcomes-columns" class="space-y-2">
                             
@@ -384,7 +396,7 @@
                             <span>Column</span>
                             <span>Include</span>
                             <span>Key</span>
-                            <span>Role</span>
+                            <span class="role-col">Role</span>
                         </div>
                         <div id="wsu-org-columns" class="space-y-2">
                             
@@ -401,7 +413,7 @@
             <p id="validation-message" class="mt-2 text-sm text-gray-600"></p>
         </div>
 
-        <div id="generate-action" class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <div id="generate-action" class="bg-white rounded-lg shadow-md p-6 mb-8 hidden">
             <h2 class="text-lg font-semibold text-gray-800 mb-2">Generate Translation Table</h2>
             <p class="text-sm text-gray-600 mb-4">
                 Use Outcomes + myWSU only. Select the key columns in the column list below, then generate a clean Input/Output table and
@@ -412,6 +424,19 @@
                     Generate Translation Table
                 </button>
                 <p id="generate-message" class="mt-2 text-sm text-gray-600"></p>
+            </div>
+        </div>
+
+        <div id="join-preview-action" class="bg-white rounded-lg shadow-md p-6 mb-8 hidden">
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Join Preview</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Join your translation table with Outcomes and myWSU source data. Key-only matching. One row per translate row.
+            </p>
+            <div class="text-center">
+                <button id="join-preview-btn" disabled class="bg-gray-400 text-white px-8 py-3 rounded-lg text-lg font-semibold shadow-lg cursor-not-allowed transition-all inline-flex items-center">
+                    Generate Join Preview
+                </button>
+                <p id="join-preview-message" class="mt-2 text-sm text-gray-600"></p>
             </div>
         </div>
 

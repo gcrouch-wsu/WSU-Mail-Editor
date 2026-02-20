@@ -1,6 +1,14 @@
 /* WSU Data Mapping Validator - Custom Styles */
 /* Most styling is handled by Tailwind CSS */
 
+/* Join Preview: hide role mapping (per BUILD_JOIN_PREVIEW.md) */
+#column-checkboxes.join-preview-mode .role-col {
+    display: none;
+}
+#column-checkboxes.join-preview-mode .grid.grid-cols-4 {
+    grid-template-columns: 1fr auto auto;
+}
+
 /* Smooth transitions for all interactive elements */
 * {
     transition: all 0.3s ease;

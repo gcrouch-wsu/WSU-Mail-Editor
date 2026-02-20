@@ -226,7 +226,7 @@ runCheck('filterOutputNotFoundBySubtype uses raw subtype', () => {
 
 runCheck('getQAValidateRowsForEmptyQueue returns valid structure', () => {
     const rows = helpers.getQAValidateRowsForEmptyQueue();
-    assert.equal(rows.length, 12, 'Header + 11 check rows matching non-empty QA layout');
+    assert.equal(rows.length, 13, 'Header + 12 check rows matching non-empty QA layout');
     assert.equal(rows[0][0], 'Check');
     assert.equal(rows[1][1], 0);
     assert.equal(rows[1][2], 'PASS');
@@ -234,9 +234,10 @@ runCheck('getQAValidateRowsForEmptyQueue returns valid structure', () => {
     assert.equal(rows[2][2], 'PASS', 'Approved review rows status should be PASS when empty');
     assert.equal(rows[6][0], 'Use Suggestion with invalid Update Side');
     assert.equal(rows[7][0], 'Stale-key rows lacking decision');
-    assert.equal(rows[11][0], 'Publish gate');
-    assert.equal(rows[11][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
-    assert.equal(rows[11][2], '', 'Empty-queue publish gate Status column C empty to match non-empty');
+    assert.equal(rows[11][0], 'Duplicate (input, output) pairs in Final_Translation_Table');
+    assert.equal(rows[12][0], 'Publish gate');
+    assert.equal(rows[12][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
+    assert.equal(rows[12][2], '', 'Empty-queue publish gate Status column C empty to match non-empty');
 });
 
 runCheck('export-worker: Input_Not_Found uses reverse name suggestion from myWSU', () => {

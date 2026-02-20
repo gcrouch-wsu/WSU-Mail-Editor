@@ -543,7 +543,7 @@ async function run() {
 
         const qaSheet = workbook.getWorksheet('QA_Checks_Validate');
         assert.ok(qaSheet, 'Expected QA_Checks_Validate worksheet');
-        const publishGateDetail = qaSheet.getRow(12).getCell(4).value;
+        const publishGateDetail = qaSheet.getRow(13).getCell(4).value;
         assert.ok(
             String(publishGateDetail || '').includes('Diagnostic tabs are hidden'),
             'QA publish gate detail should mention hidden diagnostic tabs'

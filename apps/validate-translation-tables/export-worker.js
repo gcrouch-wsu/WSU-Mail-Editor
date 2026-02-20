@@ -1,4 +1,4 @@
-/* global normalizeKeyValue, calculateNameSimilarity, similarityRatio, tokenizeName, getInformativeTokens */
+/* global normalizeKeyValue, calculateNameSimilarity, similarityRatio, tokenizeName, getInformativeTokens, countriesMatch, statesMatch, hasComparableStateValues */
 importScripts('validation.js');
 importScripts('validation-export-helpers.js');
 importScripts('https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js');
@@ -146,7 +146,8 @@ function addSheetWithRows(workbook, config) {
                     top: { style: 'medium', color: { argb: groupBorderColor } }
                 };
             }
-            if (outputColumns[colNumber - 1] === 'Suggestion_Score') {
+            const colKey = outputColumns[colNumber - 1];
+            if (colKey === 'Suggestion_Score' || colKey === 'Score') {
                 cell.numFmt = '0%';
             }
         });
@@ -1207,8 +1208,9 @@ async function buildValidationExport(payload) {
         return best;
     };
 
-    const getBestNameSuggestion = (outcomesName) => {
-        if (!canSuggestNames || !outcomesName) return null;
+    const MAX_CANDIDATES = 5;
+    const getBestNameCandidates = (outcomesName, sourceState, sourceCountry, topN = MAX_CANDIDATES) => {
+        if (!canSuggestNames || !outcomesName) return [];
         const candidates = [];
         suggestionBlockStats.forwardQueries += 1;
         const blockedIndices = getBlockedCandidateIndices(
@@ -1223,6 +1225,17 @@ async function buildValidationExport(payload) {
             suggestionBlockStats.forwardFallbacks += 1;
         }
         scanCandidates.forEach(candidate => {
+            if (typeof countriesMatch === 'function' && sourceCountry && candidate.country && !countriesMatch(sourceCountry, candidate.country)) {
+                return;
+            }
+            if (typeof hasComparableStateValues === 'function' && typeof countriesMatch === 'function' && typeof statesMatch === 'function' &&
+                hasComparableStateValues(sourceState, candidate.state) &&
+                sourceCountry && candidate.country &&
+                countriesMatch(sourceCountry, candidate.country) &&
+                !statesMatch(sourceState, candidate.state)
+            ) {
+                return;
+            }
             const score = typeof calculateNameSimilarity === 'function'
                 ? calculateNameSimilarity(outcomesName, candidate.name, suggestionIDFTable)
                 : similarityScore(normalizeValue(outcomesName), candidate.normName);
@@ -1238,12 +1251,16 @@ async function buildValidationExport(payload) {
                 });
             }
         });
-        if (!candidates.length) return null;
+        if (!candidates.length) return [];
         candidates.sort((a, b) => b.score - a.score);
-        return candidates[0];
+        return candidates.slice(0, topN);
     };
-    const getBestOutcomesNameSuggestion = (wsuName) => {
-        if (!canSuggestNames || !wsuName) return null;
+    const getBestNameSuggestion = (outcomesName, sourceState, sourceCountry) => {
+        const arr = getBestNameCandidates(outcomesName, sourceState, sourceCountry, 1);
+        return arr.length ? arr[0] : null;
+    };
+    const getBestOutcomesNameCandidates = (wsuName, sourceState, sourceCountry, topN = MAX_CANDIDATES) => {
+        if (!canSuggestNames || !wsuName) return [];
         const candidates = [];
         suggestionBlockStats.reverseQueries += 1;
         const blockedIndices = getBlockedCandidateIndices(
@@ -1258,6 +1275,17 @@ async function buildValidationExport(payload) {
             suggestionBlockStats.reverseFallbacks += 1;
         }
         scanCandidates.forEach(candidate => {
+            if (typeof countriesMatch === 'function' && sourceCountry && candidate.country && !countriesMatch(sourceCountry, candidate.country)) {
+                return;
+            }
+            if (typeof hasComparableStateValues === 'function' && typeof countriesMatch === 'function' && typeof statesMatch === 'function' &&
+                hasComparableStateValues(sourceState, candidate.state) &&
+                sourceCountry && candidate.country &&
+                countriesMatch(sourceCountry, candidate.country) &&
+                !statesMatch(sourceState, candidate.state)
+            ) {
+                return;
+            }
             const score = typeof calculateNameSimilarity === 'function'
                 ? calculateNameSimilarity(wsuName, candidate.name, suggestionIDFTable)
                 : similarityScore(normalizeValue(wsuName), candidate.normName);
@@ -1273,9 +1301,13 @@ async function buildValidationExport(payload) {
                 });
             }
         });
-        if (!candidates.length) return null;
+        if (!candidates.length) return [];
         candidates.sort((a, b) => b.score - a.score);
-        return candidates[0];
+        return candidates.slice(0, topN);
+    };
+    const getBestOutcomesNameSuggestion = (wsuName, sourceState, sourceCountry) => {
+        const arr = getBestOutcomesNameCandidates(wsuName, sourceState, sourceCountry, 1);
+        return arr.length ? arr[0] : null;
     };
     const applySuggestionFallbacks = (rowData, sourceRow, suggestion) => {
         const source = sourceRow || {};
@@ -1302,6 +1334,7 @@ async function buildValidationExport(payload) {
         rowData.Suggested_State = row.Suggested_State ?? '';
         rowData.Suggested_Country = row.Suggested_Country ?? '';
         rowData.Suggestion_Score = row.Suggestion_Score ?? '';
+        rowData._candidates = rowData._candidates ?? [];
 
         const hasPresetSuggestion = Boolean(
             rowData.Suggested_Key ||
@@ -1318,12 +1351,20 @@ async function buildValidationExport(payload) {
         );
 
         if (errorType === 'Input_Not_Found') {
-            const nameSuggestion = canSuggestNames
-                ? getBestOutcomesNameSuggestion(row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '')
-                : null;
-            const suggestion = canSuggestNames
-                ? nameSuggestion
-                : getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
+            const wsuState = wsuSuggestionStateColumn ? (row[`wsu_${wsuSuggestionStateColumn}`] ?? '') : '';
+            const wsuCountry = wsuSuggestionCountryColumn ? (row[`wsu_${wsuSuggestionCountryColumn}`] ?? '') : '';
+            const candidates = canSuggestNames
+                ? getBestOutcomesNameCandidates(row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '', wsuState, wsuCountry)
+                : [];
+            let suggestion = candidates.length ? candidates[0] : getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
+            if (suggestion && normalizeValue(suggestion.key) === normalizeValue(row.translate_input)) {
+                suggestion = null;
+                rowData._candidates = [];
+            } else if (candidates.length) {
+                rowData._candidates = candidates.map((c, i) => ({ candidateId: `C${i + 1}`, ...c }));
+            } else {
+                rowData._candidates = [];
+            }
             if (suggestion) {
                 fillSuggestedFields(
                     rowData,
@@ -1343,12 +1384,20 @@ async function buildValidationExport(payload) {
             ) {
                 return;
             }
-            const nameSuggestion = canSuggestNames
-                ? getBestNameSuggestion(row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '')
-                : null;
-            const suggestion = canSuggestNames
-                ? nameSuggestion
-                : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+            const outcomesStateOut = outcomesSuggestionStateColumn ? (row[`outcomes_${outcomesSuggestionStateColumn}`] ?? '') : '';
+            const outcomesCountryOut = outcomesSuggestionCountryColumn ? (row[`outcomes_${outcomesSuggestionCountryColumn}`] ?? '') : '';
+            const candidates = canSuggestNames
+                ? getBestNameCandidates(row[`outcomes_${nameCompareConfig.outcomes}`] || row.outcomes_name || '', outcomesStateOut, outcomesCountryOut)
+                : [];
+            let suggestion = candidates.length ? candidates[0] : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+            if (suggestion && normalizeValue(suggestion.key) === normalizeValue(row.translate_output)) {
+                suggestion = null;
+                rowData._candidates = [];
+            } else if (candidates.length) {
+                rowData._candidates = candidates.map((c, i) => ({ candidateId: `C${i + 1}`, ...c }));
+            } else {
+                rowData._candidates = [];
+            }
             if (suggestion) {
                 fillSuggestedFields(
                     rowData,
@@ -1377,9 +1426,20 @@ async function buildValidationExport(payload) {
             const wsuName = row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '';
             if (errorType === 'Duplicate_Target' || errorType === 'Duplicate_Source') {
                 // One-to-many review defaults to output-side (myWSU) suggestions.
-                const outputSuggestion = canSuggestNames
-                    ? getBestNameSuggestion(outcomesName)
-                    : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+                const outcomesState = outcomesSuggestionStateColumn ? (row[`outcomes_${outcomesSuggestionStateColumn}`] ?? '') : '';
+                const outcomesCountry = outcomesSuggestionCountryColumn ? (row[`outcomes_${outcomesSuggestionCountryColumn}`] ?? '') : '';
+                const candidates = canSuggestNames
+                    ? getBestNameCandidates(outcomesName, outcomesState, outcomesCountry)
+                    : [];
+                let outputSuggestion = candidates.length ? candidates[0] : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+                if (outputSuggestion && normalizeValue(outputSuggestion.key) === normalizeValue(row.translate_output)) {
+                    outputSuggestion = null;
+                    rowData._candidates = [];
+                } else if (candidates.length) {
+                    rowData._candidates = candidates.map((c, i) => ({ candidateId: `C${i + 1}`, ...c }));
+                } else {
+                    rowData._candidates = [];
+                }
                 if (outputSuggestion) {
                     fillSuggestedFields(
                         rowData,
@@ -1412,7 +1472,18 @@ async function buildValidationExport(payload) {
                     rowData.Suggestion_Score = formatSuggestionScore(similarity);
                 }
             } else {
-                const suggestion = getBestNameSuggestion(outcomesName);
+                const outcomesState = outcomesSuggestionStateColumn ? (row[`outcomes_${outcomesSuggestionStateColumn}`] ?? '') : '';
+                const outcomesCountry = outcomesSuggestionCountryColumn ? (row[`outcomes_${outcomesSuggestionCountryColumn}`] ?? '') : '';
+                const candidates = getBestNameCandidates(outcomesName, outcomesState, outcomesCountry);
+                let suggestion = candidates.length ? candidates[0] : null;
+                if (suggestion && normalizeValue(suggestion.key) === normalizeValue(row.translate_output)) {
+                    suggestion = null;
+                    rowData._candidates = [];
+                } else if (candidates.length) {
+                    rowData._candidates = candidates.map((c, i) => ({ candidateId: `C${i + 1}`, ...c }));
+                } else {
+                    rowData._candidates = [];
+                }
                 if (suggestion) {
                     fillSuggestedFields(
                         rowData,
@@ -1855,14 +1926,15 @@ async function buildValidationExport(payload) {
         const scoreVal = row.Suggestion_Score;
         const score = Number.isFinite(scoreVal) ? scoreVal : (typeof scoreVal === 'string' ? parseFloat(scoreVal) : NaN);
         const hasSuggestion = suggestedKey !== '' || (Number.isFinite(score) && score >= defaultDecisionThreshold);
+        const hasActionableSuggestion = suggestedKey !== '';
         if (rawType === 'Name_Mismatch' && Number.isFinite(score) && score >= defaultDecisionThreshold) return 'Keep As-Is';
         if (rawType === 'Output_Not_Found') {
             if (rawSub === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT) return 'Ignore';
-            if (rawSub === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY && hasSuggestion) return 'Use Suggestion';
+            if (rawSub === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY && hasActionableSuggestion) return 'Use Suggestion';
         }
         if (rawType === 'Missing_Mapping') return 'Keep As-Is';
-        if ((rawType === 'Duplicate_Source' || rawType === 'Duplicate_Target') && hasSuggestion) return 'Use Suggestion';
-        if (rawType === 'Input_Not_Found' && hasSuggestion) return 'Use Suggestion';
+        if ((rawType === 'Duplicate_Source' || rawType === 'Duplicate_Target') && hasActionableSuggestion) return 'Use Suggestion';
+        if (rawType === 'Input_Not_Found' && hasActionableSuggestion) return 'Use Suggestion';
         return '';
     };
     const actionQueueFromErrors = errorDataRows.map(row => {
@@ -2093,24 +2165,34 @@ async function buildValidationExport(payload) {
             sanitizeIdPart(row.Duplicate_Group || '')
         ].join('|');
     };
-    const actionQueueRows = actionQueueRowsUnstable.map(row => ({
-        ...row,
-        Suggested_Key: row.Suggested_Key ?? '',
-        Suggested_School: row.Suggested_School ?? '',
-        Suggested_City: row.Suggested_City ?? '',
-        Suggested_State: row.Suggested_State ?? '',
-        Suggested_Country: row.Suggested_Country ?? '',
-        Suggestion_Score: row.Suggestion_Score ?? '',
-        Current_Input: row.translate_input ?? '',
-        Current_Output: row.translate_output ?? '',
-        Key_Update_Side: inferKeyUpdateSide(row),
-        Review_Row_ID: buildStableReviewId(row),
-        Final_Input: '',
-        Final_Output: '',
-        Publish_Eligible: '',
-        Approval_Source: '',
-        Has_Update: ''
-    }));
+    const actionQueueRows = actionQueueRowsUnstable.map(row => {
+        const keyUpdateSide = inferKeyUpdateSide(row);
+        const currentValue = keyUpdateSide === 'Input' ? (row.translate_input ?? '') : (row.translate_output ?? '');
+        const candidates = row._candidates || [];
+        const c1 = candidates[0];
+        const c1IsCurrentValue = c1 && normalizeValue(c1.key) === normalizeValue(currentValue);
+        const defaultUseSuggestion = (row.Decision === 'Use Suggestion') && candidates.length && !c1IsCurrentValue;
+        const selectedCandidateId = defaultUseSuggestion ? 'C1' : '';
+        return {
+            ...row,
+            Suggested_Key: row.Suggested_Key ?? '',
+            Suggested_School: row.Suggested_School ?? '',
+            Suggested_City: row.Suggested_City ?? '',
+            Suggested_State: row.Suggested_State ?? '',
+            Suggested_Country: row.Suggested_Country ?? '',
+            Suggestion_Score: row.Suggestion_Score ?? '',
+            Selected_Candidate_ID: selectedCandidateId,
+            Current_Input: row.translate_input ?? '',
+            Current_Output: row.translate_output ?? '',
+            Key_Update_Side: keyUpdateSide,
+            Review_Row_ID: buildStableReviewId(row),
+            Final_Input: '',
+            Final_Output: '',
+            Publish_Eligible: '',
+            Approval_Source: '',
+            Has_Update: ''
+        };
+    });
     const reviewIdCount = new Map();
     actionQueueRows.forEach(row => {
         const baseId = row.Review_Row_ID;
@@ -2120,6 +2202,24 @@ async function buildValidationExport(payload) {
             row.Review_Row_ID = `${baseId}#${seen}`;
         }
     });
+    const candidatePoolRows = [];
+    actionQueueRows.forEach(row => {
+        const candidates = row._candidates || [];
+        const reviewRowId = row.Review_Row_ID || '';
+        candidates.forEach(c => {
+            candidatePoolRows.push({
+                Composite_Key: `${reviewRowId}|${c.candidateId || ''}`,
+                Key: c.key ?? '',
+                Name: c.name ?? '',
+                City: c.city ?? '',
+                State: c.state ?? '',
+                Country: c.country ?? '',
+                Score: typeof c.score === 'number' ? c.score : (parseFloat(c.score) || 0)
+            });
+        });
+    });
+    const candidatePoolColumns = ['Composite_Key', 'Key', 'Name', 'City', 'State', 'Country', 'Score'];
+    const candidatePoolLastRow = Math.max(2, candidatePoolRows.length + 1);
     const actionQueueBaseCols = [
         'Review_Row_ID',
         'Priority',
@@ -2133,6 +2233,7 @@ async function buildValidationExport(payload) {
         'Similarity',
         ...errorColumns.filter(c => !['Error_Type', 'Error_Subtype', '_rawErrorType', '_rawErrorSubtype'].includes(c)),
         ...reviewSuggestionColumns,
+        'Selected_Candidate_ID',
         'Decision',
         'Owner',
         'Status',
@@ -2151,6 +2252,7 @@ async function buildValidationExport(payload) {
         if (col === 'Source_Sheet') return 'Source Sheet';
         if (col === 'Key_Update_Side') return 'Update Side';
         if (col === 'Is_Stale_Key') return 'Stale Key (1=yes)';
+        if (col === 'Selected_Candidate_ID') return 'Selected Candidate ID';
         if (col === 'Resolution_Note') return 'Resolution Note';
         if (col === 'Resolved_Date') return 'Resolved Date';
         if (col === 'Review_Date') return 'Review Date';
@@ -2182,6 +2284,40 @@ async function buildValidationExport(payload) {
         );
     }
 
+    reportProgress('Building Candidate_Pool...', 81);
+    addSheetWithRows(workbook, {
+        sheetName: 'Candidate_Pool',
+        outputColumns: candidatePoolColumns,
+        rows: candidatePoolRows,
+        style: baseStyle,
+        headers: ['Composite Key', 'Key', 'Name', 'City', 'State', 'Country', 'Score']
+    });
+    const cpSheet = workbook.getWorksheet('Candidate_Pool');
+    if (cpSheet) cpSheet.state = 'hidden';
+    const candidateReferenceRows = [];
+    actionQueueRows.forEach(row => {
+        const candidates = row._candidates || [];
+        if (candidates.length === 0) return;
+        candidates.forEach(c => {
+            candidateReferenceRows.push({
+                Review_Row_ID: row.Review_Row_ID,
+                Candidate_ID: c.candidateId || '',
+                Name: c.name ?? '',
+                City: c.city ?? '',
+                State: c.state ?? '',
+                Country: c.country ?? '',
+                Score: typeof c.score === 'number' ? c.score : (parseFloat(c.score) || 0)
+            });
+        });
+    });
+    addSheetWithRows(workbook, {
+        sheetName: 'Candidate_Reference',
+        outputColumns: ['Review_Row_ID', 'Candidate_ID', 'Name', 'City', 'State', 'Country', 'Score'],
+        rows: candidateReferenceRows,
+        style: baseStyle,
+        headers: ['Review Row ID', 'Candidate ID', 'Name', 'City', 'State', 'Country', 'Similarity'],
+        groupColumn: 'Review_Row_ID'
+    });
     reportProgress('Building Review_Workbench...', 82);
     const reviewOutcomesKeyContextKey = keyLabels.outcomes ? `outcomes_${keyLabels.outcomes}` : 'outcomes_key';
     const reviewOutcomesNameCandidates = [
@@ -2211,6 +2347,7 @@ async function buildValidationExport(payload) {
         reviewWsuKeyContextKey,
         'translate_input',
         'translate_output',
+        'Selected_Candidate_ID',
         'Suggested_Key',
         'Suggested_School',
         'Suggested_City',
@@ -2241,6 +2378,7 @@ async function buildValidationExport(payload) {
         Error_Subtype: 20,
         translate_input: 24,
         translate_output: 24,
+        Selected_Candidate_ID: 18,
         Suggested_Key: 22,
         Suggested_School: 28,
         Suggested_City: 18,
@@ -2299,6 +2437,7 @@ async function buildValidationExport(payload) {
         if (wsuCityKey && col === wsuCityKey) return 'myWSU City';
         if (wsuStateKey && col === wsuStateKey) return 'myWSU State';
         if (wsuCountryKey && col === wsuCountryKey) return 'myWSU Country';
+        if (col === 'Selected_Candidate_ID') return 'Selected Candidate ID';
         if (col === 'Suggested_Key') return 'Suggested Key';
         if (col === 'Suggested_School') return 'Suggested School';
         if (col === 'Suggested_City') return 'Suggested City';
@@ -2351,9 +2490,35 @@ async function buildValidationExport(payload) {
             reviewSheet.getCell(`${reviewColLetter.Has_Update}${rowNum}`).value = {
                 formula: `IF(OR($${reviewColLetter.Current_Input}${rowNum}<>$${reviewColLetter.Final_Input}${rowNum},$${reviewColLetter.Current_Output}${rowNum}<>$${reviewColLetter.Final_Output}${rowNum}),1,0)`
             };
+            const restOfWarning = `IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",OR($${reviewColLetter.Selected_Candidate_ID}${rowNum}="",$${reviewColLetter.Suggested_Key}${rowNum}="")),"Use Suggestion needs selection",IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Use Suggestion needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))`;
+            const dupPairCond = `AND($${reviewColLetter.Publish_Eligible}${rowNum}=1,$${reviewColLetter.Final_Input}${rowNum}<>"",$${reviewColLetter.Final_Output}${rowNum}<>"",COUNTIFS(Review_Workbench!$${reviewColLetter.Publish_Eligible}$2:$${reviewColLetter.Publish_Eligible}$${rowEnd},1,Review_Workbench!$${reviewColLetter.Final_Input}$2:$${reviewColLetter.Final_Input}$${rowEnd},$${reviewColLetter.Final_Input}$${rowNum},Review_Workbench!$${reviewColLetter.Final_Output}$2:$${reviewColLetter.Final_Output}$${rowEnd},$${reviewColLetter.Final_Output}$${rowNum})>1)`;
             reviewSheet.getCell(`${reviewColLetter.Decision_Warning}${rowNum}`).value = {
-                formula: `IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Suggested_Key}${rowNum}=""),"Use Suggestion needs Suggested_Key",IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Use Suggestion needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))`
+                formula: `IF(${dupPairCond},"Duplicate pair: set one to Ignore",${restOfWarning})`
             };
+            const rowIndex = rowNum - 2;
+            const row = actionQueueRows[rowIndex];
+            const hasCandidates = row && Array.isArray(row._candidates) && row._candidates.length > 0;
+            if (hasCandidates && candidatePoolLastRow > 1) {
+                const ridCol = reviewColLetter.Review_Row_ID;
+                const sidCol = reviewColLetter.Selected_Candidate_ID;
+                const lookupVal = `$${ridCol}$${rowNum}&"|"&$${sidCol}$${rowNum}`;
+                const poolARef = `Candidate_Pool!$A$2:$A$${candidatePoolLastRow}`;
+                reviewSheet.getCell(`${reviewColLetter.Suggested_Key}${rowNum}`).value = {
+                    formula: `IF($${sidCol}$${rowNum}="","",IFERROR(XLOOKUP(${lookupVal},${poolARef},Candidate_Pool!$B$2:$B$${candidatePoolLastRow},""),""))`
+                };
+                reviewSheet.getCell(`${reviewColLetter.Suggested_School}${rowNum}`).value = {
+                    formula: `IF($${sidCol}$${rowNum}="","",IFERROR(XLOOKUP(${lookupVal},${poolARef},Candidate_Pool!$C$2:$C$${candidatePoolLastRow},""),""))`
+                };
+                reviewSheet.getCell(`${reviewColLetter.Suggested_City}${rowNum}`).value = {
+                    formula: `IF($${sidCol}$${rowNum}="","",IFERROR(XLOOKUP(${lookupVal},${poolARef},Candidate_Pool!$D$2:$D$${candidatePoolLastRow},""),""))`
+                };
+                reviewSheet.getCell(`${reviewColLetter.Suggested_State}${rowNum}`).value = {
+                    formula: `IF($${sidCol}$${rowNum}="","",IFERROR(XLOOKUP(${lookupVal},${poolARef},Candidate_Pool!$E$2:$E$${candidatePoolLastRow},""),""))`
+                };
+                reviewSheet.getCell(`${reviewColLetter.Suggested_Country}${rowNum}`).value = {
+                    formula: `IF($${sidCol}$${rowNum}="","",IFERROR(XLOOKUP(${lookupVal},${poolARef},Candidate_Pool!$F$2:$F$${candidatePoolLastRow},""),""))`
+                };
+            }
         }
         // Workbook left unprotected so sort/filter work without restriction.
         const decCol = reviewColLetter.Decision;
@@ -2397,7 +2562,8 @@ async function buildValidationExport(payload) {
             reviewSheet.addConditionalFormatting({
                 ref: `${warningCol}2:${warningCol}${rowEnd}`,
                 rules: [
-                    { type: 'containsText', operator: 'containsText', text: 'Use Suggestion needs', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Duplicate pair', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Use Suggestion needs selection', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'valid Update Side', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'Approved but blank', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } }
                 ]
@@ -2788,7 +2954,8 @@ async function buildValidationExport(payload) {
             ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
             ['Duplicate final input keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B10=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
             ['Duplicate final output keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalOutputRange},${finalOutputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B11=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
-            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B10=0,B11=0),"PASS","HOLD")`, '', 'Final publish gate status (B8/B9 are advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
+            ['Duplicate (input, output) pairs in Final_Translation_Table', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalOutputRange}<>"")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalOutputRange},${finalOutputRange})>1))/2`, '=IF(B12=0,"PASS","FAIL")', 'Duplicate (input,output) pairs; set one to Ignore before publish'],
+            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B10=0,B11=0,B12=0),"PASS","HOLD")`, '', 'Final publish gate (B8/B9 advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
         ]
         : getQAEmptyRows();
     qaRows.forEach(row => qaValidateSheet.addRow(row));
@@ -2835,6 +3002,103 @@ async function buildValidationExport(payload) {
     };
 }
 
+async function buildJoinPreviewExport(payload) {
+    const { selectedCols = {}, options = {}, context = {} } = payload || {};
+    const loadedData = context.loadedData || { outcomes: [], translate: [], wsu_org: [] };
+    const keyConfig = context.keyConfig || {};
+    const keyLabels = context.keyLabels || {};
+
+    const outcomesRows = loadedData.outcomes || [];
+    const translateRows = loadedData.translate || [];
+    const wsuRows = loadedData.wsu_org || [];
+
+    const outcomesKeyCol = keyConfig.outcomes || '';
+    const translateInputCol = keyConfig.translateInput || '';
+    const translateOutputCol = keyConfig.translateOutput || '';
+    const wsuKeyCol = keyConfig.wsu || '';
+
+    const outcomesCols = (selectedCols.outcomes || []).filter(Boolean);
+    const wsuCols = (selectedCols.wsu_org || []).filter(Boolean);
+
+    const outcomesMap = new Map();
+    outcomesRows.forEach((row, idx) => {
+        const raw = row[outcomesKeyCol];
+        const norm = typeof normalizeKeyValue === 'function' ? normalizeKeyValue(raw) : String(raw || '').trim();
+        if (!norm) return;
+        if (!outcomesMap.has(norm)) outcomesMap.set(norm, { row, idx });
+    });
+
+    const wsuMap = new Map();
+    wsuRows.forEach((row, idx) => {
+        const raw = row[wsuKeyCol];
+        const norm = typeof normalizeKeyValue === 'function' ? normalizeKeyValue(raw) : String(raw || '').trim();
+        if (!norm) return;
+        if (!wsuMap.has(norm)) wsuMap.set(norm, { row, idx });
+    });
+
+    const outcomesColKeys = outcomesCols.map(c => `outcomes_${c}`);
+    const wsuColKeys = wsuCols.map(c => `wsu_${c}`);
+    const outputColumns = [...outcomesColKeys, 'translate_input', 'translate_output', ...wsuColKeys];
+
+    const joinRows = translateRows.map(tr => {
+        const inputRaw = tr[translateInputCol];
+        const outputRaw = tr[translateOutputCol];
+        const inputNorm = typeof normalizeKeyValue === 'function' ? normalizeKeyValue(inputRaw) : String(inputRaw || '').trim();
+        const outputNorm = typeof normalizeKeyValue === 'function' ? normalizeKeyValue(outputRaw) : String(outputRaw || '').trim();
+
+        const outcomesEntry = inputNorm ? outcomesMap.get(inputNorm) : null;
+        const wsuEntry = outputNorm ? wsuMap.get(outputNorm) : null;
+
+        const outcomesRow = outcomesEntry ? outcomesEntry.row : {};
+        const wsuRow = wsuEntry ? wsuEntry.row : {};
+
+        const row = {};
+        outcomesCols.forEach(col => {
+            row[`outcomes_${col}`] = outcomesRow[col] ?? '';
+        });
+        row.translate_input = inputRaw ?? '';
+        row.translate_output = outputRaw ?? '';
+        wsuCols.forEach(col => {
+            row[`wsu_${col}`] = wsuRow[col] ?? '';
+        });
+        return row;
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.calcProperties = { fullCalcOnLoad: true };
+
+    const baseStyle = {
+        defaultHeaderColor: 'FF1E3A8A',
+        defaultBodyColor: 'FFF3F4F6',
+        outcomesHeaderColor: 'FF1E3A8A',
+        outcomesBodyColor: 'FFF3F4F6',
+        wsuHeaderColor: 'FF1E3A8A',
+        wsuBodyColor: 'FFF3F4F6',
+        translateHeaderColor: 'FF0F766E',
+        translateBodyColor: 'FFD1FAE5'
+    };
+
+    const headers = outputColumns.map(col => {
+        if (col === 'translate_input') return `${keyLabels.translateInput || 'Source key'} (Translate Input)`;
+        if (col === 'translate_output') return `${keyLabels.translateOutput || 'Target key'} (Translate Output)`;
+        return buildHeaders([col], keyLabels)[0] || col;
+    });
+
+    addSheetWithRows(workbook, {
+        sheetName: 'Join_Preview',
+        outputColumns,
+        rows: joinRows,
+        style: baseStyle,
+        headers
+    });
+
+    const buffer = toArrayBuffer(await workbook.xlsx.writeBuffer());
+    return {
+        buffer,
+        filename: downloadSafeFileName(options.fileName, 'WSU_Join_Preview.xlsx')
+    };
+}
+
 self.onmessage = async (event) => {
     const { type, payload } = event.data || {};
     try {
@@ -2845,6 +3109,11 @@ self.onmessage = async (event) => {
         }
         if (type === 'build_validation_export') {
             const result = await buildValidationExport(payload || {});
+            self.postMessage({ type: 'result', result }, [result.buffer]);
+            return;
+        }
+        if (type === 'build_join_preview_export') {
+            const result = await buildJoinPreviewExport(payload || {});
             self.postMessage({ type: 'result', result }, [result.buffer]);
             return;
         }
