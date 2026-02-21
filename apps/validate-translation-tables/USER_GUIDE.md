@@ -52,6 +52,10 @@ Use this when you already have a translation table and want to correct it.
 6. Click `Validate Mappings`.
 7. Review on-screen cards and counts.
 8. Optional: click `Bulk edit before export` to apply `Decision` and/or `Manual_Suggested_Key` to filtered rows in one step.
+   - New in-app review grid includes Outcomes/myWSU name + state + country context, per-row suggestion dropdown, and `Reason_Code`.
+   - Use quick family chips (for example, `Texas A&M`, `Troy University`) to jump to common campus groups.
+   - For performance, the grid shows up to 400 rows at once; bulk actions still apply to all filtered rows.
+   - Use `Save session` to download a JSON snapshot and `Load session` to resume later.
 9. Click `Download Full Report`.
 
 **Note:** The Validate Excel file requires **Excel 365 or 2021+** to display the Final_Translation_Table correctly. Excel 2016/2019 may show errors for the compact table.

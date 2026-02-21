@@ -2494,77 +2494,442 @@ function setupBulkEditPanel() {
     const toggleBtn = document.getElementById('bulk-edit-toggle-btn');
     const panel = document.getElementById('bulk-edit-panel');
     const filterSelect = document.getElementById('bulk-filter-error-type');
+    const filterDecisionSelect = document.getElementById('bulk-filter-decision');
+    const filterOutcomesNameInput = document.getElementById('bulk-filter-outcomes-name');
+    const filterWsuNameInput = document.getElementById('bulk-filter-wsu-name');
     const applyDecisionSelect = document.getElementById('bulk-apply-decision');
+    const applyReasonCodeSelect = document.getElementById('bulk-apply-reason-code');
+    const applyCandidateIdSelect = document.getElementById('bulk-apply-candidate-id');
     const applyManualInput = document.getElementById('bulk-apply-manual-key');
+    const applySelectedOnly = document.getElementById('bulk-apply-selected-only');
     const applyBtn = document.getElementById('bulk-apply-btn');
+    const clearSelectedBtn = document.getElementById('bulk-clear-selected-btn');
+    const selectFilteredBtn = document.getElementById('bulk-select-filtered-btn');
+    const deselectFilteredBtn = document.getElementById('bulk-deselect-filtered-btn');
+    const saveSessionBtn = document.getElementById('bulk-save-session-btn');
+    const loadSessionInput = document.getElementById('bulk-load-session-file');
+    const quickChipButtons = panel.querySelectorAll('.bulk-quick-chip');
+    const quickClearBtn = document.getElementById('bulk-quick-clear-btn');
     const tbody = document.getElementById('bulk-edit-tbody');
     const rowCountEl = document.getElementById('bulk-edit-row-count');
-    if (!toggleBtn || !panel) return;
+    const filterCountEl = document.getElementById('bulk-edit-filter-count');
+    const selectedCountEl = document.getElementById('bulk-edit-selected-count');
+    if (!toggleBtn || !panel || !tbody) return;
+
+    const MAX_RENDER_ROWS = 400;
+    const DECISION_OPTIONS = ['', 'Keep As-Is', 'Use Suggestion', 'Allow One-to-Many', 'Ignore'];
+    const REASON_CODE_OPTIONS = [
+        '',
+        'Campus consolidation',
+        'Data steward approved',
+        'Manual correction',
+        'Name match',
+        'Other'
+    ];
+    let filteredRowsCache = [];
+    let selectedRowIds = new Set();
+
+    const normalize = (value) => String(value ?? '').trim().toLowerCase();
+    const toDisplay = (value) => String(value ?? '').trim();
+    const encodeRowId = (id) => encodeURIComponent(String(id || ''));
+    const decodeRowId = (encoded) => {
+        try {
+            return decodeURIComponent(String(encoded || ''));
+        } catch (_) {
+            return String(encoded || '');
+        }
+    };
+    const optionHtml = (value, label, selected) => `<option value="${escapeHtml(value)}"${selected ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+    const decisionOptionsHtml = (value) => DECISION_OPTIONS
+        .map(opt => optionHtml(opt, opt || '(blank)', opt === value))
+        .join('');
+    const reasonOptionsHtml = (value) => REASON_CODE_OPTIONS
+        .map(opt => optionHtml(opt, opt || '(blank)', opt === value))
+        .join('');
+    const candidateLabel = (c) => {
+        const key = toDisplay(c.key || '');
+        const name = toDisplay(c.name || '');
+        const loc = [toDisplay(c.city || ''), toDisplay(c.state || ''), toDisplay(c.country || '')]
+            .filter(Boolean)
+            .join(', ');
+        const scoreVal = typeof c.score === 'number' ? c.score : parseFloat(c.score);
+        const score = Number.isFinite(scoreVal) ? ` | Score: ${scoreVal.toFixed(2)}` : '';
+        const base = `${key}: ${name}${loc ? ` - ${loc}` : ''}`;
+        return `${base}${score}`;
+    };
+    const getRoleColumn = (source, roleName) => {
+        const roles = columnRoles[source] || {};
+        const hit = Object.keys(roles).find(col => roles[col] === roleName);
+        return hit || '';
+    };
+    const getNameColumn = (source) => {
+        if (source === 'outcomes') {
+            if (lastNameCompareConfig?.outcomes) return lastNameCompareConfig.outcomes;
+            const schoolRole = getRoleColumn('outcomes', 'School');
+            if (schoolRole) return schoolRole;
+            const cols = selectedColumns.outcomes || [];
+            return cols.find(col => /name|descr|school|org/i.test(String(col || ''))) || '';
+        }
+        if (lastNameCompareConfig?.wsu) return lastNameCompareConfig.wsu;
+        const schoolRole = getRoleColumn('wsu_org', 'School');
+        if (schoolRole) return schoolRole;
+        const cols = selectedColumns.wsu_org || [];
+        return cols.find(col => /name|descr|school|org/i.test(String(col || ''))) || '';
+    };
+    const getColumnByToken = (source, token) => {
+        const roleHit = getRoleColumn(source, token.charAt(0).toUpperCase() + token.slice(1));
+        if (roleHit) return roleHit;
+        const cols = source === 'outcomes' ? (selectedColumns.outcomes || []) : (selectedColumns.wsu_org || []);
+        return cols.find(col => String(col || '').toLowerCase().includes(token)) || '';
+    };
+    const getPrefixedValue = (row, sourcePrefix, colName) => {
+        if (!colName) return '';
+        return toDisplay(row[`${sourcePrefix}_${colName}`]);
+    };
+    const attachRowContext = (row) => {
+        const outcomesNameCol = getNameColumn('outcomes');
+        const outcomesStateCol = getColumnByToken('outcomes', 'state');
+        const outcomesCountryCol = getColumnByToken('outcomes', 'country');
+        const wsuNameCol = getNameColumn('wsu_org');
+        const wsuStateCol = getColumnByToken('wsu_org', 'state');
+        const wsuCountryCol = getColumnByToken('wsu_org', 'country');
+        row._ctx = {
+            outcomesName: getPrefixedValue(row, 'outcomes', outcomesNameCol),
+            outcomesState: getPrefixedValue(row, 'outcomes', outcomesStateCol),
+            outcomesCountry: getPrefixedValue(row, 'outcomes', outcomesCountryCol),
+            wsuName: getPrefixedValue(row, 'wsu', wsuNameCol),
+            wsuState: getPrefixedValue(row, 'wsu', wsuStateCol),
+            wsuCountry: getPrefixedValue(row, 'wsu', wsuCountryCol)
+        };
+        if (!Array.isArray(row._candidates)) row._candidates = [];
+        if (typeof row.Decision !== 'string') row.Decision = toDisplay(row.Decision);
+        if (typeof row.Reason_Code !== 'string') row.Reason_Code = toDisplay(row.Reason_Code);
+        if (typeof row.Manual_Suggested_Key !== 'string') row.Manual_Suggested_Key = toDisplay(row.Manual_Suggested_Key);
+        if (typeof row.Selected_Candidate_ID !== 'string') row.Selected_Candidate_ID = toDisplay(row.Selected_Candidate_ID);
+    };
+    const cloneRows = (rows) => rows.map(row => ({
+        ...row,
+        _candidates: Array.isArray(row._candidates) ? row._candidates.map(c => ({ ...c })) : []
+    }));
+    const getWorkingRows = () => preEditedActionQueueRows || actionQueueRowsCache || [];
+    const findRowById = (rid) => getWorkingRows().find(row => String(row.Review_Row_ID || '') === rid) || null;
+    const getFilteredRows = () => {
+        const errorType = toDisplay(filterSelect?.value || '');
+        const decisionFilter = toDisplay(filterDecisionSelect?.value || '');
+        const outcomesContains = normalize(filterOutcomesNameInput?.value || '');
+        const wsuContains = normalize(filterWsuNameInput?.value || '');
+        const matches = getWorkingRows().filter(row => {
+            const ctx = row._ctx || {};
+            if (errorType && toDisplay(row.Error_Type) !== errorType) return false;
+            if (decisionFilter === '(blank)' && toDisplay(row.Decision)) return false;
+            if (decisionFilter && decisionFilter !== '(blank)' && toDisplay(row.Decision) !== decisionFilter) return false;
+            if (outcomesContains && !normalize(ctx.outcomesName).includes(outcomesContains)) return false;
+            if (wsuContains && !normalize(ctx.wsuName).includes(wsuContains)) return false;
+            return true;
+        });
+        matches.sort((a, b) => {
+            const aName = normalize(a._ctx?.outcomesName);
+            const bName = normalize(b._ctx?.outcomesName);
+            if (aName !== bName) return aName.localeCompare(bName);
+            return normalize(a.translate_input).localeCompare(normalize(b.translate_input));
+        });
+        return matches;
+    };
+    const refreshCounters = () => {
+        const allRows = getWorkingRows();
+        const validIds = new Set(allRows.map(row => String(row.Review_Row_ID || '')));
+        selectedRowIds = new Set([...selectedRowIds].filter(id => validIds.has(id)));
+        if (rowCountEl) rowCountEl.textContent = String(allRows.length);
+        if (filterCountEl) filterCountEl.textContent = String(filteredRowsCache.length);
+        if (selectedCountEl) selectedCountEl.textContent = String(selectedRowIds.size);
+    };
+    const renderBulkEditTable = () => {
+        filteredRowsCache = getFilteredRows();
+        const visibleRows = filteredRowsCache.slice(0, MAX_RENDER_ROWS);
+        tbody.innerHTML = visibleRows.map(row => {
+            const rid = String(row.Review_Row_ID || '');
+            const ridAttr = encodeRowId(rid);
+            const ctx = row._ctx || {};
+            const outcomesCtx = [ctx.outcomesName, ctx.outcomesState, ctx.outcomesCountry].filter(Boolean).join(' | ');
+            const wsuCtx = [ctx.wsuName, ctx.wsuState, ctx.wsuCountry].filter(Boolean).join(' | ');
+            const candidateOptions = (row._candidates || []);
+            const candidateOptionsHtml = [
+                optionHtml('', candidateOptions.length ? '(none)' : '(no location-valid suggestions)', toDisplay(row.Selected_Candidate_ID) === ''),
+                ...candidateOptions.map(c => optionHtml(
+                    toDisplay(c.candidateId || ''),
+                    candidateLabel(c),
+                    toDisplay(c.candidateId || '') === toDisplay(row.Selected_Candidate_ID)
+                ))
+            ].join('');
+            const manualActive = toDisplay(row.Manual_Suggested_Key) ? '<div class="text-[11px] text-orange-700 mt-1">Manual override active</div>' : '';
+            return `
+                <tr class="border-b align-top">
+                    <td class="py-1 px-2">
+                        <input type="checkbox" class="bulk-row-select" data-rid="${ridAttr}" ${selectedRowIds.has(rid) ? 'checked' : ''}>
+                    </td>
+                    <td class="py-1 px-2">${escapeHtml(toDisplay(row.Error_Type))}</td>
+                    <td class="py-1 px-2">${escapeHtml(toDisplay(row.Error_Subtype))}</td>
+                    <td class="py-1 px-2">${escapeHtml(outcomesCtx || '(blank)')}</td>
+                    <td class="py-1 px-2">${escapeHtml(wsuCtx || '(blank)')}</td>
+                    <td class="py-1 px-2 font-mono text-xs">${escapeHtml(toDisplay(row.translate_input))}</td>
+                    <td class="py-1 px-2 font-mono text-xs">${escapeHtml(toDisplay(row.translate_output))}</td>
+                    <td class="py-1 px-2">
+                        <select class="bulk-row-decision border border-gray-300 rounded px-1 py-1 text-xs w-full" data-rid="${ridAttr}">
+                            ${decisionOptionsHtml(toDisplay(row.Decision))}
+                        </select>
+                    </td>
+                    <td class="py-1 px-2">
+                        <select class="bulk-row-reason border border-gray-300 rounded px-1 py-1 text-xs w-full" data-rid="${ridAttr}">
+                            ${reasonOptionsHtml(toDisplay(row.Reason_Code))}
+                        </select>
+                    </td>
+                    <td class="py-1 px-2">
+                        <select class="bulk-row-candidate border border-gray-300 rounded px-1 py-1 text-xs w-full" data-rid="${ridAttr}">
+                            ${candidateOptionsHtml}
+                        </select>
+                        ${manualActive}
+                    </td>
+                    <td class="py-1 px-2">
+                        <input type="text" class="bulk-row-manual border border-gray-300 rounded px-1 py-1 text-xs w-full" data-rid="${ridAttr}" value="${escapeHtml(toDisplay(row.Manual_Suggested_Key))}">
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        if (filteredRowsCache.length > MAX_RENDER_ROWS) {
+            tbody.innerHTML += `<tr><td colspan="11" class="py-1 px-2 text-gray-500 text-xs">Showing first ${MAX_RENDER_ROWS} of ${filteredRowsCache.length} filtered rows. Bulk actions still apply to all filtered rows.</td></tr>`;
+        }
+        refreshCounters();
+    };
+    const getApplyTargets = () => {
+        const selectedOnly = Boolean(applySelectedOnly?.checked);
+        if (!selectedOnly) return filteredRowsCache;
+        return filteredRowsCache.filter(row => selectedRowIds.has(String(row.Review_Row_ID || '')));
+    };
+    const loadActionQueueRows = async () => {
+        if (actionQueueRowsCache) {
+            renderBulkEditTable();
+            return;
+        }
+        toggleBtn.disabled = true;
+        toggleBtn.textContent = 'Loading...';
+        try {
+            const payload = {
+                validated: validatedData,
+                missing: missingData,
+                selectedCols: selectedColumns,
+                priorDecisions: priorDecisions || null,
+                options: {
+                    includeSuggestions: Boolean(document.getElementById('include-suggestions')?.checked),
+                    showMappingLogic: Boolean(document.getElementById('show-mapping-logic')?.checked),
+                    nameCompareConfig: lastNameCompareConfig,
+                    campusFamilyRules: campusFamilyRules || null
+                },
+                context: { loadedData, columnRoles, keyConfig, keyLabels }
+            };
+            const result = await runExportWorkerTask('get_action_queue', payload);
+            actionQueueRowsCache = cloneRows(result?.actionQueueRows || []);
+            preEditedActionQueueRows = cloneRows(actionQueueRowsCache);
+            getWorkingRows().forEach(attachRowContext);
+            const types = [...new Set(getWorkingRows().map(r => toDisplay(r.Error_Type)).filter(Boolean))].sort();
+            if (filterSelect) {
+                filterSelect.innerHTML = '<option value="">All</option>' + types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+            }
+            renderBulkEditTable();
+        } catch (err) {
+            alert(`Error loading action queue: ${err.message}`);
+        } finally {
+            toggleBtn.disabled = false;
+            toggleBtn.textContent = 'Bulk edit before export';
+        }
+    };
+    const applySessionData = (sessionRows) => {
+        const rowMap = new Map(getWorkingRows().map(row => [String(row.Review_Row_ID || ''), row]));
+        let applied = 0;
+        let missing = 0;
+        sessionRows.forEach(entry => {
+            const rid = String(entry.Review_Row_ID || '');
+            if (!rid) return;
+            const row = rowMap.get(rid);
+            if (!row) {
+                missing += 1;
+                return;
+            }
+            row.Decision = toDisplay(entry.Decision);
+            row.Reason_Code = toDisplay(entry.Reason_Code);
+            row.Manual_Suggested_Key = toDisplay(entry.Manual_Suggested_Key);
+            row.Selected_Candidate_ID = toDisplay(entry.Selected_Candidate_ID);
+            applied += 1;
+        });
+        preEditedActionQueueRows = getWorkingRows();
+        renderBulkEditTable();
+        alert(`Session loaded: ${applied} rows applied${missing ? `, ${missing} unmatched Review_Row_ID` : ''}.`);
+    };
+
     toggleBtn.addEventListener('click', async function() {
         panel.classList.toggle('hidden');
-        if (!panel.classList.contains('hidden') && !actionQueueRowsCache) {
-            try {
-                toggleBtn.disabled = true;
-                toggleBtn.textContent = 'Loading...';
-                const payload = {
-                    validated: validatedData,
-                    missing: missingData,
-                    selectedCols: selectedColumns,
-                    priorDecisions: priorDecisions || null,
-                    options: {
-                        includeSuggestions: Boolean(document.getElementById('include-suggestions')?.checked),
-                        showMappingLogic: Boolean(document.getElementById('show-mapping-logic')?.checked),
-                        nameCompareConfig: lastNameCompareConfig,
-                        campusFamilyRules: campusFamilyRules || null
-                    },
-                    context: { loadedData, columnRoles, keyConfig, keyLabels }
-                };
-                const result = await runExportWorkerTask('get_action_queue', payload);
-                actionQueueRowsCache = result?.actionQueueRows || [];
-                preEditedActionQueueRows = [...actionQueueRowsCache];
-                renderBulkEditTable();
-                const types = [...new Set(actionQueueRowsCache.map(r => r.Error_Type || '').filter(Boolean))].sort();
-                filterSelect.innerHTML = '<option value="">All</option>' + types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-                if (rowCountEl) rowCountEl.textContent = actionQueueRowsCache.length;
-            } catch (err) {
-                alert(`Error loading action queue: ${err.message}`);
-            } finally {
-                toggleBtn.disabled = false;
-                toggleBtn.textContent = 'Bulk edit before export';
-            }
-        } else if (!panel.classList.contains('hidden')) {
-            renderBulkEditTable();
+        if (!panel.classList.contains('hidden')) {
+            await loadActionQueueRows();
         }
     });
-    function renderBulkEditTable() {
-        const filter = filterSelect?.value || '';
-        const rows = (preEditedActionQueueRows || actionQueueRowsCache || []).filter(r => !filter || (r.Error_Type || '') === filter);
-        if (!tbody) return;
-        tbody.innerHTML = rows.slice(0, 100).map(r => `
-            <tr class="border-b">
-                <td class="py-1 px-2">${escapeHtml(r.Error_Type || '')}</td>
-                <td class="py-1 px-2">${escapeHtml(r.translate_input || '')}</td>
-                <td class="py-1 px-2">${escapeHtml(r.translate_output || '')}</td>
-                <td class="py-1 px-2">${escapeHtml(r.Decision || '')}</td>
-                <td class="py-1 px-2">${escapeHtml(r.Manual_Suggested_Key || '')}</td>
-            </tr>
-        `).join('');
-        if (rows.length > 100) tbody.innerHTML += `<tr><td colspan="5" class="py-1 px-2 text-gray-500 text-xs">... and ${rows.length - 100} more</td></tr>`;
-    }
+
     filterSelect?.addEventListener('change', renderBulkEditTable);
-    applyBtn?.addEventListener('click', function() {
-        const filter = filterSelect?.value || '';
-        const decision = applyDecisionSelect?.value || '';
-        const manualKey = (applyManualInput?.value || '').trim();
-        if (!decision && !manualKey) return;
-        const rows = preEditedActionQueueRows || actionQueueRowsCache || [];
-        const toUpdate = filter ? rows.filter(r => (r.Error_Type || '') === filter) : rows;
-        toUpdate.forEach(r => {
-            if (decision) r.Decision = decision;
-            if (manualKey) r.Manual_Suggested_Key = manualKey;
+    filterDecisionSelect?.addEventListener('change', renderBulkEditTable);
+    filterOutcomesNameInput?.addEventListener('input', renderBulkEditTable);
+    filterWsuNameInput?.addEventListener('input', renderBulkEditTable);
+    quickChipButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const chipValue = toDisplay(btn.getAttribute('data-outcomes-name'));
+            if (filterOutcomesNameInput) filterOutcomesNameInput.value = chipValue;
+            renderBulkEditTable();
         });
-        preEditedActionQueueRows = rows;
+    });
+    quickClearBtn?.addEventListener('click', function() {
+        if (filterOutcomesNameInput) filterOutcomesNameInput.value = '';
+        if (filterWsuNameInput) filterWsuNameInput.value = '';
+        if (filterDecisionSelect) filterDecisionSelect.value = '';
+        if (filterSelect) filterSelect.value = '';
         renderBulkEditTable();
+    });
+
+    tbody.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const rid = decodeRowId(target.getAttribute('data-rid'));
+        if (!rid) return;
+        const row = findRowById(rid);
+        if (!row) return;
+        if (target.classList.contains('bulk-row-select')) {
+            if (target.checked) selectedRowIds.add(rid);
+            else selectedRowIds.delete(rid);
+            refreshCounters();
+            return;
+        }
+        if (target.classList.contains('bulk-row-decision')) {
+            row.Decision = toDisplay(target.value);
+        } else if (target.classList.contains('bulk-row-reason')) {
+            row.Reason_Code = toDisplay(target.value);
+        } else if (target.classList.contains('bulk-row-candidate')) {
+            row.Selected_Candidate_ID = toDisplay(target.value);
+            if (row.Selected_Candidate_ID) row.Manual_Suggested_Key = '';
+        }
+        preEditedActionQueueRows = getWorkingRows();
+        renderBulkEditTable();
+    });
+    tbody.addEventListener('input', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (!target.classList.contains('bulk-row-manual')) return;
+        const rid = decodeRowId(target.getAttribute('data-rid'));
+        if (!rid) return;
+        const row = findRowById(rid);
+        if (!row) return;
+        row.Manual_Suggested_Key = toDisplay(target.value);
+        if (row.Manual_Suggested_Key) row.Selected_Candidate_ID = '';
+        preEditedActionQueueRows = getWorkingRows();
+    });
+
+    applyBtn?.addEventListener('click', function() {
+        const decision = toDisplay(applyDecisionSelect?.value);
+        const reasonCode = toDisplay(applyReasonCodeSelect?.value);
+        const candidateId = toDisplay(applyCandidateIdSelect?.value);
+        const manualKey = (applyManualInput?.value || '').trim();
+        if (!decision && !reasonCode && !candidateId && !manualKey) {
+            alert('Choose at least one bulk field to apply.');
+            return;
+        }
+        const targets = getApplyTargets();
+        if (!targets.length) {
+            alert('No rows match current filters/selection.');
+            return;
+        }
+        targets.forEach(row => {
+            if (decision) row.Decision = decision;
+            if (reasonCode) row.Reason_Code = reasonCode;
+            if (candidateId) {
+                row.Selected_Candidate_ID = candidateId;
+                row.Manual_Suggested_Key = '';
+            }
+            if (manualKey) {
+                row.Manual_Suggested_Key = manualKey;
+                row.Selected_Candidate_ID = '';
+            }
+        });
+        preEditedActionQueueRows = getWorkingRows();
+        renderBulkEditTable();
+    });
+    clearSelectedBtn?.addEventListener('click', function() {
+        const rows = getWorkingRows().filter(row => selectedRowIds.has(String(row.Review_Row_ID || '')));
+        if (!rows.length) {
+            alert('No selected rows to clear.');
+            return;
+        }
+        if (!confirm(`Clear Decision, Reason, Candidate, and Manual Key for ${rows.length} selected rows?`)) return;
+        rows.forEach(row => {
+            row.Decision = '';
+            row.Reason_Code = '';
+            row.Selected_Candidate_ID = '';
+            row.Manual_Suggested_Key = '';
+        });
+        preEditedActionQueueRows = getWorkingRows();
+        renderBulkEditTable();
+    });
+    selectFilteredBtn?.addEventListener('click', function() {
+        filteredRowsCache.forEach(row => selectedRowIds.add(String(row.Review_Row_ID || '')));
+        refreshCounters();
+        renderBulkEditTable();
+    });
+    deselectFilteredBtn?.addEventListener('click', function() {
+        filteredRowsCache.forEach(row => selectedRowIds.delete(String(row.Review_Row_ID || '')));
+        refreshCounters();
+        renderBulkEditTable();
+    });
+    saveSessionBtn?.addEventListener('click', function() {
+        const rows = getWorkingRows();
+        if (!rows.length) {
+            alert('Nothing to save yet.');
+            return;
+        }
+        const payload = {
+            version: 1,
+            savedAt: new Date().toISOString(),
+            rowCount: rows.length,
+            rows: rows.map(row => ({
+                Review_Row_ID: row.Review_Row_ID || '',
+                Decision: row.Decision || '',
+                Reason_Code: row.Reason_Code || '',
+                Selected_Candidate_ID: row.Selected_Candidate_ID || '',
+                Manual_Suggested_Key: row.Manual_Suggested_Key || ''
+            }))
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `validate_review_session_${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    });
+    loadSessionInput?.addEventListener('change', async function(event) {
+        const input = event.target;
+        const file = input?.files?.[0];
+        if (!file) return;
+        try {
+            await loadActionQueueRows();
+            const text = await file.text();
+            const parsed = JSON.parse(text);
+            if (!parsed || !Array.isArray(parsed.rows)) {
+                alert('Invalid session file. Expected JSON with a rows array.');
+                input.value = '';
+                return;
+            }
+            applySessionData(parsed.rows);
+        } catch (err) {
+            alert(`Error loading session: ${err.message}`);
+        } finally {
+            input.value = '';
+        }
     });
 }
 

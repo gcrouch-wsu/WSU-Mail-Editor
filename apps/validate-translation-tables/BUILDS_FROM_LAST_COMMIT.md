@@ -59,6 +59,7 @@
 
 - **Goal:** Apply Decision and Manual_Suggested_Key to filtered rows in one step.
 - **Status:** Implemented (Pre-export UI)
+- **UX add-ons:** Implemented quick family filter chips and persistent 400-row render guidance so reviewers can group campus families quickly without confusion.
 
 ---
 

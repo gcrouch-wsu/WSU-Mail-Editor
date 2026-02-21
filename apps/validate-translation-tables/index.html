@@ -77,7 +77,7 @@
                             <p>2. <strong>Match Options:</strong> Pick Translation input/output columns. Choose validation mode: Key only, or Key + name comparison</p>
                             <p>3. <strong>Name comparison</strong> (if used): Pick Outcomes and myWSU name columns; set threshold (default 0.8) and ambiguity gap (0.03)</p>
                             <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; mark key columns for Outcomes and myWSU; optionally map roles (School, City, State, Country). Include City/State for high-confidence matching</p>
-                            <p>5. Optional: Include name-match suggestions; Show mapping logic; use Bulk edit before export to apply Decision/Manual_Suggested_Key to filtered rows</p>
+                            <p>5. Optional: Include name-match suggestions; Show mapping logic; use Bulk edit before export for context-aware edits (including quick family chips), then Save/Load session JSON if you need multi-day review</p>
                             <p>6. Click <strong>Validate Mappings</strong> -> review cards -> <strong>Download Full Report</strong></p>
                             <p>7. The Final_Translation_Table has <strong>auto-matched row pairs</strong> (Valid + High_Confidence_Match). You must use <strong>Review_Workbench</strong> to set decisions for rows needing review. Set <strong>Decision</strong> (Keep As-Is, Use Suggestion, Allow One-to-Many, Ignore) and set <strong>Reason Code</strong> for risky decisions (Use Suggestion with manual key, Allow One-to-Many, Keep As-Is on Duplicate_Target rows). If you use Use Suggestion, either Suggested Key (from C1/C2/C3) or <strong>Manual_Suggested_Key</strong> must be filled, and Update Side must be Input/Output/Both. For intentional many-to-one (for example, Texas A&amp;M campuses to one parent), use Keep As-Is on Duplicate_Target rows. Use <strong>Translation_Key_Updates (What changed)</strong> to verify all key changes before publish.</p>
                             <p>8. Excel requires 365 or 2021+. Before updating the Outcomes Translation Table: verify changes in <strong>Translation_Key_Updates (What changed)</strong> -> copy Final_Translation_Table -> paste as <strong>values only</strong> into a new sheet -> sort and double-check -> only then update. Publish only after QA_Checks_Validate blocking checks pass (including risky decisions without reason code and duplicate checks).</p>
@@ -689,19 +689,48 @@
             </div>
 
             <div id="bulk-edit-panel" class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 hidden">
-                <h3 class="text-base font-semibold text-gray-800 mb-3">Bulk apply before export</h3>
-                <p class="text-sm text-gray-600 mb-3">Apply Decision and Manual Key to filtered rows. Changes are included when you download.</p>
-                <div class="flex flex-wrap gap-3 mb-3">
+                <h3 class="text-base font-semibold text-gray-800 mb-2">In-app review and bulk apply before export</h3>
+                <p class="text-sm text-gray-600 mb-3">Review context inline (Outcomes/myWSU names + location), set Decision/Reason/Suggestion, then bulk apply to selected or filtered rows.</p>
+
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-3">
                     <div>
-                        <label class="block text-xs text-gray-600 mb-1">Filter by Error Type</label>
-                        <select id="bulk-filter-error-type" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                        <label class="block text-xs text-gray-600 mb-1">Filter Error Type</label>
+                        <select id="bulk-filter-error-type" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
                             <option value="">All</option>
                         </select>
                     </div>
                     <div>
+                        <label class="block text-xs text-gray-600 mb-1">Filter Decision</label>
+                        <select id="bulk-filter-decision" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
+                            <option value="">All</option>
+                            <option value="Keep As-Is">Keep As-Is</option>
+                            <option value="Use Suggestion">Use Suggestion</option>
+                            <option value="Allow One-to-Many">Allow One-to-Many</option>
+                            <option value="Ignore">Ignore</option>
+                            <option value="(blank)">Blank only</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Outcomes Name Contains</label>
+                        <input id="bulk-filter-outcomes-name" type="text" class="border border-gray-300 rounded px-2 py-1 text-sm w-full" placeholder="e.g. Texas A&amp;M">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Current myWSU Name Contains</label>
+                        <input id="bulk-filter-wsu-name" type="text" class="border border-gray-300 rounded px-2 py-1 text-sm w-full" placeholder="e.g. University">
+                    </div>
+                    <div class="flex items-end">
+                        <label class="inline-flex items-center text-sm text-gray-700">
+                            <input id="bulk-apply-selected-only" type="checkbox" class="mr-2">
+                            Apply to selected rows only
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-6 gap-3 mb-3">
+                    <div>
                         <label class="block text-xs text-gray-600 mb-1">Apply Decision</label>
-                        <select id="bulk-apply-decision" class="border border-gray-300 rounded px-2 py-1 text-sm">
-                            <option value="">—</option>
+                        <select id="bulk-apply-decision" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
+                            <option value="">(no change)</option>
                             <option value="Keep As-Is">Keep As-Is</option>
                             <option value="Use Suggestion">Use Suggestion</option>
                             <option value="Allow One-to-Many">Allow One-to-Many</option>
@@ -709,22 +738,77 @@
                         </select>
                     </div>
                     <div>
+                        <label class="block text-xs text-gray-600 mb-1">Apply Reason Code</label>
+                        <select id="bulk-apply-reason-code" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
+                            <option value="">(no change)</option>
+                            <option value="Campus consolidation">Campus consolidation</option>
+                            <option value="Data steward approved">Data steward approved</option>
+                            <option value="Manual correction">Manual correction</option>
+                            <option value="Name match">Name match</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Apply Candidate ID</label>
+                        <select id="bulk-apply-candidate-id" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
+                            <option value="">(no change)</option>
+                            <option value="C1">C1</option>
+                            <option value="C2">C2</option>
+                            <option value="C3">C3</option>
+                            <option value="C4">C4</option>
+                            <option value="C5">C5</option>
+                        </select>
+                    </div>
+                    <div>
                         <label class="block text-xs text-gray-600 mb-1">Apply Manual Key</label>
-                        <input id="bulk-apply-manual-key" type="text" placeholder="Optional" class="border border-gray-300 rounded px-2 py-1 text-sm w-40">
+                        <input id="bulk-apply-manual-key" type="text" placeholder="Optional" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
                     </div>
                     <div class="flex items-end">
-                        <button id="bulk-apply-btn" class="bg-wsu-crimson hover:bg-red-800 text-white px-4 py-2 rounded text-sm font-medium">Apply to filtered</button>
+                        <button id="bulk-apply-btn" class="bg-wsu-crimson hover:bg-red-800 text-white px-4 py-2 rounded text-sm font-medium w-full">Apply</button>
+                    </div>
+                    <div class="flex items-end">
+                        <button id="bulk-clear-selected-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm font-medium w-full">Clear selected</button>
                     </div>
                 </div>
-                <div class="text-xs text-gray-500 mb-2"><span id="bulk-edit-row-count">0</span> rows in queue</div>
-                <div class="overflow-x-auto max-h-48 border border-gray-200 rounded bg-white">
-                    <table class="min-w-full text-sm">
+
+                <div class="flex flex-wrap items-center gap-3 text-xs text-gray-500 mb-2">
+                    <span><span id="bulk-edit-row-count">0</span> rows total</span>
+                    <span><span id="bulk-edit-filter-count">0</span> rows filtered</span>
+                    <span><span id="bulk-edit-selected-count">0</span> rows selected</span>
+                    <button id="bulk-select-filtered-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Select filtered</button>
+                    <button id="bulk-deselect-filtered-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Deselect filtered</button>
+                    <button id="bulk-save-session-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Save session</button>
+                    <label for="bulk-load-session-file" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium cursor-pointer">Load session</label>
+                    <input id="bulk-load-session-file" type="file" accept=".json" class="hidden">
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 text-xs text-gray-600 mb-2">
+                    <span class="font-medium">Quick family filters:</span>
+                    <button type="button" class="bulk-quick-chip bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium" data-outcomes-name="Texas A&amp;M">Texas A&amp;M</button>
+                    <button type="button" class="bulk-quick-chip bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium" data-outcomes-name="Troy University">Troy University</button>
+                    <button type="button" class="bulk-quick-chip bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium" data-outcomes-name="University of California">University of California</button>
+                    <button type="button" class="bulk-quick-chip bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium" data-outcomes-name="California State">California State</button>
+                    <button id="bulk-quick-clear-btn" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs font-medium border border-gray-300">Clear</button>
+                </div>
+
+                <div class="text-xs text-gray-500 mb-2">
+                    For performance, the grid renders up to 400 rows. Bulk actions still apply to all filtered rows.
+                </div>
+
+                <div class="overflow-x-auto max-h-96 border border-gray-200 rounded bg-white">
+                    <table class="text-sm" style="min-width: 1600px;">
                         <thead class="bg-gray-100 sticky top-0">
                             <tr>
-                                <th class="py-1 px-2 text-left">Error Type</th>
-                                <th class="py-1 px-2 text-left">Input</th>
-                                <th class="py-1 px-2 text-left">Output</th>
+                                <th class="py-1 px-2 text-left">Select</th>
+                                <th class="py-1 px-2 text-left">Error</th>
+                                <th class="py-1 px-2 text-left">Subtype</th>
+                                <th class="py-1 px-2 text-left">Outcomes (Name / State / Country)</th>
+                                <th class="py-1 px-2 text-left">Current myWSU (Name / State / Country)</th>
+                                <th class="py-1 px-2 text-left">Input Key</th>
+                                <th class="py-1 px-2 text-left">Output Key</th>
                                 <th class="py-1 px-2 text-left">Decision</th>
+                                <th class="py-1 px-2 text-left">Reason</th>
+                                <th class="py-1 px-2 text-left">Suggested myWSU</th>
                                 <th class="py-1 px-2 text-left">Manual Key</th>
                             </tr>
                         </thead>
@@ -732,7 +816,6 @@
                     </table>
                 </div>
             </div>
-
             <div class="text-center">
                 <button id="bulk-edit-toggle-btn" class="mr-2 mb-4 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm font-medium">Bulk edit before export</button>
                 <button id="download-btn" class="bg-wsu-crimson hover:bg-red-800 text-white px-8 py-3 rounded-lg text-lg font-semibold shadow-lg transition-colors inline-flex items-center">

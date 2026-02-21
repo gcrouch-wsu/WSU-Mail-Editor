@@ -2373,6 +2373,7 @@ async function buildValidationExport(payload) {
             const edited = preEditedMap.get(row.Review_Row_ID || '');
             if (!edited) return;
             if (edited.Decision !== undefined && edited.Decision !== null) row.Decision = edited.Decision;
+            if (edited.Selected_Candidate_ID !== undefined && edited.Selected_Candidate_ID !== null) row.Selected_Candidate_ID = edited.Selected_Candidate_ID;
             if (edited.Manual_Suggested_Key !== undefined && edited.Manual_Suggested_Key !== null) row.Manual_Suggested_Key = edited.Manual_Suggested_Key;
             if (edited.Reason_Code !== undefined && edited.Reason_Code !== null) row.Reason_Code = edited.Reason_Code;
         });

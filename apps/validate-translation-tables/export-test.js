@@ -1298,13 +1298,16 @@ async function run() {
         assert.ok(rid.length > 0, 'Row should have Review_Row_ID');
         const preEdited = queueResult.actionQueueRows.map(r => ({ ...r }));
         preEdited[0].Decision = 'Ignore';
+        preEdited[0].Selected_Candidate_ID = 'C3';
         preEdited[0].Manual_Suggested_Key = 'CUSTOM-KEY';
         const fullResult = await harness.buildValidationExport({ ...basePayload, preEditedActionQueueRows: preEdited });
         assertExportResult(fullResult);
         const reviewSheet = harness.getLastWorkbook().getWorksheet('Review_Workbench');
         const decisionCol = findHeaderIndex(reviewSheet, 'Decision');
+        const selectedCandidateCol = findHeaderIndex(reviewSheet, 'Selected Candidate ID');
         const manualCol = findHeaderIndex(reviewSheet, 'Manual Key (override when no candidates)');
         assert.equal(String(reviewSheet.getRow(2).getCell(decisionCol).value || ''), 'Ignore', 'Decision should be Ignore from preEdited');
+        assert.equal(String(reviewSheet.getRow(2).getCell(selectedCandidateCol).value || ''), 'C3', 'Selected_Candidate_ID should merge from preEdited');
         assert.equal(String(reviewSheet.getRow(2).getCell(manualCol).value || ''), 'CUSTOM-KEY', 'Manual_Suggested_Key should be CUSTOM-KEY from preEdited');
     });
 

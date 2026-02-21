@@ -99,7 +99,8 @@ For risky decisions, reviewers select a controlled `Reason_Code` (manual-key `Us
 
 - Inline C1/C2/C3 options in `Review_Workbench` include city/state/country and score
 - Manual key override (`Manual_Suggested_Key`) with valid-key checks
-- Optional pre-export bulk edit panel to apply Decision/manual key to filtered rows
+- Optional pre-export bulk edit panel with contextual rows, quick family chips, and bulk Decision/manual key actions on filtered rows
+- Review panel renders up to 400 rows for performance; bulk actions still apply to all filtered rows
 - `Translation_Key_Updates` serves as the primary "What changed" verification sheet
 - Optional re-import summary after export (`applied`, `conflicts`, `newRows`, `orphaned`)
 
