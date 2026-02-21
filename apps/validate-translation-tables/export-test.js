@@ -543,11 +543,133 @@ async function run() {
 
         const qaSheet = workbook.getWorksheet('QA_Checks_Validate');
         assert.ok(qaSheet, 'Expected QA_Checks_Validate worksheet');
-        const publishGateDetail = qaSheet.getRow(13).getCell(4).value;
+        const publishGateRow = [...Array(20)].map((_, i) => qaSheet.getRow(i + 1).getCell(1).value).findIndex(v => String(v || '').includes('Publish gate'));
+        assert.ok(publishGateRow >= 0, 'QA sheet should have Publish gate row');
+        const publishGateDetail = qaSheet.getRow(publishGateRow + 1).getCell(4).value;
         assert.ok(
             String(publishGateDetail || '').includes('Diagnostic tabs are hidden'),
             'QA publish gate detail should mention hidden diagnostic tabs'
         );
+    });
+
+    await runCheck('Fix A: Output_Not_Found_No_Replacement does not get weak fallback suggestions', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Output_Not_Found',
+                    _rawErrorType: 'Output_Not_Found',
+                    Error_Subtype: 'Output_Not_Found_No_Replacement',
+                    _rawErrorSubtype: 'Output_Not_Found_No_Replacement',
+                    translate_input: 'OUT-1',
+                    translate_output: 'WSU-STALE',
+                    outcomes_school: 'Alpha University',
+                    wsu_school: ''
+                }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            options: {
+                includeSuggestions: true,
+                nameCompareConfig: { enabled: true, outcomes: 'school', wsu: 'school', threshold: 0.5 }
+            },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'Alpha University' }],
+                    translate: [{ translate_input: 'OUT-1', translate_output: 'WSU-STALE' }],
+                    wsu_org: [
+                        { key: 'WSU-OTHER', school: 'Alpha University' }
+                    ]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        const suggestedKeyCol = findHeaderIndex(reviewSheet, 'Suggested Key');
+        assert.ok(suggestedKeyCol > 0, 'Review sheet should have Suggested Key column');
+        const suggestedKeyCell = reviewSheet.getRow(2).getCell(suggestedKeyCol).value;
+        const isFormula = suggestedKeyCell && typeof suggestedKeyCell === 'object' && suggestedKeyCell.formula;
+        assert.ok(!isFormula, 'NO_REPLACEMENT row should not have formula in Suggested_Key (would allow computed suggestion)');
+        const suggestedKeyVal = String(suggestedKeyCell?.result ?? suggestedKeyCell ?? '');
+        assert.equal(suggestedKeyVal, '', 'NO_REPLACEMENT row should not get fallback Suggested_Key from export');
+    });
+
+    await runCheck('Fix C: Manual_Suggested_Key column exists and effective key supports manual override', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Duplicate_Target',
+                    _rawErrorType: 'Duplicate_Target',
+                    translate_input: 'IN-1',
+                    translate_output: 'OUT-LEGACY',
+                    outcomes_school: 'Campus A',
+                    wsu_school: 'Legacy Org',
+                    _candidates: []
+                }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            options: { includeSuggestions: true },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-1', school: 'Campus A' }],
+                    translate: [{ translate_input: 'IN-1', translate_output: 'OUT-LEGACY' }],
+                    wsu_org: [
+                        { key: 'OUT-LEGACY', school: 'Legacy Org' },
+                        { key: 'OUT-PARENT', school: 'Parent Org' }
+                    ]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        const manualKeyCol = findHeaderIndex(reviewSheet, 'Manual Key (override when no candidates)');
+        assert.ok(manualKeyCol > 0, 'Review sheet should have Manual_Suggested_Key column');
+        const finalOutputCol = findHeaderIndex(reviewSheet, 'Final Translate Output');
+        assert.ok(finalOutputCol > 0, 'Review sheet should have Final_Output column');
+        const finalOutputCell = reviewSheet.getRow(2).getCell(finalOutputCol).value;
+        const formula = (finalOutputCell && finalOutputCell.formula) ? finalOutputCell.formula : '';
+        assert.ok(formula.includes('TRIM'), 'Final_Output formula should use TRIM for Manual_Suggested_Key effective key path');
+    });
+
+    await runCheck('Fix B: B12 exemption formula excludes Duplicate_Target+Keep As-Is from duplicate output check', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                { Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-A', translate_output: 'OUT-PARENT', outcomes_school: 'Campus A', wsu_school: 'Parent' },
+                { Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-B', translate_output: 'OUT-PARENT', outcomes_school: 'Campus B', wsu_school: 'Parent' }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-A', school: 'Campus A' }, { key: 'IN-B', school: 'Campus B' }],
+                    translate: [
+                        { translate_input: 'IN-A', translate_output: 'OUT-PARENT' },
+                        { translate_input: 'IN-B', translate_output: 'OUT-PARENT' }
+                    ],
+                    wsu_org: [{ key: 'OUT-PARENT', school: 'Parent' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const qaSheet = workbook.getWorksheet('QA_Checks_Validate');
+        const dupOutputRow = [...Array(15)].map((_, i) => qaSheet.getRow(i + 1).getCell(1).value).findIndex(v => String(v || '').includes('Duplicate final output'));
+        assert.ok(dupOutputRow >= 0, 'QA sheet should have Duplicate final output check');
+        const dupOutputFormula = qaSheet.getRow(dupOutputRow + 1).getCell(2).value;
+        const formulaStr = (dupOutputFormula && dupOutputFormula.formula) ? dupOutputFormula.formula : String(dupOutputFormula || '');
+        assert.ok(formulaStr.includes('One_to_Many') && formulaStr.includes('Duplicate_Target') && formulaStr.includes('Keep As-Is'),
+            'Duplicate output formula should exempt One_to_Many+Duplicate_Target+Keep As-Is');
     });
 
     await runCheck('buildValidationExport dedupes Input_Not_Found vs Missing_Mapping overlap', async () => {
@@ -878,15 +1000,17 @@ async function run() {
             'Use Suggestion',
             `Input_Not_Found Decision (got: ${JSON.stringify(inputNotFoundDecision)}); canonical pair (OUT-1, WSU-1)`
         );
+        // Duplicate_Source with suggestion=same-as-current: we no longer show that as Suggested_Key (avoids no-op confusion)
         assert.equal(
             duplicateSourceSuggestedKey,
-            'WSU-1',
-            `Duplicate_Source Suggested_Key (got: ${JSON.stringify(duplicateSourceSuggestedKey)}); canonical pair (${duplicateSourceSuggestedKey}, WSU-1) vs Input_Not_Found (OUT-1, WSU-1)`
+            '',
+            `Duplicate_Source Suggested_Key should be blank when suggestion equals current (got: ${JSON.stringify(duplicateSourceSuggestedKey)})`
         );
+        // One-to-Many rows default to Allow One-to-Many when no actionable suggestion (not Use Suggestion)
         assert.equal(
             duplicateSourceDecision,
-            'Use Suggestion',
-            `Duplicate_Source Decision (got: ${JSON.stringify(duplicateSourceDecision)}); canonical pair (${duplicateSourceSuggestedKey}, WSU-1)`
+            'Allow One-to-Many',
+            `Duplicate_Source Decision should be Allow One-to-Many when no actionable suggestion (got: ${JSON.stringify(duplicateSourceDecision)})`
         );
     });
 
@@ -995,6 +1119,269 @@ async function run() {
         assert.ok(keyUpdateSideCol > 0, 'Review sheet should have Update Side column');
         const keyUpdateSideValue = String(reviewSheet.getRow(2).getCell(keyUpdateSideCol).value || '');
         assert.equal(keyUpdateSideValue, 'Output', 'Duplicate_Target should have Key_Update_Side=Output');
+    });
+
+    await runCheck('P2.1: Duplicate_Target defaults to Keep As-Is when no actionable suggestion', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [
+                { Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-A', translate_output: 'OUT-PARENT', outcomes_school: 'Campus A', wsu_school: 'Parent', Suggested_Key: '', Suggestion_Score: '' },
+                { Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-B', translate_output: 'OUT-PARENT', outcomes_school: 'Campus B', wsu_school: 'Parent', Suggested_Key: '', Suggestion_Score: '' }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-A', school: 'Campus A' }, { key: 'IN-B', school: 'Campus B' }],
+                    translate: [
+                        { translate_input: 'IN-A', translate_output: 'OUT-PARENT' },
+                        { translate_input: 'IN-B', translate_output: 'OUT-PARENT' }
+                    ],
+                    wsu_org: [{ key: 'OUT-PARENT', school: 'Parent' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        const decisionCol = findHeaderIndex(reviewSheet, 'Decision');
+        assert.ok(decisionCol > 0, 'Review sheet should have Decision column');
+        const rowCount = reviewSheet.rowCount || 0;
+        for (let r = 2; r <= rowCount; r += 1) {
+            const decision = String(reviewSheet.getRow(r).getCell(decisionCol).value || '');
+            assert.equal(decision, 'Keep As-Is', `Duplicate_Target row ${r} should default to Keep As-Is when no suggestion (got: ${decision})`);
+        }
+    });
+
+    await runCheck('P2.2 re-import: prior decisions applied when Review_Row_ID matches', async () => {
+        const harness = createHarness();
+        const basePayload = {
+            validated: [
+                { Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-A', translate_output: 'OUT-PARENT', outcomes_key: 'IN-A', wsu_key: 'OUT-PARENT', outcomes_school: 'Campus A', wsu_school: 'Parent' }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-A', school: 'Campus A' }],
+                    translate: [{ translate_input: 'IN-A', translate_output: 'OUT-PARENT' }],
+                    wsu_org: [{ key: 'OUT-PARENT', school: 'Parent' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        };
+        const run1 = await harness.buildValidationExport(basePayload);
+        assertExportResult(run1);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        const reviewRowIdCol = findHeaderIndex(reviewSheet, 'Review Row ID');
+        assert.ok(reviewRowIdCol > 0, 'Review sheet should have Review Row ID column');
+        const reviewRowId = String(reviewSheet.getRow(2).getCell(reviewRowIdCol).value || '');
+        assert.ok(reviewRowId.length > 0, 'Review_Row_ID should be non-empty');
+        const priorDecisions = {
+            [reviewRowId]: { Decision: 'Ignore', Reason_Code: 'reimport-test' }
+        };
+        const run2 = await harness.buildValidationExport({ ...basePayload, priorDecisions });
+        assertExportResult(run2);
+        assert.ok(run2.reimportSummary, 'Result should include reimportSummary when priorDecisions used');
+        assert.equal(run2.reimportSummary.applied, 1, 'One decision should be applied');
+        assert.equal(run2.reimportSummary.conflicts, 0, 'No conflicts expected');
+        const reviewSheet2 = harness.getLastWorkbook().getWorksheet('Review_Workbench');
+        const decisionCol = findHeaderIndex(reviewSheet2, 'Decision');
+        const decisionValue = String(reviewSheet2.getRow(2).getCell(decisionCol).value || '');
+        assert.equal(decisionValue, 'Ignore', `Decision should be Ignore from prior (got: ${decisionValue})`);
+    });
+
+    await runCheck('P2.2 re-import: no priorDecisions yields no reimportSummary', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [{ Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-X', translate_output: 'OUT-Y', outcomes_key: 'IN-X', wsu_key: 'OUT-Y' }],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-X', school: 'X' }],
+                    translate: [{ translate_input: 'IN-X', translate_output: 'OUT-Y' }],
+                    wsu_org: [{ key: 'OUT-Y', school: 'Y' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        assert.equal(result.reimportSummary, undefined, 'reimportSummary should be absent when no priorDecisions');
+    });
+
+    await runCheck('P2.2 re-import: orphaned count when prior has extra IDs', async () => {
+        const harness = createHarness();
+        const payload = {
+            validated: [{ Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-A', translate_output: 'OUT-PARENT', outcomes_key: 'IN-A', wsu_key: 'OUT-PARENT' }],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-A', school: 'Campus A' }],
+                    translate: [{ translate_input: 'IN-A', translate_output: 'OUT-PARENT' }],
+                    wsu_org: [{ key: 'OUT-PARENT', school: 'Parent' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        };
+        const run1 = await harness.buildValidationExport(payload);
+        assertExportResult(run1);
+        const reviewSheet = harness.getLastWorkbook().getWorksheet('Review_Workbench');
+        const reviewRowIdCol = findHeaderIndex(reviewSheet, 'Review Row ID');
+        const reviewRowId = String(reviewSheet.getRow(2).getCell(reviewRowIdCol).value || '');
+        const priorDecisions = {
+            [reviewRowId]: { Decision: 'Keep As-Is' },
+            'NonExistent|ID|X|Y||||': { Decision: 'Ignore' }
+        };
+        const run2 = await harness.buildValidationExport({ ...payload, priorDecisions });
+        assertExportResult(run2);
+        assert.equal(run2.reimportSummary.applied, 1, 'One decision applied');
+        assert.equal(run2.reimportSummary.orphaned, 1, 'One orphaned (non-existent ID in prior)');
+    });
+
+    await runCheck('P1.2: Reason_Code column and risky-without-reason QA row exist', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [{ Error_Type: 'Allow One-to-Many', Source_Sheet: 'One_to_Many', translate_input: 'IN-X', translate_output: 'OUT-Y', outcomes_key: 'IN-X', wsu_key: 'OUT-Y' }],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-X', school: 'X' }],
+                    translate: [{ translate_input: 'IN-X', translate_output: 'OUT-Y' }],
+                    wsu_org: [{ key: 'OUT-Y', school: 'Y' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        const reasonCodeCol = findHeaderIndex(reviewSheet, 'Reason Code');
+        assert.ok(reasonCodeCol > 0, 'Review_Workbench should have Reason Code column');
+        const qaSheet = workbook.getWorksheet('QA_Checks_Validate');
+        const riskyRow = [...Array(20)].map((_, i) => qaSheet.getRow(i + 1).getCell(1).value).findIndex(v => String(v || '').includes('Risky decisions without reason code'));
+        assert.ok(riskyRow >= 0, 'QA sheet should have Risky decisions without reason code row');
+    });
+
+    await runCheck('P0.3: get_action_queue returns actionQueueRows; preEditedActionQueueRows merge into export', async () => {
+        const harness = createHarness();
+        const basePayload = {
+            validated: [
+                { Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-A', translate_output: 'OUT-P', outcomes_key: 'IN-A', wsu_key: 'OUT-P', outcomes_school: 'Campus A', wsu_school: 'Parent' }
+            ],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-A', school: 'Campus A' }],
+                    translate: [{ translate_input: 'IN-A', translate_output: 'OUT-P' }],
+                    wsu_org: [{ key: 'OUT-P', school: 'Parent' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        };
+        const queueResult = await harness.buildValidationExport({ ...basePayload, returnActionQueueOnly: true });
+        assert.ok(Array.isArray(queueResult.actionQueueRows), 'returnActionQueueOnly should return actionQueueRows');
+        assert.ok(queueResult.actionQueueRows.length >= 1, 'Should have at least one row');
+        const row = queueResult.actionQueueRows[0];
+        const rid = row.Review_Row_ID || '';
+        assert.ok(rid.length > 0, 'Row should have Review_Row_ID');
+        const preEdited = queueResult.actionQueueRows.map(r => ({ ...r }));
+        preEdited[0].Decision = 'Ignore';
+        preEdited[0].Manual_Suggested_Key = 'CUSTOM-KEY';
+        const fullResult = await harness.buildValidationExport({ ...basePayload, preEditedActionQueueRows: preEdited });
+        assertExportResult(fullResult);
+        const reviewSheet = harness.getLastWorkbook().getWorksheet('Review_Workbench');
+        const decisionCol = findHeaderIndex(reviewSheet, 'Decision');
+        const manualCol = findHeaderIndex(reviewSheet, 'Manual Key (override when no candidates)');
+        assert.equal(String(reviewSheet.getRow(2).getCell(decisionCol).value || ''), 'Ignore', 'Decision should be Ignore from preEdited');
+        assert.equal(String(reviewSheet.getRow(2).getCell(manualCol).value || ''), 'CUSTOM-KEY', 'Manual_Suggested_Key should be CUSTOM-KEY from preEdited');
+    });
+
+    await runCheck('P1.3: campus-family rules prefill Manual_Suggested_Key when pattern matches', async () => {
+        const harness = createHarness();
+        const payload = {
+            validated: [{
+                Error_Type: 'Duplicate_Target',
+                Source_Sheet: 'One_to_Many',
+                translate_input: 'IN-TAMU-CT',
+                translate_output: 'OUT-OLD',
+                outcomes_key: 'IN-TAMU-CT',
+                wsu_key: 'OUT-OLD',
+                outcomes_school: 'Texas A&M University - Central Texas'
+            }],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            options: {
+                nameCompareConfig: { outcomes: 'school', wsu: 'school', enabled: true },
+                campusFamilyRules: {
+                    version: 1,
+                    patterns: [{ pattern: 'Texas A&M*', parentKey: 'TAMU-MAIN', enabled: true }]
+                }
+            },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-TAMU-CT', school: 'Texas A&M University - Central Texas' }],
+                    translate: [{ translate_input: 'IN-TAMU-CT', translate_output: 'OUT-OLD' }],
+                    wsu_org: [
+                        { key: 'OUT-OLD', school: 'Old campus' },
+                        { key: 'TAMU-MAIN', school: 'Texas A&M University' }
+                    ]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        };
+        const result = await harness.buildValidationExport(payload);
+        assertExportResult(result);
+        const reviewSheet = harness.getLastWorkbook().getWorksheet('Review_Workbench');
+        const manualKeyCol = findHeaderIndex(reviewSheet, 'Manual Key (override when no candidates)');
+        assert.ok(manualKeyCol > 0, 'Review sheet should have Manual Key column');
+        const manualKeyValue = String(reviewSheet.getRow(2).getCell(manualKeyCol).value || '');
+        assert.equal(manualKeyValue, 'TAMU-MAIN', `Manual_Suggested_Key should be prefilled by campus-family (got: ${manualKeyValue})`);
+    });
+
+    await runCheck('P2.2 re-import: conflict when Use Suggestion key invalid', async () => {
+        const harness = createHarness();
+        const payload = {
+            validated: [{ Error_Type: 'Duplicate_Target', Source_Sheet: 'One_to_Many', translate_input: 'IN-A', translate_output: 'OUT-PARENT', outcomes_key: 'IN-A', wsu_key: 'OUT-PARENT' }],
+            selectedCols: { outcomes: ['school'], wsu_org: ['school'] },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-A', school: 'Campus A' }],
+                    translate: [{ translate_input: 'IN-A', translate_output: 'OUT-PARENT' }],
+                    wsu_org: [{ key: 'OUT-PARENT', school: 'Parent' }]
+                },
+                keyConfig: { outcomes: 'key', translateInput: 'translate_input', translateOutput: 'translate_output', wsu: 'key' },
+                keyLabels: { outcomes: 'key', wsu: 'key', translateInput: 'translate_input', translateOutput: 'translate_output' },
+                columnRoles: { outcomes: { school: 'School' }, wsu_org: { school: 'School' } }
+            }
+        };
+        const run1 = await harness.buildValidationExport(payload);
+        assertExportResult(run1);
+        const reviewSheet = harness.getLastWorkbook().getWorksheet('Review_Workbench');
+        const reviewRowIdCol = findHeaderIndex(reviewSheet, 'Review Row ID');
+        const reviewRowId = String(reviewSheet.getRow(2).getCell(reviewRowIdCol).value || '');
+        const priorDecisions = {
+            [reviewRowId]: { Decision: 'Use Suggestion', Manual_Suggested_Key: 'INVALID-KEY-NOT-IN-WSU' }
+        };
+        const run2 = await harness.buildValidationExport({ ...payload, priorDecisions });
+        assertExportResult(run2);
+        assert.equal(run2.reimportSummary.applied, 0, 'No decision applied (invalid key)');
+        assert.equal(run2.reimportSummary.conflicts, 1, 'One conflict (invalid key)');
+        const decisionCol = findHeaderIndex(harness.getLastWorkbook().getWorksheet('Review_Workbench'), 'Decision');
+        const decisionValue = String(harness.getLastWorkbook().getWorksheet('Review_Workbench').getRow(2).getCell(decisionCol).value || '');
+        assert.equal(decisionValue, 'Keep As-Is', 'Decision should remain default (Keep As-Is) when conflict');
     });
 
     await runCheck('buildGenerationExport includes create review guidance columns and instructions', async () => {

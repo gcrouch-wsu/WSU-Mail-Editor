@@ -54,6 +54,8 @@ It supports three workflows:
 - Translation table file (`translate_input` -> `translate_output`)
 - myWSU source file
 - User-selected key columns and optional role mappings (`School`, `City`, `State`, `Country`)
+- Optional prior Validate workbook for `Review_Row_ID`-based decision re-import
+- Optional campus-family JSON rules for parent-key prefills (for example, campus variants)
 
 ### Name matching (technical)
 
@@ -91,10 +93,19 @@ Technical notes:
 - `Ignore`
 
 `Use Suggestion` applies `Suggested_Key` according to `Update Side` (`Input`, `Output`, or `Both`).
+For risky decisions, reviewers select a controlled `Reason_Code` (manual-key `Use Suggestion`, `Allow One-to-Many`, and `Duplicate_Target + Keep As-Is`).
+
+### Validate reviewer tooling
+
+- Inline C1/C2/C3 options in `Review_Workbench` include city/state/country and score
+- Manual key override (`Manual_Suggested_Key`) with valid-key checks
+- Optional pre-export bulk edit panel to apply Decision/manual key to filtered rows
+- `Translation_Key_Updates` serves as the primary "What changed" verification sheet
+- Optional re-import summary after export (`applied`, `conflicts`, `newRows`, `orphaned`)
 
 ### QA publish gate
 
-`QA_Checks_Validate` enforces blocking checks for unresolved actions, invalid suggestion states, blank finals on publishable rows, formula-cap overflow, and duplicate final keys (excluding approved one-to-many exceptions).
+`QA_Checks_Validate` enforces blocking checks for unresolved actions, invalid suggestion states, blank finals on publishable rows, formula-cap overflow, no-op `Use Suggestion`, risky decisions without `Reason_Code`, and duplicate final keys/pairs (with a narrow many-to-one exemption on duplicate outputs).
 
 ### Key files
 

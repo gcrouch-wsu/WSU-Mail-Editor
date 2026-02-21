@@ -9,6 +9,9 @@ let fileObjects = {
     translate: null,
     wsu_org: null
 };
+let priorDecisions = null;
+let campusFamilyRules = null;
+let preEditedActionQueueRows = null;
 
 let loadedData = {
     outcomes: [],
@@ -123,6 +126,8 @@ function setRunLock(isLocked) {
 document.addEventListener('DOMContentLoaded', function() {
     setupModeSelector();
     setupFileUploads();
+    setupCampusFamilyUpload();
+    loadCampusFamilyBaseline();
     setupColumnSelection();
     setupValidateButton();
     setupGenerateButton();
@@ -132,6 +137,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupDebugToggle();
     setupDownloadButton();
     setupResetButton();
+    setupBulkEditPanel();
     setupNameCompareControls();
     setupShowAllErrorsToggle();
     setupMappingLogicPreviewToggle();
@@ -283,8 +289,16 @@ function updateModeUI() {
     const translateOutputGroup = document.getElementById('translate-output-group');
     const keyMatchFields = document.getElementById('key-match-fields');
 
+    const priorValidateCard = document.getElementById('prior-validate-card');
+    const campusFamilyCard = document.getElementById('campus-family-card');
     if (translateCard) {
         translateCard.classList.toggle('hidden', currentMode === 'create');
+    }
+    if (priorValidateCard) {
+        priorValidateCard.classList.toggle('hidden', currentMode !== 'validate');
+    }
+    if (campusFamilyCard) {
+        campusFamilyCard.classList.toggle('hidden', currentMode !== 'validate');
     }
     if (outcomesCard) {
         outcomesCard.classList.remove('hidden');
@@ -351,6 +365,88 @@ function getFileEncoding(fileKey) {
     return select ? select.value : 'auto';
 }
 
+function parsePriorValidateWorkbook(file) {
+    return new Promise((resolve, reject) => {
+        if (!file || !file.name || (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls'))) {
+            resolve(null);
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = typeof XLSX !== 'undefined' ? XLSX.read(data, { type: 'array' }) : null;
+                if (!workbook || !workbook.SheetNames) {
+                    resolve(null);
+                    return;
+                }
+                const sheetName = workbook.SheetNames.find(n => n === 'Review_Workbench');
+                if (!sheetName) {
+                    resolve(null);
+                    return;
+                }
+                const sheet = workbook.Sheets[sheetName];
+                if (!sheet) {
+                    resolve(null);
+                    return;
+                }
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+                if (!rows || rows.length < 2) {
+                    resolve({ priorDecisions: {}, rowCount: 0 });
+                    return;
+                }
+                const headers = rows[0].map(h => String(h || '').trim());
+                const findCol = (patterns) => {
+                    for (const p of patterns) {
+                        const i = headers.findIndex(h => {
+                            const str = String(h ?? '');
+                            return typeof p === 'string' ? str.toLowerCase().includes(p.toLowerCase()) : (p.test ? p.test(str) : false);
+                        });
+                        if (i >= 0) return i;
+                    }
+                    return -1;
+                };
+                const ridCol = findCol(['Review Row ID', /review\s*row\s*id/i]);
+                const decCol = findCol(['Decision', /^decision$/i]);
+                const manCol = findCol(['Manual Key', /manual.*key/i]);
+                const reasonCol = findCol(['Reason Code', /reason\s*code/i]);
+                const curInCol = findCol(['Current Translate Input', 'Current Input', /current.*input/i]);
+                const curOutCol = findCol(['Current Translate Output', 'Current Output', /current.*output/i]);
+                const sugCol = findCol(['Suggested Key', /suggested\s*key/i]);
+                if (ridCol < 0 || decCol < 0) {
+                    resolve(null);
+                    return;
+                }
+                const priorDecisionsObj = {};
+                for (let r = 1; r < rows.length; r += 1) {
+                    const row = rows[r] || [];
+                    const reviewRowId = String(row[ridCol] ?? '').trim();
+                    if (!reviewRowId) continue;
+                    const decision = String(row[decCol] ?? '').trim();
+                    const manualKey = manCol >= 0 ? String(row[manCol] ?? '').trim() : '';
+                    const reasonCode = reasonCol >= 0 ? String(row[reasonCol] ?? '').trim() : '';
+                    const currentInput = curInCol >= 0 ? String(row[curInCol] ?? '').trim() : '';
+                    const currentOutput = curOutCol >= 0 ? String(row[curOutCol] ?? '').trim() : '';
+                    const suggestedKey = sugCol >= 0 ? String(row[sugCol] ?? '').trim() : '';
+                    priorDecisionsObj[reviewRowId] = {
+                        Decision: decision,
+                        Manual_Suggested_Key: manualKey,
+                        Reason_Code: reasonCode,
+                        Current_Input: currentInput,
+                        Current_Output: currentOutput,
+                        Suggested_Key: suggestedKey
+                    };
+                }
+                resolve({ priorDecisions: priorDecisionsObj, rowCount: Object.keys(priorDecisionsObj).length });
+            } catch (err) {
+                reject(new Error(`Error parsing prior workbook: ${err.message}`));
+            }
+        };
+        reader.onerror = () => reject(new Error('Error reading prior workbook file'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
 function setupFileUploads() {
     const fileInputs = [
         { id: 'outcomes-file', key: 'outcomes' },
@@ -371,6 +467,96 @@ function setupFileUploads() {
                     await reparseFile(input.key);
                 }
             });
+        }
+    });
+
+    const priorFileInput = document.getElementById('prior-validate-file');
+    if (priorFileInput) {
+        priorFileInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            const statusDiv = document.getElementById('prior-validate-status');
+            const filenameSpan = document.getElementById('prior-validate-filename');
+            const rowsSpan = document.getElementById('prior-validate-rows');
+            if (!file) {
+                priorDecisions = null;
+                if (statusDiv) statusDiv.classList.add('hidden');
+                return;
+            }
+            try {
+                const parsed = await parsePriorValidateWorkbook(file);
+                if (parsed && parsed.priorDecisions && Object.keys(parsed.priorDecisions).length > 0) {
+                    priorDecisions = parsed.priorDecisions;
+                    if (filenameSpan) filenameSpan.textContent = file.name;
+                    if (rowsSpan) rowsSpan.textContent = `${parsed.rowCount} decisions to re-apply`;
+                    if (statusDiv) statusDiv.classList.remove('hidden');
+                } else if (parsed && parsed.priorDecisions) {
+                    priorDecisions = parsed.priorDecisions;
+                    if (filenameSpan) filenameSpan.textContent = file.name;
+                    if (rowsSpan) rowsSpan.textContent = 'No decisions in prior workbook';
+                    if (statusDiv) statusDiv.classList.remove('hidden');
+                } else {
+                    priorDecisions = null;
+                    if (statusDiv) statusDiv.classList.add('hidden');
+                    if (priorFileInput) priorFileInput.value = '';
+                    alert('Prior workbook has no Review_Workbench sheet or could not be parsed.');
+                }
+            } catch (err) {
+                priorDecisions = null;
+                if (statusDiv) statusDiv.classList.add('hidden');
+                if (priorFileInput) priorFileInput.value = '';
+                alert(`Error parsing prior workbook: ${err.message}`);
+            }
+        });
+    }
+}
+
+async function loadCampusFamilyBaseline() {
+    try {
+        const res = await fetch('campus-family-baseline.json');
+        if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.patterns) && data.patterns.length > 0) {
+                campusFamilyRules = data;
+            }
+        }
+    } catch (_) {
+        campusFamilyRules = null;
+    }
+}
+
+function setupCampusFamilyUpload() {
+    const fileInput = document.getElementById('campus-family-file');
+    const statusDiv = document.getElementById('campus-family-status');
+    const filenameSpan = document.getElementById('campus-family-filename');
+    const rowsSpan = document.getElementById('campus-family-rows');
+    if (!fileInput) return;
+    fileInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) {
+            campusFamilyRules = null;
+            if (statusDiv) statusDiv.classList.add('hidden');
+            await loadCampusFamilyBaseline();
+            return;
+        }
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            if (data && Array.isArray(data.patterns)) {
+                campusFamilyRules = data;
+                if (filenameSpan) filenameSpan.textContent = file.name;
+                if (rowsSpan) rowsSpan.textContent = `${data.patterns.length} pattern(s)`;
+                if (statusDiv) statusDiv.classList.remove('hidden');
+            } else {
+                campusFamilyRules = null;
+                if (statusDiv) statusDiv.classList.add('hidden');
+                fileInput.value = '';
+                alert('Campus-family file must have a "patterns" array.');
+            }
+        } catch (err) {
+            campusFamilyRules = null;
+            if (statusDiv) statusDiv.classList.add('hidden');
+            fileInput.value = '';
+            alert(`Error parsing campus-family JSON: ${err.message}`);
         }
     });
 }
@@ -1277,6 +1463,11 @@ async function runValidation() {
             alert('Switch to Validate mode to run validation.');
             return;
         }
+        // Clear pre-export bulk edits so a new validation run cannot reuse stale queue state.
+        actionQueueRowsCache = null;
+        preEditedActionQueueRows = null;
+        const bulkPanel = document.getElementById('bulk-edit-panel');
+        if (bulkPanel) bulkPanel.classList.add('hidden');
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('results').classList.add('hidden');
         document.getElementById('loading-message').textContent = 'Analyzing mappings...';
@@ -2200,7 +2391,7 @@ function setupDownloadButton() {
             const showMappingLogic = Boolean(
                 document.getElementById('show-mapping-logic')?.checked
             );
-            await createExcelOutput(
+            const result = await createExcelOutput(
                 validatedData,
                 missingData,
                 selectedColumns,
@@ -2208,6 +2399,9 @@ function setupDownloadButton() {
                     includeSuggestions,
                     showMappingLogic,
                     nameCompareConfig: lastNameCompareConfig,
+                    priorDecisions: priorDecisions || undefined,
+                    campusFamilyRules: campusFamilyRules || undefined,
+                    preEditedActionQueueRows: preEditedActionQueueRows || undefined,
                     onProgress: (stage, percent) => {
                         if (progressText && progressBar) {
                             progressText.textContent = stage;
@@ -2225,7 +2419,11 @@ function setupDownloadButton() {
                 Download Full Report
             `;
             if (progressWrap && progressText && progressBar) {
-                progressText.textContent = 'Download ready.';
+                const s = result?.reimportSummary;
+                const summary = s
+                    ? `Re-import: ${s.applied ?? 0} applied, ${s.conflicts ?? 0} conflicts, ${s.newRows ?? 0} new rows, ${s.orphaned ?? 0} orphaned.`
+                    : 'Download ready.';
+                progressText.textContent = summary;
                 progressBar.style.width = '100%';
                 setTimeout(() => {
                     progressWrap.classList.add('hidden');
@@ -2258,24 +2456,28 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     const onProgressCb = typeof options.onProgress === 'function'
         ? options.onProgress
         : null;
+    const payload = {
+        validated,
+        missing,
+        selectedCols,
+        priorDecisions: options.priorDecisions || null,
+        options: {
+            includeSuggestions: Boolean(options.includeSuggestions),
+            showMappingLogic: Boolean(options.showMappingLogic),
+            nameCompareConfig: options.nameCompareConfig || {},
+            campusFamilyRules: options.campusFamilyRules || null
+        },
+        preEditedActionQueueRows: options.preEditedActionQueueRows || null,
+        context: {
+            loadedData,
+            columnRoles,
+            keyConfig,
+            keyLabels
+        }
+    };
     const result = await runExportWorkerTask(
         'build_validation_export',
-        {
-            validated,
-            missing,
-            selectedCols,
-            options: {
-                includeSuggestions: Boolean(options.includeSuggestions),
-                showMappingLogic: Boolean(options.showMappingLogic),
-                nameCompareConfig: options.nameCompareConfig || {}
-            },
-            context: {
-                loadedData,
-                columnRoles,
-                keyConfig,
-                keyLabels
-            }
-        },
+        payload,
         (stage, processed, total) => {
             if (!onProgressCb) return;
             const percent = total ? Math.round((processed / total) * 100) : 0;
@@ -2283,7 +2485,87 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         }
     );
     downloadArrayBuffer(result.buffer, result.filename || 'WSU_Mapping_Validation_Report.xlsx');
-    return;
+    return result;
+}
+
+let actionQueueRowsCache = null;
+
+function setupBulkEditPanel() {
+    const toggleBtn = document.getElementById('bulk-edit-toggle-btn');
+    const panel = document.getElementById('bulk-edit-panel');
+    const filterSelect = document.getElementById('bulk-filter-error-type');
+    const applyDecisionSelect = document.getElementById('bulk-apply-decision');
+    const applyManualInput = document.getElementById('bulk-apply-manual-key');
+    const applyBtn = document.getElementById('bulk-apply-btn');
+    const tbody = document.getElementById('bulk-edit-tbody');
+    const rowCountEl = document.getElementById('bulk-edit-row-count');
+    if (!toggleBtn || !panel) return;
+    toggleBtn.addEventListener('click', async function() {
+        panel.classList.toggle('hidden');
+        if (!panel.classList.contains('hidden') && !actionQueueRowsCache) {
+            try {
+                toggleBtn.disabled = true;
+                toggleBtn.textContent = 'Loading...';
+                const payload = {
+                    validated: validatedData,
+                    missing: missingData,
+                    selectedCols: selectedColumns,
+                    priorDecisions: priorDecisions || null,
+                    options: {
+                        includeSuggestions: Boolean(document.getElementById('include-suggestions')?.checked),
+                        showMappingLogic: Boolean(document.getElementById('show-mapping-logic')?.checked),
+                        nameCompareConfig: lastNameCompareConfig,
+                        campusFamilyRules: campusFamilyRules || null
+                    },
+                    context: { loadedData, columnRoles, keyConfig, keyLabels }
+                };
+                const result = await runExportWorkerTask('get_action_queue', payload);
+                actionQueueRowsCache = result?.actionQueueRows || [];
+                preEditedActionQueueRows = [...actionQueueRowsCache];
+                renderBulkEditTable();
+                const types = [...new Set(actionQueueRowsCache.map(r => r.Error_Type || '').filter(Boolean))].sort();
+                filterSelect.innerHTML = '<option value="">All</option>' + types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+                if (rowCountEl) rowCountEl.textContent = actionQueueRowsCache.length;
+            } catch (err) {
+                alert(`Error loading action queue: ${err.message}`);
+            } finally {
+                toggleBtn.disabled = false;
+                toggleBtn.textContent = 'Bulk edit before export';
+            }
+        } else if (!panel.classList.contains('hidden')) {
+            renderBulkEditTable();
+        }
+    });
+    function renderBulkEditTable() {
+        const filter = filterSelect?.value || '';
+        const rows = (preEditedActionQueueRows || actionQueueRowsCache || []).filter(r => !filter || (r.Error_Type || '') === filter);
+        if (!tbody) return;
+        tbody.innerHTML = rows.slice(0, 100).map(r => `
+            <tr class="border-b">
+                <td class="py-1 px-2">${escapeHtml(r.Error_Type || '')}</td>
+                <td class="py-1 px-2">${escapeHtml(r.translate_input || '')}</td>
+                <td class="py-1 px-2">${escapeHtml(r.translate_output || '')}</td>
+                <td class="py-1 px-2">${escapeHtml(r.Decision || '')}</td>
+                <td class="py-1 px-2">${escapeHtml(r.Manual_Suggested_Key || '')}</td>
+            </tr>
+        `).join('');
+        if (rows.length > 100) tbody.innerHTML += `<tr><td colspan="5" class="py-1 px-2 text-gray-500 text-xs">... and ${rows.length - 100} more</td></tr>`;
+    }
+    filterSelect?.addEventListener('change', renderBulkEditTable);
+    applyBtn?.addEventListener('click', function() {
+        const filter = filterSelect?.value || '';
+        const decision = applyDecisionSelect?.value || '';
+        const manualKey = (applyManualInput?.value || '').trim();
+        if (!decision && !manualKey) return;
+        const rows = preEditedActionQueueRows || actionQueueRowsCache || [];
+        const toUpdate = filter ? rows.filter(r => (r.Error_Type || '') === filter) : rows;
+        toUpdate.forEach(r => {
+            if (decision) r.Decision = decision;
+            if (manualKey) r.Manual_Suggested_Key = manualKey;
+        });
+        preEditedActionQueueRows = rows;
+        renderBulkEditTable();
+    });
 }
 
 function setupResetButton() {

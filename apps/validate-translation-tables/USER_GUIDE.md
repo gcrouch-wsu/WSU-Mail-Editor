@@ -34,11 +34,13 @@ Use this when you already have a translation table and want to correct it.
 - Outcomes source file
 - Translate table file
 - myWSU source file
+- **Optional:** Prior Validate workbook (Excel from a previous Validate run) - to re-apply your decisions and resume a prior session
+- **Optional:** Campus-family JSON rules file - to prefill parent keys for campus variants (for example, Texas A&M* -> TAMU-MAIN)
 
 ### Steps in the app
 
 1. Select `Validate`.
-2. Upload all 3 files.
+2. Upload all 3 required files. Optionally upload a **Prior Validate workbook** to re-apply decisions from a previous run (works best when source data is unchanged). Optionally upload a **Campus-family JSON** file to prefill parent keys.
 3. In `Select Columns, Keys, and Roles`:
    - Pick key columns for Outcomes, Translate input/output, and myWSU.
    - Pick included columns.
@@ -49,7 +51,8 @@ Use this when you already have a translation table and want to correct it.
 5. If using name comparison, pick name columns and adjust threshold/ambiguity gap.
 6. Click `Validate Mappings`.
 7. Review on-screen cards and counts.
-8. Click `Download Full Report`.
+8. Optional: click `Bulk edit before export` to apply `Decision` and/or `Manual_Suggested_Key` to filtered rows in one step.
+9. Click `Download Full Report`.
 
 **Note:** The Validate Excel file requires **Excel 365 or 2021+** to display the Final_Translation_Table correctly. Excel 2016/2019 may show errors for the compact table.
 
@@ -66,9 +69,9 @@ The downloaded Excel file includes:
 
 Recommended order:
 
-1. `Review_Workbench` - main decision sheet (use this first). Sortable and filterable.
+1. `Review_Workbench` - main decision sheet (use this first). Sortable and filterable. When a row has multiple suggestions (C1, C2, C3), the **C1**, **C2**, **C3** columns show each option inline (Key: Name - City, State, Country | Score). Compare them on the same row, then enter C1, C2, or C3 in **Selected Candidate ID** to pick the best match. No need to switch sheets.
 2. `Final_Translation_Table` - final publish-ready key table (auto-matched + your approved decisions).
-3. `Translation_Key_Updates` - only changed key pairs.
+3. `Translation_Key_Updates` - **What changed** verification sheet: only key pairs that differ from current. Use this to quickly verify all changes before publish.
 4. `QA_Checks_Validate` - publish gate checks.
 
 Hidden by default (diagnostic/internal):
@@ -81,8 +84,12 @@ Hidden by default (diagnostic/internal):
 - `High_Confidence_Matches`
 - `Valid_Mappings`
 - `Action_Queue`
+- `Candidate_Pool`
+- `Candidate_Reference`
 - `Approved_Mappings`
 - `Final_Staging`
+
+**To unhide Candidate_Pool or Candidate_Reference:** Right-click the tab bar at the bottom of Excel, choose **Unhide**, then select the sheet you need. These sheets support the C1/C2/C3 candidate lookup; unhide them only when you need to inspect candidate details.
 
 ### How `Review_Workbench` works
 
@@ -90,7 +97,7 @@ Hidden by default (diagnostic/internal):
 
 - Outcomes and myWSU name/key context
 - Source location columns when selected: Outcomes State, Outcomes Country; myWSU City, myWSU State, myWSU Country (blanks in source appear as blank)
-- Current translate keys and suggested key/school/city/state/country (verify suggested location before applying Use Suggestion)
+- Current translate keys and suggested key/school/city/state/country (verify suggested location before applying Use Suggestion). When the best suggestion equals the current value, Suggested_Key is left blank to avoid confusion—use Manual_Suggested_Key or Keep As-Is instead.
 - `Decision` (editable dropdown) - **this determines whether the row is copied to the Final_Translation_Table**
 - Formula outputs: `Final_Input`, `Final_Output`, `Publish_Eligible`, `Decision_Warning` (these show whether the row is ready to publish)
 
@@ -104,10 +111,14 @@ Each decision determines whether the row is included in the Final_Translation_Ta
 
 | Decision | Effect |
 |----------|--------|
-| **Keep As-Is** | Row is copied to Final_Translation_Table with current keys. No changes. |
-| **Use Suggestion** | Row is copied to Final_Translation_Table with `Suggested_Key` applied on the side shown by Update Side. Verify Suggested Key, School, City, State, Country before applying. |
-| **Allow One-to-Many** | Row is copied to Final_Translation_Table as an intentional one-to-many exception. |
+| **Keep As-Is** | Row is copied to Final_Translation_Table with current keys. No changes. The row still participates in duplicate-key QA checks—if it creates a duplicate final key with another row (that is not Allow One-to-Many), QA will fail. |
+| **Use Suggestion** | Row is copied to Final_Translation_Table with the effective suggestion key applied on the side shown by Update Side. The effective key is `Manual_Suggested_Key` if you enter one, otherwise `Suggested_Key` from candidate selection. Verify the key and context before applying. |
+| **Allow One-to-Many** | Row is copied to Final_Translation_Table as an intentional one-to-many or many-to-one exception. The row is **excluded** from duplicate-key QA checks—use this when you deliberately want multiple rows with the same final key (e.g., several campus keys mapping to one parent org). |
 | **Ignore** | Row is **not** copied to Final_Translation_Table. Kept unresolved for later review. |
+
+**When to choose Keep As-Is vs Allow One-to-Many for duplicate rows:** Use **Keep As-Is** when the row is correct and does not create a duplicate. Use **Allow One-to-Many** when the row is correct *and* you are intentionally approving a duplicate key (one-to-many or many-to-one mapping).
+
+**Intentional many-to-one (Duplicate_Target + Keep As-Is):** When multiple Outcomes campus keys map to one myWSU parent key (e.g., Texas A&M campuses → Texas A&M main), you can use **Keep As-Is** on each Duplicate_Target row. The duplicate output QA check (B14) exempts rows where Source_Sheet=One_to_Many, Error_Type=Duplicate_Target, and Decision=Keep As-Is. Duplicate input (B13) and duplicate pair (B15) checks still block as usual.
 
 ### How to edit rows to get a clean final table
 
@@ -115,15 +126,32 @@ Each decision determines whether the row is included in the Final_Translation_Ta
 2. Work top to bottom, or filter to rows where `Decision` is blank.
 3. For each row, choose one Decision from the table above.
 4. If you choose `Use Suggestion`, confirm:
-   - `Suggested_Key` is filled.
+   - Either `Suggested_Key` is filled (from candidate selection), or you enter a valid key in **Manual_Suggested_Key**.
    - `Update Side` is `Input`, `Output`, or `Both` (not `None`).
+   - For risky decisions, select a **Reason Code**:
+     - `Use Suggestion` with manual key
+     - `Allow One-to-Many`
+     - `Keep As-Is` on `Duplicate_Target` rows (`Source_Sheet=One_to_Many`)
 5. Check the same row:
    - `Decision_Warning` should be blank.
    - `Final_Input` and `Final_Output` should be filled for rows you want to publish.
 6. Verify outputs:
    - `Final_Translation_Table` shows approved rows.
-   - `Translation_Key_Updates` shows only changed keys.
+   - `Translation_Key_Updates` (What changed) shows only changed keys—use this to verify all updates before publish.
    - `QA_Checks_Validate` has no blocking checks.
+
+### Manual override when candidates are blank or unusable
+
+When Outcomes has many campuses but myWSU has only one parent key, the candidate list may be blank or unusable. You can still resolve the row:
+
+1. Enter the correct myWSU key in **Manual_Suggested_Key** (must exist in the myWSU key list).
+2. Set **Update Side** to `Output` (or `Both` if updating both sides).
+3. Choose **Use Suggestion**.
+4. Ensure `Decision_Warning` is blank. If you see "Invalid manual key: not found in valid keys", the key is not in the valid myWSU keys—correct it or use a different key.
+
+### Resuming a prior session (re-import)
+
+If you upload a **Prior Validate workbook** (Excel from a previous Validate run), the app will re-apply your prior decisions where `Review_Row_ID` matches. After download, the progress area shows: *Re-import: X applied, Y conflicts, Z new rows, W orphaned.* Conflicts occur when a prior "Use Suggestion" key is no longer valid in the new context. New rows are rows in the current run with no prior decision; orphaned rows are prior decisions for rows no longer in the current run.
 
 ### What happens automatically
 
@@ -131,7 +159,7 @@ Each decision determines whether the row is included in the Final_Translation_Ta
 - For rows that need review, **default decisions** are pre-populated when the best choice is obvious (for example, Name_Mismatch with good score -> Keep As-Is; Output_Not_Found with no replacement -> Ignore). You can still change any decision.
 - `Final_Translation_Table` = auto-matched rows + rows where your Review_Workbench decision is Keep As-Is, Use Suggestion, or Allow One-to-Many (not Ignore).
 - Columns: Review Row ID, your selected Outcomes columns, Translate Input, Translate Output, your selected myWSU columns.
-- `Translation_Key_Updates` shows only rows where final keys differ from current keys.
+- `Translation_Key_Updates` (What changed) shows only rows where final keys differ from current keys—your primary verification sheet before publish.
 
 ### Final step before updating Outcomes Translation Table
 
@@ -153,9 +181,16 @@ Gate-blocking checks include:
 - unresolved actions
 - overflow beyond formula capacity
 - blank finals on publish-eligible rows
-- `Use Suggestion` without `Suggested_Key`
+- `Use Suggestion` without effective key (needs Manual_Suggested_Key or Selected_Candidate_ID + Suggested_Key)
 - `Use Suggestion` with invalid Update Side
-- duplicate final keys excluding rows intentionally approved as `Allow One-to-Many`
+- `Use Suggestion` with invalid manual key (key not in valid myWSU/Outcomes keys)
+- `Use Suggestion` no-op (effective key equals current value; no change)
+- risky decisions without reason code (B10)
+- duplicate final input keys (B13)
+- duplicate final output keys (B14), excluding Allow One-to-Many and intentional Duplicate_Target+Keep As-Is
+- duplicate (input, output) pairs (B15)
+
+**Duplicate input (B13) and duplicate pair (B15) checks still block**—only the duplicate output check (B14) has the narrow exemption for intentional many-to-one.
 
 ## Workflow 2: Create a new translation table
 

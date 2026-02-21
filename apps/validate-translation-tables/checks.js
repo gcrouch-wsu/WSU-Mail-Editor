@@ -226,18 +226,21 @@ runCheck('filterOutputNotFoundBySubtype uses raw subtype', () => {
 
 runCheck('getQAValidateRowsForEmptyQueue returns valid structure', () => {
     const rows = helpers.getQAValidateRowsForEmptyQueue();
-    assert.equal(rows.length, 13, 'Header + 12 check rows matching non-empty QA layout');
+    assert.equal(rows.length, 16, 'Header + 15 check rows matching non-empty QA layout');
     assert.equal(rows[0][0], 'Check');
     assert.equal(rows[1][1], 0);
     assert.equal(rows[1][2], 'PASS');
     assert.equal(rows[1][3], 'Blank or Ignore');
     assert.equal(rows[2][2], 'PASS', 'Approved review rows status should be PASS when empty');
     assert.equal(rows[6][0], 'Use Suggestion with invalid Update Side');
-    assert.equal(rows[7][0], 'Stale-key rows lacking decision');
-    assert.equal(rows[11][0], 'Duplicate (input, output) pairs in Final_Translation_Table');
-    assert.equal(rows[12][0], 'Publish gate');
-    assert.equal(rows[12][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
-    assert.equal(rows[12][2], '', 'Empty-queue publish gate Status column C empty to match non-empty');
+    assert.equal(rows[7][0], 'Use Suggestion with invalid manual key');
+    assert.equal(rows[8][0], 'Use Suggestion no-op (key equals current value)');
+    assert.equal(rows[9][0], 'Risky decisions without reason code');
+    assert.equal(rows[10][0], 'Stale-key rows lacking decision');
+    assert.equal(rows[14][0], 'Duplicate (input, output) pairs in Final_Translation_Table');
+    assert.equal(rows[15][0], 'Publish gate');
+    assert.equal(rows[15][1], 'PASS', 'Empty-queue publish gate result in column B to match non-empty layout');
+    assert.equal(rows[15][2], '', 'Empty-queue publish gate Status column C empty to match non-empty');
 });
 
 runCheck('export-worker: Input_Not_Found uses reverse name suggestion from myWSU', () => {
@@ -288,8 +291,12 @@ runCheck('export-worker: Validate publish gate checks exist', () => {
     assert.ok(exportWorkerCode.includes('B5=0'));
     assert.ok(exportWorkerCode.includes('B6=0'));
     assert.ok(exportWorkerCode.includes('B7=0'));
-    assert.ok(exportWorkerCode.includes('B10=0'));
-    assert.ok(exportWorkerCode.includes('B11=0'));
+    assert.ok(exportWorkerCode.includes('B8=0'));
+    assert.ok(exportWorkerCode.includes('B9=0'), 'Publish gate should include no-op check B9');
+    assert.ok(exportWorkerCode.includes('B10=0'), 'Publish gate should include risky-without-reason B10');
+    assert.ok(exportWorkerCode.includes('B13=0'), 'Publish gate should include duplicate input B13');
+    assert.ok(exportWorkerCode.includes('B14=0'), 'Publish gate should include duplicate output B14');
+    assert.ok(exportWorkerCode.includes('B15=0'), 'Publish gate should include duplicate pairs B15');
     assert.ok(exportWorkerCode.includes('"PASS","HOLD"'));
     assert.ok(exportWorkerCode.includes('Diagnostic tabs are hidden'));
 });
@@ -308,10 +315,11 @@ runCheck('export-worker: Review workbook exposes explicit current/final key colu
 
 runCheck('export-worker: Human review safeguards exist', () => {
     assert.ok(exportWorkerCode.includes('Decision_Warning'));
-    assert.ok(exportWorkerCode.includes('Use Suggestion without Suggested_Key'));
+    assert.ok(exportWorkerCode.includes('Use Suggestion without effective key'));
     assert.ok(exportWorkerCode.includes('Use Suggestion needs'));
     assert.ok(exportWorkerCode.includes('valid Update Side'));
     assert.ok(exportWorkerCode.includes('Use Suggestion with invalid Update Side'));
+    assert.ok(exportWorkerCode.includes('Use Suggestion with invalid manual key'));
     assert.ok(exportWorkerCode.includes('Approved but blank final'));
 });
 

@@ -994,6 +994,9 @@ function classifyMissingOutputReplacement(
         if (sourceCountry && targetCountry && !countriesMatch(sourceCountry, targetCountry)) {
             return;
         }
+        if (!sourceCountry && targetCountry) {
+            return;
+        }
 
         if (
             hasComparableStateValues(sourceState, targetState) &&

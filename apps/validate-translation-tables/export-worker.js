@@ -932,7 +932,7 @@ async function buildGenerationExport(payload) {
 }
 
 async function buildValidationExport(payload) {
-    const { validated = [], selectedCols = {}, options = {}, context = {} } = payload || {};
+    const { validated = [], selectedCols = {}, options = {}, context = {}, priorDecisions: priorDecisionsPayload = null, preEditedActionQueueRows = null, returnActionQueueOnly = false } = payload || {};
     const workbook = new ExcelJS.Workbook();
     workbook.calcProperties = {
         ...(workbook.calcProperties || {}),
@@ -941,6 +941,7 @@ async function buildValidationExport(payload) {
     const includeSuggestions = Boolean(options.includeSuggestions);
     const showMappingLogic = Boolean(options.showMappingLogic);
     const nameCompareConfig = options.nameCompareConfig || {};
+    const campusFamilyRules = options.campusFamilyRules || null;
     const loadedData = context.loadedData || { outcomes: [], translate: [], wsu_org: [] };
     const columnRoles = context.columnRoles || { outcomes: {}, wsu_org: {} };
     const keyConfig = context.keyConfig || {};
@@ -1218,24 +1219,25 @@ async function buildValidationExport(payload) {
             wsuNameTokenIndex,
             suggestionIDFTable
         );
-        const scanCandidates = blockedIndices
+        let scanCandidates = blockedIndices
             ? blockedIndices.map(idx => wsuNameCandidates[idx]).filter(Boolean)
             : wsuNameCandidates;
         if (!blockedIndices) {
             suggestionBlockStats.forwardFallbacks += 1;
         }
-        scanCandidates.forEach(candidate => {
-            if (typeof countriesMatch === 'function' && sourceCountry && candidate.country && !countriesMatch(sourceCountry, candidate.country)) {
-                return;
-            }
+        const rejectByLocation = (c) => {
+            if (typeof countriesMatch === 'function' && sourceCountry && c.country && !countriesMatch(sourceCountry, c.country)) return true;
+            if (!sourceCountry && c.country) return true;
             if (typeof hasComparableStateValues === 'function' && typeof countriesMatch === 'function' && typeof statesMatch === 'function' &&
-                hasComparableStateValues(sourceState, candidate.state) &&
-                sourceCountry && candidate.country &&
-                countriesMatch(sourceCountry, candidate.country) &&
-                !statesMatch(sourceState, candidate.state)
-            ) {
-                return;
-            }
+                hasComparableStateValues(sourceState, c.state) &&
+                sourceCountry && c.country &&
+                countriesMatch(sourceCountry, c.country) &&
+                !statesMatch(sourceState, c.state)
+            ) return true;
+            return false;
+        };
+        scanCandidates.forEach(candidate => {
+            if (rejectByLocation(candidate)) return;
             const score = typeof calculateNameSimilarity === 'function'
                 ? calculateNameSimilarity(outcomesName, candidate.name, suggestionIDFTable)
                 : similarityScore(normalizeValue(outcomesName), candidate.normName);
@@ -1251,6 +1253,27 @@ async function buildValidationExport(payload) {
                 });
             }
         });
+        if (!candidates.length && blockedIndices) {
+            suggestionBlockStats.forwardFallbacks += 1;
+            scanCandidates = wsuNameCandidates;
+            scanCandidates.forEach(candidate => {
+                if (rejectByLocation(candidate)) return;
+                const score = typeof calculateNameSimilarity === 'function'
+                    ? calculateNameSimilarity(outcomesName, candidate.name, suggestionIDFTable)
+                    : similarityScore(normalizeValue(outcomesName), candidate.normName);
+                if (score >= MIN_NAME_SUGGESTION_DISPLAY_SCORE) {
+                    candidates.push({
+                        row: candidate.row,
+                        key: candidate.key,
+                        name: candidate.name,
+                        city: candidate.city,
+                        state: candidate.state,
+                        country: candidate.country,
+                        score
+                    });
+                }
+            });
+        }
         if (!candidates.length) return [];
         candidates.sort((a, b) => b.score - a.score);
         return candidates.slice(0, topN);
@@ -1263,29 +1286,30 @@ async function buildValidationExport(payload) {
         if (!canSuggestNames || !wsuName) return [];
         const candidates = [];
         suggestionBlockStats.reverseQueries += 1;
+        const rejectByLocationRev = (c) => {
+            if (typeof countriesMatch === 'function' && sourceCountry && c.country && !countriesMatch(sourceCountry, c.country)) return true;
+            if (!sourceCountry && c.country) return true;
+            if (typeof hasComparableStateValues === 'function' && typeof countriesMatch === 'function' && typeof statesMatch === 'function' &&
+                hasComparableStateValues(sourceState, c.state) &&
+                sourceCountry && c.country &&
+                countriesMatch(sourceCountry, c.country) &&
+                !statesMatch(sourceState, c.state)
+            ) return true;
+            return false;
+        };
         const blockedIndices = getBlockedCandidateIndices(
             wsuName,
             outcomesNameTokenIndex,
             suggestionIDFTable
         );
-        const scanCandidates = blockedIndices
+        let scanCandidates = blockedIndices
             ? blockedIndices.map(idx => outcomesNameCandidates[idx]).filter(Boolean)
             : outcomesNameCandidates;
         if (!blockedIndices) {
             suggestionBlockStats.reverseFallbacks += 1;
         }
         scanCandidates.forEach(candidate => {
-            if (typeof countriesMatch === 'function' && sourceCountry && candidate.country && !countriesMatch(sourceCountry, candidate.country)) {
-                return;
-            }
-            if (typeof hasComparableStateValues === 'function' && typeof countriesMatch === 'function' && typeof statesMatch === 'function' &&
-                hasComparableStateValues(sourceState, candidate.state) &&
-                sourceCountry && candidate.country &&
-                countriesMatch(sourceCountry, candidate.country) &&
-                !statesMatch(sourceState, candidate.state)
-            ) {
-                return;
-            }
+            if (rejectByLocationRev(candidate)) return;
             const score = typeof calculateNameSimilarity === 'function'
                 ? calculateNameSimilarity(wsuName, candidate.name, suggestionIDFTable)
                 : similarityScore(normalizeValue(wsuName), candidate.normName);
@@ -1301,6 +1325,27 @@ async function buildValidationExport(payload) {
                 });
             }
         });
+        if (!candidates.length && blockedIndices) {
+            suggestionBlockStats.reverseFallbacks += 1;
+            scanCandidates = outcomesNameCandidates;
+            scanCandidates.forEach(candidate => {
+                if (rejectByLocationRev(candidate)) return;
+                const score = typeof calculateNameSimilarity === 'function'
+                    ? calculateNameSimilarity(wsuName, candidate.name, suggestionIDFTable)
+                    : similarityScore(normalizeValue(wsuName), candidate.normName);
+                if (score >= MIN_NAME_SUGGESTION_DISPLAY_SCORE) {
+                    candidates.push({
+                        row: candidate.row,
+                        key: candidate.key,
+                        name: candidate.name,
+                        city: candidate.city,
+                        state: candidate.state,
+                        country: candidate.country,
+                        score
+                    });
+                }
+            });
+        }
         if (!candidates.length) return [];
         candidates.sort((a, b) => b.score - a.score);
         return candidates.slice(0, topN);
@@ -1353,8 +1398,23 @@ async function buildValidationExport(payload) {
         if (errorType === 'Input_Not_Found') {
             const wsuState = wsuSuggestionStateColumn ? (row[`wsu_${wsuSuggestionStateColumn}`] ?? '') : '';
             const wsuCountry = wsuSuggestionCountryColumn ? (row[`wsu_${wsuSuggestionCountryColumn}`] ?? '') : '';
-            const candidates = canSuggestNames
-                ? getBestOutcomesNameCandidates(row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '', wsuState, wsuCountry)
+            let wsuName = (row[`wsu_${nameCompareConfig.wsu}`] || row.wsu_Descr || '').toString().trim();
+            if (!wsuName && row && typeof row === 'object') {
+                const nameHints = ['Descr', 'Org Name', 'name', 'Description', 'School', 'OrgName'];
+                for (const hint of nameHints) {
+                    const val = row[`wsu_${hint}`] ?? row[`wsu_${hint.replace(/\s+/g, ' ')}`];
+                    if (val && String(val).trim()) {
+                        wsuName = String(val).trim();
+                        break;
+                    }
+                }
+                if (!wsuName) {
+                    const wsuKey = Object.keys(row || {}).find(k => k.startsWith('wsu_') && /descr|name|school|org/i.test(k));
+                    if (wsuKey) wsuName = String(row[wsuKey] || '').trim();
+                }
+            }
+            const candidates = canSuggestNames && wsuName
+                ? getBestOutcomesNameCandidates(wsuName, wsuState, wsuCountry)
                 : [];
             let suggestion = candidates.length ? candidates[0] : getBestKeySuggestion(row.translate_input, outcomesKeyCandidates);
             if (suggestion && normalizeValue(suggestion.key) === normalizeValue(row.translate_input)) {
@@ -1378,6 +1438,9 @@ async function buildValidationExport(payload) {
                 rowData.Suggestion_Score = formatSuggestionScore(suggestion.score);
             }
         } else if (errorType === 'Output_Not_Found') {
+            if (row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT) {
+                return;
+            }
             if (
                 row.Error_Subtype === EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.LIKELY_STALE_KEY &&
                 hasCompletePresetSuggestion
@@ -1452,17 +1515,17 @@ async function buildValidationExport(payload) {
                     applySuggestionFallbacks(rowData, row, outputSuggestion);
                     rowData.Suggestion_Score = formatSuggestionScore(outputSuggestion.score);
                 } else {
-                    const currentOutputKey = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
-                    fillSuggestedFields(rowData, row, roleMapWsu, selectedCols.wsu_org, currentOutputKey, 'wsu_');
+                    // Do not show current value as suggestion; leave Suggested_Key blank to avoid no-op confusion
+                    fillSuggestedFields(rowData, row, roleMapWsu, selectedCols.wsu_org, '', 'wsu_');
                 }
             } else if (errorType === 'High_Confidence_Match') {
-                const wsuKeyValue = row[`wsu_${keyLabels.wsu}`] || row.translate_output;
+                // Do not show current value as suggestion; leave Suggested_Key blank to avoid no-op confusion
                 fillSuggestedFields(
                     rowData,
                     row,
                     roleMapWsu,
                     selectedCols.wsu_org,
-                    wsuKeyValue,
+                    '',
                     'wsu_'
                 );
                 const similarity = typeof calculateNameSimilarity === 'function'
@@ -1935,6 +1998,7 @@ async function buildValidationExport(payload) {
         if (rawType === 'Missing_Mapping') return 'Keep As-Is';
         if ((rawType === 'Duplicate_Source' || rawType === 'Duplicate_Target') && hasActionableSuggestion) return 'Use Suggestion';
         if (rawType === 'Input_Not_Found' && hasActionableSuggestion) return 'Use Suggestion';
+        if (rawType === 'Duplicate_Target') return 'Keep As-Is';
         return '';
     };
     const actionQueueFromErrors = errorDataRows.map(row => {
@@ -2165,6 +2229,14 @@ async function buildValidationExport(payload) {
             sanitizeIdPart(row.Duplicate_Group || '')
         ].join('|');
     };
+    const fmtCandidateChoice = (c) => {
+        if (!c || (!c.key && !c.name)) return '';
+        const loc = [c.city, c.state, c.country].filter(Boolean).join(', ');
+        const locPart = loc ? ` - ${loc}` : '';
+        const scoreVal = typeof c.score === 'number' ? c.score : (parseFloat(c.score) || NaN);
+        const scorePart = Number.isFinite(scoreVal) ? ` | Score: ${scoreVal.toFixed(2)}` : '';
+        return `${c.key || ''}: ${c.name || ''}${locPart}${scorePart}`;
+    };
     const actionQueueRows = actionQueueRowsUnstable.map(row => {
         const keyUpdateSide = inferKeyUpdateSide(row);
         const currentValue = keyUpdateSide === 'Input' ? (row.translate_input ?? '') : (row.translate_output ?? '');
@@ -2182,6 +2254,10 @@ async function buildValidationExport(payload) {
             Suggested_Country: row.Suggested_Country ?? '',
             Suggestion_Score: row.Suggestion_Score ?? '',
             Selected_Candidate_ID: selectedCandidateId,
+            Manual_Suggested_Key: '',
+            C1_Choice: fmtCandidateChoice(candidates[0]),
+            C2_Choice: fmtCandidateChoice(candidates[1]),
+            C3_Choice: fmtCandidateChoice(candidates[2]),
             Current_Input: row.translate_input ?? '',
             Current_Output: row.translate_output ?? '',
             Key_Update_Side: keyUpdateSide,
@@ -2202,6 +2278,108 @@ async function buildValidationExport(payload) {
             row.Review_Row_ID = `${baseId}#${seen}`;
         }
     });
+    const matchCampusFamilyPattern = (pattern, value) => {
+        if (!value || !pattern) return false;
+        const str = String(value).trim();
+        if (pattern.endsWith('*')) {
+            const prefix = pattern.slice(0, -1).trim();
+            return str.toUpperCase().startsWith(prefix.toUpperCase());
+        }
+        return str.toUpperCase() === String(pattern).trim().toUpperCase();
+    };
+    const getRowNameForCampusFamily = (row) => {
+        const outcomesNameCol = nameCompareConfig.outcomes;
+        if (outcomesNameCol && row[`outcomes_${outcomesNameCol}`]) {
+            return String(row[`outcomes_${outcomesNameCol}`] || '').trim();
+        }
+        const nameHints = ['Descr', 'Org Name', 'name', 'School', 'Description', 'OrgName'];
+        for (const hint of nameHints) {
+            const val = row[`outcomes_${hint}`] ?? row[`wsu_${hint}`];
+            if (val && String(val).trim()) return String(val).trim();
+        }
+        const outcomesKey = Object.keys(row || {}).find(k => k.startsWith('outcomes_') && /descr|name|school|org/i.test(k));
+        if (outcomesKey) return String(row[outcomesKey] || '').trim();
+        return '';
+    };
+    if (campusFamilyRules && Array.isArray(campusFamilyRules.patterns) && campusFamilyRules.patterns.length > 0) {
+        const validOutputKeysSet = new Set((wsuKeyCandidates || []).map(c => normalizeValue(c.raw || '')));
+        const rules = campusFamilyRules.patterns
+            .filter(r => r && r.enabled !== false && r.pattern && r.parentKey)
+            .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+        actionQueueRows.forEach(row => {
+            if (row.Manual_Suggested_Key && String(row.Manual_Suggested_Key).trim()) return;
+            const keyUpdateSide = row.Key_Update_Side || '';
+            if (keyUpdateSide !== 'Output' && keyUpdateSide !== 'Both') return;
+            const rowName = getRowNameForCampusFamily(row);
+            if (!rowName) return;
+            for (const rule of rules) {
+                if (!matchCampusFamilyPattern(rule.pattern, rowName)) continue;
+                const parentNorm = normalizeValue(rule.parentKey);
+                if (!validOutputKeysSet.has(parentNorm)) continue;
+                if (rule.country && outcomesSuggestionCountryColumn && row[`outcomes_${outcomesSuggestionCountryColumn}`] && typeof countriesMatch === 'function' && !countriesMatch(row[`outcomes_${outcomesSuggestionCountryColumn}`], rule.country)) continue;
+                if (rule.state && outcomesSuggestionStateColumn && String(row[`outcomes_${outcomesSuggestionStateColumn}`] || '').trim() !== String(rule.state || '').trim()) continue;
+                row.Manual_Suggested_Key = rule.parentKey;
+                break;
+            }
+        });
+    }
+    const reimportSummary = { applied: 0, conflicts: 0, newRows: 0, orphaned: 0 };
+    const priorDecisions = priorDecisionsPayload && typeof priorDecisionsPayload === 'object' && Object.keys(priorDecisionsPayload).length > 0
+        ? priorDecisionsPayload
+        : null;
+    if (priorDecisions) {
+        const validOutputKeysSet = new Set((wsuKeyCandidates || []).map(c => normalizeValue(c.raw || '')));
+        const validInputKeysSet = new Set((outcomesKeyCandidates || []).map(c => normalizeValue(c.raw || '')));
+        const priorKeysVisited = new Set();
+        actionQueueRows.forEach(row => {
+            const reviewRowId = row.Review_Row_ID || '';
+            const prior = priorDecisions[reviewRowId];
+            if (!prior) {
+                reimportSummary.newRows += 1;
+                return;
+            }
+            priorKeysVisited.add(reviewRowId);
+            const priorDecision = String(prior.Decision || '').trim();
+            const priorManual = String(prior.Manual_Suggested_Key || '').trim();
+            const priorSuggested = String(prior.Suggested_Key || '').trim();
+            const effectiveKey = priorManual || priorSuggested;
+            if (priorDecision === 'Use Suggestion') {
+                if (!effectiveKey) {
+                    reimportSummary.conflicts += 1;
+                    return;
+                }
+                const keyUpdateSide = row.Key_Update_Side || '';
+                const validKeys = (keyUpdateSide === 'Output' || keyUpdateSide === 'Both') ? validOutputKeysSet : validInputKeysSet;
+                const keyNorm = normalizeValue(effectiveKey);
+                if (!validKeys.has(keyNorm)) {
+                    reimportSummary.conflicts += 1;
+                    return;
+                }
+                row.Manual_Suggested_Key = priorManual || priorSuggested;
+            }
+            row.Decision = priorDecision || row.Decision;
+            if (prior.Reason_Code !== undefined && prior.Reason_Code !== null) row.Reason_Code = prior.Reason_Code;
+            reimportSummary.applied += 1;
+        });
+        reimportSummary.orphaned = Object.keys(priorDecisions).filter(k => !priorKeysVisited.has(k)).length;
+    }
+    if (preEditedActionQueueRows && Array.isArray(preEditedActionQueueRows) && preEditedActionQueueRows.length > 0) {
+        const preEditedMap = new Map();
+        preEditedActionQueueRows.forEach(r => {
+            const id = r.Review_Row_ID || '';
+            if (id) preEditedMap.set(id, r);
+        });
+        actionQueueRows.forEach(row => {
+            const edited = preEditedMap.get(row.Review_Row_ID || '');
+            if (!edited) return;
+            if (edited.Decision !== undefined && edited.Decision !== null) row.Decision = edited.Decision;
+            if (edited.Manual_Suggested_Key !== undefined && edited.Manual_Suggested_Key !== null) row.Manual_Suggested_Key = edited.Manual_Suggested_Key;
+            if (edited.Reason_Code !== undefined && edited.Reason_Code !== null) row.Reason_Code = edited.Reason_Code;
+        });
+    }
+    if (returnActionQueueOnly) {
+        return { actionQueueRows };
+    }
     const candidatePoolRows = [];
     actionQueueRows.forEach(row => {
         const candidates = row._candidates || [];
@@ -2318,6 +2496,16 @@ async function buildValidationExport(payload) {
         headers: ['Review Row ID', 'Candidate ID', 'Name', 'City', 'State', 'Country', 'Similarity'],
         groupColumn: 'Review_Row_ID'
     });
+    const validOutputKeys = [...new Set((wsuKeyCandidates || []).map(c => String(c.raw || '').trim()).filter(Boolean))];
+    const validInputKeys = [...new Set((outcomesKeyCandidates || []).map(c => String(c.raw || '').trim()).filter(Boolean))];
+    const validOutputKeysSheet = workbook.addWorksheet('Valid_Output_Keys', { state: 'hidden' });
+    validOutputKeysSheet.addRow(['Key']);
+    validOutputKeys.forEach(k => validOutputKeysSheet.addRow([k]));
+    const validInputKeysSheet = workbook.addWorksheet('Valid_Input_Keys', { state: 'hidden' });
+    validInputKeysSheet.addRow(['Key']);
+    validInputKeys.forEach(k => validInputKeysSheet.addRow([k]));
+    const validOutputKeysLastRow = Math.max(2, validOutputKeys.length + 1);
+    const validInputKeysLastRow = Math.max(2, validInputKeys.length + 1);
     reportProgress('Building Review_Workbench...', 82);
     const reviewOutcomesKeyContextKey = keyLabels.outcomes ? `outcomes_${keyLabels.outcomes}` : 'outcomes_key';
     const reviewOutcomesNameCandidates = [
@@ -2339,6 +2527,7 @@ async function buildValidationExport(payload) {
     const sourceContextKeys = [outcomesStateKey, outcomesCountryKey, wsuCityKey, wsuStateKey, wsuCountryKey].filter(Boolean);
     const reviewWorkbenchColumns = [
         'Decision',
+        'Reason_Code',
         'Error_Type',
         'Error_Subtype',
         ...outcomesColumns.filter(k => k && k !== reviewOutcomesKeyContextKey),
@@ -2348,6 +2537,10 @@ async function buildValidationExport(payload) {
         'translate_input',
         'translate_output',
         'Selected_Candidate_ID',
+        'Manual_Suggested_Key',
+        'C1_Choice',
+        'C2_Choice',
+        'C3_Choice',
         'Suggested_Key',
         'Suggested_School',
         'Suggested_City',
@@ -2374,11 +2567,16 @@ async function buildValidationExport(payload) {
     ].filter((v, i, arr) => arr.indexOf(v) === i);
     const reviewColumnWidths = {
         Decision: 20,
+        Reason_Code: 24,
         Error_Type: 20,
         Error_Subtype: 20,
         translate_input: 24,
         translate_output: 24,
         Selected_Candidate_ID: 18,
+        Manual_Suggested_Key: 22,
+        C1_Choice: 52,
+        C2_Choice: 52,
+        C3_Choice: 52,
         Suggested_Key: 22,
         Suggested_School: 28,
         Suggested_City: 18,
@@ -2428,6 +2626,7 @@ async function buildValidationExport(payload) {
         if (col === 'Has_Update') return 'Has Update (1=yes)';
         if (col === 'Decision_Warning') return 'Decision Warning';
         if (col === 'Decision') return 'Decision';
+        if (col === 'Reason_Code') return 'Reason Code';
         if (col === reviewOutcomesNameContextKey) return 'Outcomes Name';
         if (col === reviewOutcomesKeyContextKey) return 'Outcomes Key';
         if (outcomesStateKey && col === outcomesStateKey) return 'Outcomes State';
@@ -2438,6 +2637,10 @@ async function buildValidationExport(payload) {
         if (wsuStateKey && col === wsuStateKey) return 'myWSU State';
         if (wsuCountryKey && col === wsuCountryKey) return 'myWSU Country';
         if (col === 'Selected_Candidate_ID') return 'Selected Candidate ID';
+        if (col === 'Manual_Suggested_Key') return 'Manual Key (override when no candidates)';
+        if (col === 'C1_Choice') return 'C1 (Key: Name - City, State, Country | Score)';
+        if (col === 'C2_Choice') return 'C2 (Key: Name - City, State, Country | Score)';
+        if (col === 'C3_Choice') return 'C3 (Key: Name - City, State, Country | Score)';
         if (col === 'Suggested_Key') return 'Suggested Key';
         if (col === 'Suggested_School') return 'Suggested School';
         if (col === 'Suggested_City') return 'Suggested City';
@@ -2464,6 +2667,7 @@ async function buildValidationExport(payload) {
         reviewColLetter[key] = columnIndexToLetter(reviewColIndex[key]);
     });
     const decisionListFormula = '"Keep As-Is,Use Suggestion,Allow One-to-Many,Ignore"';
+    const reasonCodeListFormula = '"Campus consolidation,Data steward approved,Manual correction,Name match,Other"';
     if (reviewSheet && actionQueueRows.length > 0) {
         const rowEnd = actionQueueRows.length + 1;
         reviewSheet.dataValidations.add(
@@ -2474,12 +2678,24 @@ async function buildValidationExport(payload) {
                 formulae: [decisionListFormula]
             }
         );
+        reviewSheet.dataValidations.add(
+            `${reviewColLetter.Reason_Code}2:${reviewColLetter.Reason_Code}${rowEnd}`,
+            {
+                type: 'list',
+                allowBlank: true,
+                formulae: [reasonCodeListFormula]
+            }
+        );
         for (let rowNum = 2; rowNum <= rowEnd; rowNum += 1) {
+            const manCol = reviewColLetter.Manual_Suggested_Key;
+            const sugCol = reviewColLetter.Suggested_Key;
+            const effKeyInput = `IF($${manCol}$${rowNum}<>"",TRIM($${manCol}$${rowNum}),$${sugCol}$${rowNum})`;
+            const effKeyOutput = effKeyInput;
             reviewSheet.getCell(`${reviewColLetter.Final_Input}${rowNum}`).value = {
-                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Input}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Use Suggestion",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Input",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Input}${rowNum}),""))`
+                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Input}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Use Suggestion",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Input",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),${effKeyInput},$${reviewColLetter.Current_Input}${rowNum}),""))`
             };
             reviewSheet.getCell(`${reviewColLetter.Final_Output}${rowNum}`).value = {
-                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Output}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Use Suggestion",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Output",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),$${reviewColLetter.Suggested_Key}${rowNum},$${reviewColLetter.Current_Output}${rowNum}),""))`
+                formula: `IF(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Current_Output}${rowNum},IF($${reviewColLetter.Decision}${rowNum}="Use Suggestion",IF(OR($${reviewColLetter.Key_Update_Side}${rowNum}="Output",$${reviewColLetter.Key_Update_Side}${rowNum}="Both"),${effKeyOutput},$${reviewColLetter.Current_Output}${rowNum}),""))`
             };
             reviewSheet.getCell(`${reviewColLetter.Publish_Eligible}${rowNum}`).value = {
                 formula: `IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),$${reviewColLetter.Final_Input}${rowNum}<>"",$${reviewColLetter.Final_Output}${rowNum}<>""),1,0)`
@@ -2490,7 +2706,16 @@ async function buildValidationExport(payload) {
             reviewSheet.getCell(`${reviewColLetter.Has_Update}${rowNum}`).value = {
                 formula: `IF(OR($${reviewColLetter.Current_Input}${rowNum}<>$${reviewColLetter.Final_Input}${rowNum},$${reviewColLetter.Current_Output}${rowNum}<>$${reviewColLetter.Final_Output}${rowNum}),1,0)`
             };
-            const restOfWarning = `IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",OR($${reviewColLetter.Selected_Candidate_ID}${rowNum}="",$${reviewColLetter.Suggested_Key}${rowNum}="")),"Use Suggestion needs selection",IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Use Suggestion needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))`;
+            const curInCol = reviewColLetter.Current_Input;
+            const curOutCol = reviewColLetter.Current_Output;
+            const sideCol = reviewColLetter.Key_Update_Side;
+            const effKey = `IF(TRIM($${manCol}$${rowNum})<>"",TRIM($${manCol}$${rowNum}),$${sugCol}$${rowNum})`;
+            const effBlank = `AND(TRIM($${manCol}$${rowNum})="",$${sugCol}$${rowNum}="")`;
+            const noOpOutput = `AND(OR($${sideCol}$${rowNum}="Output",$${sideCol}$${rowNum}="Both"),${effKey}=TRIM($${curOutCol}$${rowNum}),${effKey}<>"")`;
+            const noOpInput = `AND(OR($${sideCol}$${rowNum}="Input",$${sideCol}$${rowNum}="Both"),${effKey}=TRIM($${curInCol}$${rowNum}),${effKey}<>"")`;
+            const invalidManualOutput = `AND(TRIM($${manCol}$${rowNum})<>"",OR($${sideCol}$${rowNum}="Output",$${sideCol}$${rowNum}="Both"),COUNTIF(Valid_Output_Keys!$A$2:$A$${validOutputKeysLastRow},TRIM($${manCol}$${rowNum}))=0)`;
+            const invalidManualInput = `AND(TRIM($${manCol}$${rowNum})<>"",$${sideCol}$${rowNum}="Input",COUNTIF(Valid_Input_Keys!$A$2:$A$${validInputKeysLastRow},TRIM($${manCol}$${rowNum}))=0)`;
+            const restOfWarning = `IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",${effBlank}),"Use Suggestion needs selection",IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",OR(${noOpOutput},${noOpInput})),"Use Suggestion key equals current value (no change)",IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",OR(${invalidManualOutput},${invalidManualInput})),"Invalid manual key: not found in valid keys",IF(AND($${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Key_Update_Side}${rowNum}="None"),"Use Suggestion needs valid Update Side",IF(AND(OR($${reviewColLetter.Decision}${rowNum}="Keep As-Is",$${reviewColLetter.Decision}${rowNum}="Use Suggestion",$${reviewColLetter.Decision}${rowNum}="Allow One-to-Many"),OR($${reviewColLetter.Final_Input}${rowNum}="",$${reviewColLetter.Final_Output}${rowNum}="")),"Approved but blank final","")))))`;
             const dupPairCond = `AND($${reviewColLetter.Publish_Eligible}${rowNum}=1,$${reviewColLetter.Final_Input}${rowNum}<>"",$${reviewColLetter.Final_Output}${rowNum}<>"",COUNTIFS(Review_Workbench!$${reviewColLetter.Publish_Eligible}$2:$${reviewColLetter.Publish_Eligible}$${rowEnd},1,Review_Workbench!$${reviewColLetter.Final_Input}$2:$${reviewColLetter.Final_Input}$${rowEnd},$${reviewColLetter.Final_Input}$${rowNum},Review_Workbench!$${reviewColLetter.Final_Output}$2:$${reviewColLetter.Final_Output}$${rowEnd},$${reviewColLetter.Final_Output}$${rowNum})>1)`;
             reviewSheet.getCell(`${reviewColLetter.Decision_Warning}${rowNum}`).value = {
                 formula: `IF(${dupPairCond},"Duplicate pair: set one to Ignore",${restOfWarning})`
@@ -2564,6 +2789,8 @@ async function buildValidationExport(payload) {
                 rules: [
                     { type: 'containsText', operator: 'containsText', text: 'Duplicate pair', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'Use Suggestion needs selection', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'Invalid manual key', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
+                    { type: 'containsText', operator: 'containsText', text: 'key equals current value', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'valid Update Side', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } },
                     { type: 'containsText', operator: 'containsText', text: 'Approved but blank', style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } } } }
                 ]
@@ -2589,7 +2816,8 @@ async function buildValidationExport(payload) {
         'One_to_Many',
         'Missing_Mappings',
         'High_Confidence_Matches',
-        'Valid_Mappings'
+        'Valid_Mappings',
+        'Candidate_Reference'
     ].forEach(hideValidateSheet);
 
     reportProgress('Building Approved_Mappings...', 84);
@@ -2748,6 +2976,8 @@ async function buildValidationExport(payload) {
     const finalColumns = [
         { key: 'Review_Row_ID', header: 'Review Row ID' },
         { key: 'Decision', header: 'Decision' },
+        { key: 'Source_Sheet', header: 'Source Sheet' },
+        { key: 'Error_Type', header: 'Error Type' },
         ...finalOutcomesCols,
         { key: 'translate_input', header: 'Translate Input' },
         { key: 'translate_output', header: 'Translate Output' },
@@ -2858,7 +3088,7 @@ async function buildValidationExport(payload) {
     sourceContextKeys.forEach(k => { finalColumnWidths[k] = 18; });
     finalSheet.columns = finalColumns.map(col => ({
         width: finalColumnWidths[col.key] || 22,
-        hidden: col.key === 'Decision'
+        hidden: ['Decision', 'Source_Sheet', 'Error_Type'].includes(col.key)
     }));
     finalSheet.autoFilter = {
         from: 'A1',
@@ -2874,6 +3104,7 @@ async function buildValidationExport(payload) {
         { key: 'Final_Input', header: 'Final Translate Input' },
         { key: 'Final_Output', header: 'Final Translate Output' },
         { key: 'Decision', header: 'Decision' },
+        { key: 'Reason_Code', header: 'Reason Code' },
         { key: 'Source_Sheet', header: 'Source Sheet' },
         { key: 'Owner', header: 'Owner' },
         { key: 'Resolution_Note', header: 'Resolution Note' }
@@ -2900,6 +3131,7 @@ async function buildValidationExport(payload) {
             updateSourceValueFormula('Final_Input', rowNum, includeExpr),
             updateSourceValueFormula('Final_Output', rowNum, includeExpr),
             updateSourceValueFormula('Decision', rowNum, includeExpr),
+            updateSourceValueFormula('Reason_Code', rowNum, includeExpr),
             updateSourceValueFormula('Source_Sheet', rowNum, includeExpr),
             updateSourceValueFormula('Owner', rowNum, includeExpr),
             updateSourceValueFormula('Resolution_Note', rowNum, includeExpr)
@@ -2912,6 +3144,7 @@ async function buildValidationExport(payload) {
         { width: 24 },
         { width: 24 },
         { width: 22 },
+        { width: 24 },
         { width: 22 },
         { width: 18 },
         { width: 46 }
@@ -2925,12 +3158,18 @@ async function buildValidationExport(payload) {
     const reviewFinalOutputRange = `Review_Workbench!$${reviewColLetter.Final_Output}$2:$${reviewColLetter.Final_Output}$${reviewLastRow}`;
     const reviewStaleRange = `Review_Workbench!$${reviewColLetter.Is_Stale_Key}$2:$${reviewColLetter.Is_Stale_Key}$${reviewLastRow}`;
     const reviewSourceRange = `Review_Workbench!$${reviewColLetter.Source_Sheet}$2:$${reviewColLetter.Source_Sheet}$${reviewLastRow}`;
+    const reviewErrorTypeRange = `Review_Workbench!$${reviewColLetter.Error_Type}$2:$${reviewColLetter.Error_Type}$${reviewLastRow}`;
     const reviewSuggestedKeyRange = `Review_Workbench!$${reviewColLetter.Suggested_Key}$2:$${reviewColLetter.Suggested_Key}$${reviewLastRow}`;
+    const reviewManualSuggestedKeyRange = `Review_Workbench!$${reviewColLetter.Manual_Suggested_Key}$2:$${reviewColLetter.Manual_Suggested_Key}$${reviewLastRow}`;
+    const reviewReasonCodeRange = `Review_Workbench!$${reviewColLetter.Reason_Code}$2:$${reviewColLetter.Reason_Code}$${reviewLastRow}`;
+    const reviewDecisionWarningRange = `Review_Workbench!$${reviewColLetter.Decision_Warning}$2:$${reviewColLetter.Decision_Warning}$${reviewLastRow}`;
     const reviewKeyUpdateSideRange = `Review_Workbench!$${reviewColLetter.Key_Update_Side}$2:$${reviewColLetter.Key_Update_Side}$${reviewLastRow}`;
     const finalLastRow = refLastRow;
     const finalInputRange = `Final_Translation_Table!$${finalColLetter.translate_input}$2:$${finalColLetter.translate_input}$${finalLastRow}`;
     const finalOutputRange = `Final_Translation_Table!$${finalColLetter.translate_output}$2:$${finalColLetter.translate_output}$${finalLastRow}`;
     const finalDecisionRange = `Final_Translation_Table!$${finalColLetter.Decision}$2:$${finalColLetter.Decision}$${finalLastRow}`;
+    const finalSourceSheetRange = `Final_Translation_Table!$${finalColLetter.Source_Sheet}$2:$${finalColLetter.Source_Sheet}$${finalLastRow}`;
+    const finalErrorTypeRange = `Final_Translation_Table!$${finalColLetter.Error_Type}$2:$${finalColLetter.Error_Type}$${finalLastRow}`;
     const getQAEmptyRows = (typeof ValidationExportHelpers !== 'undefined' && ValidationExportHelpers &&
         typeof ValidationExportHelpers.getQAValidateRowsForEmptyQueue === 'function')
         ? ValidationExportHelpers.getQAValidateRowsForEmptyQueue
@@ -2948,14 +3187,18 @@ async function buildValidationExport(payload) {
             ['Approved review rows', `=COUNTIF(${decisionRange},"Keep As-Is")+COUNTIF(${decisionRange},"Use Suggestion")+COUNTIF(${decisionRange},"Allow One-to-Many")`, '=IF(B3>0,"PASS","CHECK")', 'Rows approved from Review_Workbench'],
             ['Approved rows beyond formula capacity', `=MAX(0,B3-${cappedReviewFormulaRows})`, '=IF(B4=0,"PASS","CHECK")', `Rows above ${cappedReviewFormulaRows} approved review decisions exceed formula row capacity`],
             ['Blank final keys on publish-eligible rows (sanity)', `=COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalInputRange},"")+COUNTIFS(${reviewPublishRangeRef},1,${reviewFinalOutputRange},"")`, '=IF(B5=0,"PASS","FAIL")', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
-            ['Use Suggestion without Suggested_Key', `=COUNTIFS(${decisionRange},"Use Suggestion",${reviewSuggestedKeyRange},"")`, '=IF(B6=0,"PASS","FAIL")', 'Use Suggestion chosen but Suggested_Key blank; fix or change decision'],
+            ['Use Suggestion without effective key', `=COUNTIFS(${decisionRange},"Use Suggestion",${reviewManualSuggestedKeyRange},"",${reviewSuggestedKeyRange},"")`, '=IF(B6=0,"PASS","FAIL")', 'Use Suggestion needs Manual Key or Selected Candidate ID + Suggested Key'],
             ['Use Suggestion with invalid Update Side', `=COUNTIFS(${decisionRange},"Use Suggestion",${reviewKeyUpdateSideRange},"None")`, '=IF(B7=0,"PASS","FAIL")', 'Use Suggestion chosen but Update Side is None; fix or change decision'],
-            ['Stale-key rows lacking decision', `=COUNTIFS(${reviewStaleRange},1,${decisionRange},"")`, '=IF(B8=0,"PASS","CHECK")', 'Likely stale key rows without decision (advisory)'],
-            ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B9=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
-            ['Duplicate final input keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B10=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
-            ['Duplicate final output keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalOutputRange},${finalOutputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B11=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
-            ['Duplicate (input, output) pairs in Final_Translation_Table', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalOutputRange}<>"")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalOutputRange},${finalOutputRange})>1))/2`, '=IF(B12=0,"PASS","FAIL")', 'Duplicate (input,output) pairs; set one to Ignore before publish'],
-            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B10=0,B11=0,B12=0),"PASS","HOLD")`, '', 'Final publish gate (B8/B9 advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
+            ['Use Suggestion with invalid manual key', `=COUNTIF(${reviewDecisionWarningRange},"*Invalid manual key*")`, '=IF(B8=0,"PASS","FAIL")', 'Manual key not found in valid myWSU/Outcomes keys'],
+            ['Use Suggestion no-op (key equals current value)', `=COUNTIF(${reviewDecisionWarningRange},"*no change*")`, '=IF(B9=0,"PASS","FAIL")', 'Use Suggestion chosen but effective key equals current; fix or change decision'],
+            ['Risky decisions without reason code', `=SUMPRODUCT((1*(((${decisionRange}="Use Suggestion")*(TRIM(${reviewManualSuggestedKeyRange})<>""))+(${decisionRange}="Allow One-to-Many")+(((${decisionRange}="Keep As-Is")*(${reviewSourceRange}="One_to_Many")*(${reviewErrorTypeRange}="Duplicate_Target")))>0))*(TRIM(${reviewReasonCodeRange})=""))`, '=IF(B10=0,"PASS","FAIL")', 'Reason Code required for: Use Suggestion+Manual Key, Allow One-to-Many, Duplicate_Target+Keep As-Is'],
+            ['Stale-key rows lacking decision', `=COUNTIFS(${reviewStaleRange},1,${decisionRange},"")`, '=IF(B11=0,"PASS","CHECK")', 'Likely stale key rows without decision (advisory)'],
+            ['One-to-many rows lacking decision', `=COUNTIFS(${reviewSourceRange},"One_to_Many",${decisionRange},"")`, '=IF(B12=0,"PASS","CHECK")', 'One-to-many rows without decision (advisory)'],
+            ['Duplicate final input keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalDecisionRange},"<>Allow One-to-Many")>1))/2`, '=IF(B13=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
+            ['Duplicate final output keys (excluding Allow One-to-Many)', `=SUMPRODUCT((${finalOutputRange}<>"")*(${finalDecisionRange}<>"Allow One-to-Many")*(((${finalSourceSheetRange}<>"One_to_Many")+(${finalErrorTypeRange}<>"Duplicate_Target")+(${finalDecisionRange}<>"Keep As-Is"))>0)*(COUNTIFS(${finalOutputRange},${finalOutputRange},${finalDecisionRange},"<>Allow One-to-Many")-COUNTIFS(${finalOutputRange},${finalOutputRange},${finalSourceSheetRange},"One_to_Many",${finalErrorTypeRange},"Duplicate_Target",${finalDecisionRange},"Keep As-Is")>1))/2`, '=IF(B14=0,"PASS","CHECK")', 'Duplicates in Final_Translation_Table output keys excluding Allow One-to-Many and Duplicate_Target+Keep As-Is'],
+            ['Duplicate (input, output) pairs in Final_Translation_Table', `=SUMPRODUCT((${finalInputRange}<>"")*(${finalOutputRange}<>"")*(COUNTIFS(${finalInputRange},${finalInputRange},${finalOutputRange},${finalOutputRange})>1))/2`, '=IF(B15=0,"PASS","FAIL")', 'Duplicate (input,output) pairs; set one to Ignore before publish'],
+            ...(reimportSummary.applied > 0 ? [['Prior decisions applied', reimportSummary.applied, '', 'Re-import from prior Validate workbook']] : []),
+            ['Publish gate', `=IF(AND(B2=0,B4=0,B5=0,B6=0,B7=0,B8=0,B9=0,B10=0,B13=0,B14=0,B15=0),"PASS","HOLD")`, '', 'Final publish gate (B11/B12 advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
         ]
         : getQAEmptyRows();
     qaRows.forEach(row => qaValidateSheet.addRow(row));
@@ -2996,10 +3239,12 @@ async function buildValidationExport(payload) {
     reportProgress('Finalizing Excel file...', 92);
     const buffer = toArrayBuffer(await workbook.xlsx.writeBuffer());
     reportProgress('Saving file...', 100);
-    return {
+    const result = {
         buffer,
         filename: downloadSafeFileName(options.fileName, 'WSU_Mapping_Validation_Report.xlsx')
     };
+    if (priorDecisions) result.reimportSummary = reimportSummary;
+    return result;
 }
 
 async function buildJoinPreviewExport(payload) {
@@ -3109,7 +3354,16 @@ self.onmessage = async (event) => {
         }
         if (type === 'build_validation_export') {
             const result = await buildValidationExport(payload || {});
-            self.postMessage({ type: 'result', result }, [result.buffer]);
+            if (result.actionQueueRows && !result.buffer) {
+                self.postMessage({ type: 'result', result });
+            } else {
+                self.postMessage({ type: 'result', result }, [result.buffer]);
+            }
+            return;
+        }
+        if (type === 'get_action_queue') {
+            const result = await buildValidationExport({ ...(payload || {}), returnActionQueueOnly: true });
+            self.postMessage({ type: 'result', result });
             return;
         }
         if (type === 'build_join_preview_export') {

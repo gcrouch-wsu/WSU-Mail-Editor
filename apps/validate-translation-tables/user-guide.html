@@ -27,18 +27,19 @@
     </style>
 </head>
 <body>
-    <p class="print-note">Print this page (Ctrl+P) and choose &ldquo;Save as PDF&rdquo; for a PDF copy.</p>
-    <h1>Validate Translation Tables &ndash; User Guide</h1>
-    <p><strong>What it does:</strong> Three workflows &mdash; <strong>Validate</strong> (check/fix existing table), <strong>Create</strong> (build new from Outcomes + myWSU), and <strong>Join Preview</strong> (join table with source data for visual verification). Requires Excel 365 or 2021+ for Validate export.</p>
+    <p class="print-note">Print this page (Ctrl+P) and choose "Save as PDF" for a PDF copy.</p>
+    <h1>Validate Translation Tables - User Guide</h1>
+    <p><strong>What it does:</strong> Three workflows - <strong>Validate</strong> (check/fix existing table), <strong>Create</strong> (build new from Outcomes + myWSU), and <strong>Join Preview</strong> (join table with source data for visual verification). Requires Excel 365 or 2021+ for Validate export.</p>
 
     <h2>Validate workflow</h2>
     <div class="section">
-        <p><strong>1. Upload</strong> Outcomes source, Translation table, and myWSU.</p>
-        <p><strong>2. Match Options</strong> &rarr; pick key columns (Translation input/output), validation mode (Key only or Key + name).</p>
+        <p><strong>1. Upload</strong> Outcomes source, Translation table, and myWSU. Optional: Prior Validate workbook to re-apply decisions from a previous run. Optional: campus-family JSON rules to prefill parent keys for campus variants.</p>
+        <p><strong>2. Match Options</strong> -> pick key columns (Translation input/output), validation mode (Key only or Key + name).</p>
         <p><strong>3. Name comparison</strong> (if used): pick Outcomes/myWSU name columns, threshold (default 0.8), ambiguity gap (0.03).</p>
-        <p><strong>4. Select Columns, Keys, and Roles</strong> &rarr; pick included columns, key columns, optional role mapping (School, City, State, Country). Include City/State for high-confidence matching.</p>
-        <p><strong>5. Validate Mappings</strong> &rarr; review cards &rarr; <strong>Download Full Report</strong>.</p>
+        <p><strong>4. Select Columns, Keys, and Roles</strong> -> pick included columns, key columns, optional role mapping (School, City, State, Country). Include City/State for high-confidence matching.</p>
+        <p><strong>5. Validate Mappings</strong> -> review cards -> optional <strong>Bulk edit before export</strong> -> <strong>Download Full Report</strong>.</p>
     </div>
+
     <h2>What the Excel file contains</h2>
     <div class="section">
         <p>The Final_Translation_Table includes both:</p>
@@ -51,16 +52,20 @@
 
     <h2>Excel review order</h2>
     <div class="section">
-        <p><strong>1. Review_Workbench</strong> (main decision sheet; sortable/filterable). Edit only <em>Decision</em>.</p>
+        <p><strong>1. Review_Workbench</strong> (main decision sheet; sortable/filterable). C1/C2/C3 columns show candidate options inline (Key: Name - City, State, Country | Score); enter C1, C2, or C3 in Selected Candidate ID to pick.</p>
         <ul>
-            <li><strong>Keep As-Is:</strong> copy current keys to final.</li>
-            <li><strong>Use Suggestion:</strong> copy with Suggested Key.</li>
-            <li><strong>Allow One-to-Many:</strong> copy as approved exception.</li>
+            <li><strong>Keep As-Is:</strong> copy current keys to final. Row still counts toward duplicate-key QA; use when the row does not create a duplicate.</li>
+            <li><strong>Use Suggestion:</strong> copy with effective key (Manual_Suggested_Key if you enter one, otherwise Suggested_Key from candidate selection). When candidates are blank, enter a valid myWSU key in Manual_Suggested_Key.</li>
+            <li><strong>Allow One-to-Many:</strong> copy as approved exception. Row is excluded from duplicate-key QA; use when you intentionally allow duplicate keys (e.g., many-to-one mapping).</li>
             <li><strong>Ignore:</strong> do not copy to final.</li>
+            <li><strong>Reason Code:</strong> required for risky decisions: Use Suggestion with manual key, Allow One-to-Many, and Keep As-Is on Duplicate_Target rows.</li>
         </ul>
+        <p><strong>Intentional many-to-one:</strong> Duplicate_Target + Keep As-Is is exempt from duplicate output QA (B14), for example Texas A&amp;M campuses to one parent key. Duplicate input (B13) and duplicate-pair (B15) checks still block.</p>
+        <p><strong>Unhide Candidate_Pool/Candidate_Reference:</strong> Right-click tab bar -> Unhide -> select sheet. Use when you need to inspect candidate details.</p>
         <p><strong>2. Final_Translation_Table:</strong> auto-matched rows + approved review rows (not sortable directly).</p>
-        <p><strong>3. Translation_Key_Updates:</strong> changed keys only.</p>
+        <p><strong>3. Translation_Key_Updates (What changed):</strong> only key pairs that differ from current. Use this to verify all changes before publish.</p>
         <p><strong>4. QA_Checks_Validate:</strong> all blocking checks must pass before publish.</p>
+        <p><strong>Blocking QA highlights:</strong> B10 risky decisions without reason code, B13 duplicate input keys, B14 duplicate output keys (with intentional many-to-one exemption), B15 duplicate pairs.</p>
         <p><strong>Final step before updating Outcomes Translation Table:</strong></p>
         <ol>
             <li>Copy Final_Translation_Table.</li>
@@ -69,19 +74,20 @@
             <li>Only then update the Outcomes Translation Table.</li>
         </ol>
     </div>
+
     <h2>Create workflow</h2>
     <div class="section">
-        <p><strong>1. Upload</strong> Outcomes and myWSU. <strong>2. Match method</strong>: key or name (key optional in name mode). <strong>3. Select columns</strong> &rarr; include columns, optional roles. <strong>4. Generate Translation Table</strong> &rarr; download Excel. See Review_Instructions_Create in workbook.</p>
+        <p><strong>1. Upload</strong> Outcomes and myWSU. <strong>2. Match method</strong>: key or name (key optional in name mode). <strong>3. Select columns</strong> -> include columns, optional roles. <strong>4. Generate Translation Table</strong> -> download Excel. See Review_Instructions_Create in workbook.</p>
     </div>
 
     <h2>Join Preview workflow</h2>
     <div class="section">
-        <p><strong>1. Upload</strong> Outcomes source, Translation table, and myWSU. <strong>2. Key selection</strong> &rarr; pick Outcomes key, Translation input/output columns, and myWSU key. <strong>3. Select columns</strong> &rarr; pick which Outcomes and myWSU columns to include. <strong>4. Generate Join Preview</strong> &rarr; download Excel. Review the joined table to verify Outcomes and myWSU data align correctly before publish.</p>
+        <p><strong>1. Upload</strong> Outcomes source, Translation table, and myWSU. <strong>2. Key selection</strong> -> pick Outcomes key, Translation input/output columns, and myWSU key. <strong>3. Select columns</strong> -> pick which Outcomes and myWSU columns to include. <strong>4. Generate Join Preview</strong> -> download Excel. Review the joined table to verify Outcomes and myWSU data align correctly before publish.</p>
     </div>
 
     <h2>Tips</h2>
     <div class="section">
-        <p>Review by exception. Check QA before publish. Use Suggestion: verify Suggested Key/School/City/State/Country first. Privacy: all processing is local in your browser.</p>
+        <p>Review by exception. Check QA before publish. Use Suggestion: verify Suggested Key/School/City/State/Country first. Re-import: upload prior Validate workbook to resume; after download, summary shows applied, conflicts, new rows, orphaned. Privacy: all processing is local in your browser.</p>
     </div>
 </body>
 </html>

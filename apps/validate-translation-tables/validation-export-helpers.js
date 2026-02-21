@@ -72,14 +72,17 @@
             ['Approved review rows', 0, 'PASS', 'Rows approved from Review_Workbench'],
             ['Approved rows beyond formula capacity', 0, 'PASS', 'Rows above formula capacity'],
             ['Blank final keys on publish-eligible rows (sanity)', 0, 'PASS', 'Sanity check: publish-eligible rows should already enforce non-blank finals'],
-            ['Use Suggestion without Suggested_Key', 0, 'PASS', 'Use Suggestion chosen but Suggested_Key blank; fix or change decision'],
+            ['Use Suggestion without effective key', 0, 'PASS', 'Use Suggestion needs Manual Key or Selected Candidate ID + Suggested Key'],
             ['Use Suggestion with invalid Update Side', 0, 'PASS', 'Use Suggestion chosen but Update Side is None; fix or change decision'],
+            ['Use Suggestion with invalid manual key', 0, 'PASS', 'Manual key not found in valid myWSU/Outcomes keys'],
+            ['Use Suggestion no-op (key equals current value)', 0, 'PASS', 'Use Suggestion chosen but effective key equals current; fix or change decision'],
+            ['Risky decisions without reason code', 0, 'PASS', 'Reason Code required for: Use Suggestion+Manual Key, Allow One-to-Many, Duplicate_Target+Keep As-Is'],
             ['Stale-key rows lacking decision', 0, 'PASS', 'Likely stale key rows without decision (advisory)'],
             ['One-to-many rows lacking decision', 0, 'PASS', 'One-to-many rows without decision (advisory)'],
             ['Duplicate final input keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table input keys excluding approved one-to-many rows'],
-            ['Duplicate final output keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table output keys excluding approved one-to-many rows'],
+            ['Duplicate final output keys (excluding Allow One-to-Many)', 0, 'PASS', 'Duplicates in Final_Translation_Table output keys excluding Allow One-to-Many and Duplicate_Target+Keep As-Is'],
             ['Duplicate (input, output) pairs in Final_Translation_Table', 0, 'PASS', 'Duplicate (input,output) pairs; set one to Ignore before publish'],
-            ['Publish gate', 'PASS', '', 'Final publish gate (B8/B9 advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
+            ['Publish gate', 'PASS', '', 'Final publish gate (B11/B12 advisory). Diagnostic tabs are hidden; right-click tab bar and choose Unhide if needed.']
         ];
     }
 

@@ -73,14 +73,14 @@
                     </p>
                     <div class="mt-2 text-sm text-blue-700">
                         <div id="instructions-validate">
-                            <p>1. Upload Outcomes source, Translation table, and myWSU</p>
+                            <p>1. Upload Outcomes source, Translation table, and myWSU. Optional: Prior Validate workbook to re-apply decisions from a previous run. Optional: campus-family JSON rules to prefill parent keys for campus variants.</p>
                             <p>2. <strong>Match Options:</strong> Pick Translation input/output columns. Choose validation mode: Key only, or Key + name comparison</p>
                             <p>3. <strong>Name comparison</strong> (if used): Pick Outcomes and myWSU name columns; set threshold (default 0.8) and ambiguity gap (0.03)</p>
                             <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; mark key columns for Outcomes and myWSU; optionally map roles (School, City, State, Country). Include City/State for high-confidence matching</p>
-                            <p>5. Optional: Include name-match suggestions; Show mapping logic</p>
+                            <p>5. Optional: Include name-match suggestions; Show mapping logic; use Bulk edit before export to apply Decision/Manual_Suggested_Key to filtered rows</p>
                             <p>6. Click <strong>Validate Mappings</strong> -> review cards -> <strong>Download Full Report</strong></p>
-                            <p>7. The Final_Translation_Table has <strong>auto-matched row pairs</strong> (Valid + High_Confidence_Match). You must use <strong>Review_Workbench</strong> to set decisions for rows needing review. Edit only the <strong>Decision</strong> column: Keep As-Is, Use Suggestion, Allow One-to-Many, or Ignore. Your decisions control which rows are copied to the Final_Translation_Table. If you use Use Suggestion, Suggested Key must exist and Update Side must be Input/Output/Both.</p>
-                            <p>8. Excel requires 365 or 2021+. Before updating the Outcomes Translation Table: copy Final_Translation_Table → paste as <strong>values only</strong> into a new sheet → sort and double-check → only then update. Publish only after QA_Checks_Validate blocking checks pass.</p>
+                            <p>7. The Final_Translation_Table has <strong>auto-matched row pairs</strong> (Valid + High_Confidence_Match). You must use <strong>Review_Workbench</strong> to set decisions for rows needing review. Set <strong>Decision</strong> (Keep As-Is, Use Suggestion, Allow One-to-Many, Ignore) and set <strong>Reason Code</strong> for risky decisions (Use Suggestion with manual key, Allow One-to-Many, Keep As-Is on Duplicate_Target rows). If you use Use Suggestion, either Suggested Key (from C1/C2/C3) or <strong>Manual_Suggested_Key</strong> must be filled, and Update Side must be Input/Output/Both. For intentional many-to-one (for example, Texas A&amp;M campuses to one parent), use Keep As-Is on Duplicate_Target rows. Use <strong>Translation_Key_Updates (What changed)</strong> to verify all key changes before publish.</p>
+                            <p>8. Excel requires 365 or 2021+. Before updating the Outcomes Translation Table: verify changes in <strong>Translation_Key_Updates (What changed)</strong> -> copy Final_Translation_Table -> paste as <strong>values only</strong> into a new sheet -> sort and double-check -> only then update. Publish only after QA_Checks_Validate blocking checks pass (including risky decisions without reason code and duplicate checks).</p>
                         </div>
                         <div id="instructions-create" class="hidden">
                             <p>1. Upload Outcomes source and myWSU</p>
@@ -200,6 +200,58 @@
                             <span id="wsu-org-filename"></span>
                         </div>
                         <p id="wsu-org-rows" class="text-gray-600 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="prior-validate-card" class="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-gray-300 hover:border-wsu-crimson transition-colors">
+                <div class="text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">Prior Validate Workbook</h3>
+                    <p class="text-xs text-gray-500 mt-1">Optional – resume prior session</p>
+                    <p class="text-xs text-gray-500 mt-1">Excel from previous Validate run</p>
+                    <div class="mt-4">
+                        <label for="prior-validate-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            Choose File
+                        </label>
+                        <input id="prior-validate-file" name="prior-validate-file" type="file" accept=".xlsx" class="hidden">
+                    </div>
+                    <div id="prior-validate-status" class="mt-3 text-sm hidden">
+                        <div class="flex items-center justify-center text-green-600">
+                            <svg class="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span id="prior-validate-filename"></span>
+                        </div>
+                        <p id="prior-validate-rows" class="text-gray-600 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="campus-family-card" class="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-gray-300 hover:border-wsu-crimson transition-colors">
+                <div class="text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">Campus-Family Rules</h3>
+                    <p class="text-xs text-gray-500 mt-1">Optional – prefill parent keys</p>
+                    <p class="text-xs text-gray-500 mt-1">JSON (pattern, parentKey)</p>
+                    <div class="mt-4">
+                        <label for="campus-family-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            Choose File
+                        </label>
+                        <input id="campus-family-file" name="campus-family-file" type="file" accept=".json" class="hidden">
+                    </div>
+                    <div id="campus-family-status" class="mt-3 text-sm hidden">
+                        <div class="flex items-center justify-center text-green-600">
+                            <svg class="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span id="campus-family-filename"></span>
+                        </div>
+                        <p id="campus-family-rows" class="text-gray-600 mt-1"></p>
                     </div>
                 </div>
             </div>
@@ -636,7 +688,53 @@
                 </div>
             </div>
 
+            <div id="bulk-edit-panel" class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 hidden">
+                <h3 class="text-base font-semibold text-gray-800 mb-3">Bulk apply before export</h3>
+                <p class="text-sm text-gray-600 mb-3">Apply Decision and Manual Key to filtered rows. Changes are included when you download.</p>
+                <div class="flex flex-wrap gap-3 mb-3">
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Filter by Error Type</label>
+                        <select id="bulk-filter-error-type" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Apply Decision</label>
+                        <select id="bulk-apply-decision" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                            <option value="">—</option>
+                            <option value="Keep As-Is">Keep As-Is</option>
+                            <option value="Use Suggestion">Use Suggestion</option>
+                            <option value="Allow One-to-Many">Allow One-to-Many</option>
+                            <option value="Ignore">Ignore</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Apply Manual Key</label>
+                        <input id="bulk-apply-manual-key" type="text" placeholder="Optional" class="border border-gray-300 rounded px-2 py-1 text-sm w-40">
+                    </div>
+                    <div class="flex items-end">
+                        <button id="bulk-apply-btn" class="bg-wsu-crimson hover:bg-red-800 text-white px-4 py-2 rounded text-sm font-medium">Apply to filtered</button>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500 mb-2"><span id="bulk-edit-row-count">0</span> rows in queue</div>
+                <div class="overflow-x-auto max-h-48 border border-gray-200 rounded bg-white">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-100 sticky top-0">
+                            <tr>
+                                <th class="py-1 px-2 text-left">Error Type</th>
+                                <th class="py-1 px-2 text-left">Input</th>
+                                <th class="py-1 px-2 text-left">Output</th>
+                                <th class="py-1 px-2 text-left">Decision</th>
+                                <th class="py-1 px-2 text-left">Manual Key</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulk-edit-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="text-center">
+                <button id="bulk-edit-toggle-btn" class="mr-2 mb-4 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm font-medium">Bulk edit before export</button>
                 <button id="download-btn" class="bg-wsu-crimson hover:bg-red-800 text-white px-8 py-3 rounded-lg text-lg font-semibold shadow-lg transition-colors inline-flex items-center">
                     <svg class="h-6 w-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
