@@ -285,4 +285,4 @@ Use this when you have updated a translation table (via Validate or manually) an
 
 ## Privacy
 
-Files are processed locally in your browser by the app design.
+Your uploaded files are processed locally in your browser and are not uploaded by this app. The page loads JavaScript libraries from public CDNs.

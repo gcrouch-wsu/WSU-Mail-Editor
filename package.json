@@ -24,7 +24,7 @@
     "lint": "npm run lint --workspaces",
     "format": "npm run format --workspaces",
     "checkfmt": "npm run checkfmt --workspaces",
-    "check:validate-translation": "node apps/validate-translation-tables/checks.js && node apps/validate-translation-tables/export-test.js"
+    "check:validate-translation": "node apps/validate-translation-tables/checks.js && node apps/validate-translation-tables/export-test.js && node apps/validate-translation-tables/ui-smoke-test.js"
   },
   "repository": {
     "type": "git",

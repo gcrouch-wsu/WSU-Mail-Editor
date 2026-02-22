@@ -639,7 +639,7 @@ async function run() {
         assert.ok(formula.includes('TRIM'), 'Final_Output formula should use TRIM for Manual_Suggested_Key effective key path');
     });
 
-    await runCheck('Fix B: B12 exemption formula excludes Duplicate_Target+Keep As-Is from duplicate output check', async () => {
+    await runCheck('Fix B: B14 exemption formula excludes Duplicate_Target+Keep As-Is from duplicate output check', async () => {
         const harness = createHarness();
         const result = await harness.buildValidationExport({
             validated: [

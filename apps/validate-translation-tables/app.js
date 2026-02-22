@@ -31,6 +31,7 @@ let columnRoles = {
     wsu_org: {}
 };
 let showAllErrors = false;
+let showUnresolvedErrorsOnly = true;
 let keyConfig = {
     outcomes: '',
     translateInput: '',
@@ -71,6 +72,8 @@ let activeExportWorker = null;
 let activeExportWorkerReject = null;
 let pageBusy = false;
 let runLocked = false;
+let uploadedSessionRows = null;
+let uploadedSessionApplied = false;
 
 function beforeUnloadHandler(event) {
     event.preventDefault();
@@ -126,6 +129,7 @@ function setRunLock(isLocked) {
 document.addEventListener('DOMContentLoaded', function() {
     setupModeSelector();
     setupFileUploads();
+    setupSessionUploadCard();
     setupCampusFamilyUpload();
     loadCampusFamilyBaseline();
     setupColumnSelection();
@@ -290,12 +294,16 @@ function updateModeUI() {
     const keyMatchFields = document.getElementById('key-match-fields');
 
     const priorValidateCard = document.getElementById('prior-validate-card');
+    const sessionUploadCard = document.getElementById('session-upload-card');
     const campusFamilyCard = document.getElementById('campus-family-card');
     if (translateCard) {
         translateCard.classList.toggle('hidden', currentMode === 'create');
     }
     if (priorValidateCard) {
         priorValidateCard.classList.toggle('hidden', currentMode !== 'validate');
+    }
+    if (sessionUploadCard) {
+        sessionUploadCard.classList.toggle('hidden', currentMode !== 'validate');
     }
     if (campusFamilyCard) {
         campusFamilyCard.classList.toggle('hidden', currentMode !== 'validate');
@@ -367,7 +375,8 @@ function getFileEncoding(fileKey) {
 
 function parsePriorValidateWorkbook(file) {
     return new Promise((resolve, reject) => {
-        if (!file || !file.name || (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls'))) {
+        const fileName = String(file?.name || '').toLowerCase();
+        if (!fileName || (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls'))) {
             resolve(null);
             return;
         }
@@ -444,6 +453,53 @@ function parsePriorValidateWorkbook(file) {
         };
         reader.onerror = () => reject(new Error('Error reading prior workbook file'));
         reader.readAsArrayBuffer(file);
+    });
+}
+
+function parseSessionRowsPayload(payload) {
+    if (!payload || !Array.isArray(payload.rows)) {
+        throw new Error('Invalid session file. Expected JSON with a rows array.');
+    }
+    return payload.rows;
+}
+
+function setupSessionUploadCard() {
+    const sessionInput = document.getElementById('session-upload-file');
+    const statusDiv = document.getElementById('session-upload-status');
+    const filenameSpan = document.getElementById('session-upload-filename');
+    const rowsSpan = document.getElementById('session-upload-rows');
+    if (!sessionInput) return;
+
+    sessionInput.addEventListener('change', async function(e) {
+        const file = e.target.files?.[0];
+        if (!file) {
+            uploadedSessionRows = null;
+            uploadedSessionApplied = false;
+            if (statusDiv) statusDiv.classList.add('hidden');
+            return;
+        }
+
+        try {
+            const text = await file.text();
+            const payload = JSON.parse(text);
+            const rows = parseSessionRowsPayload(payload);
+            uploadedSessionRows = rows;
+            uploadedSessionApplied = false;
+            if (filenameSpan) filenameSpan.textContent = file.name;
+            if (rowsSpan) rowsSpan.textContent = `${rows.length} session row(s) ready to apply`;
+            if (statusDiv) statusDiv.classList.remove('hidden');
+            if (actionQueueRowsCache && actionQueueRowsCache.length) {
+                uploadedSessionApplied = applySessionDataToActionQueue(rows, { sourceLabel: 'Upload' });
+                document.dispatchEvent(new CustomEvent('session-upload-applied'));
+                refreshErrorPresentation();
+            }
+        } catch (err) {
+            uploadedSessionRows = null;
+            uploadedSessionApplied = false;
+            if (statusDiv) statusDiv.classList.add('hidden');
+            sessionInput.value = '';
+            alert(`Error parsing session JSON: ${err.message}`);
+        }
     });
 }
 
@@ -524,11 +580,162 @@ async function loadCampusFamilyBaseline() {
     }
 }
 
+function downloadTextFile(filename, content, mimeType = 'text/plain') {
+    const blob = new Blob([content], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+
+function parseCampusFamilyEnabled(value) {
+    if (typeof value === 'boolean') return value;
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) return true;
+    if (['true', 'yes', '1', 'y'].includes(normalized)) return true;
+    if (['false', 'no', '0', 'n'].includes(normalized)) return false;
+    return true;
+}
+
+function normalizeCampusFamilyRule(raw, index) {
+    const pattern = String(
+        raw.pattern ?? raw.Pattern ?? raw.name ?? raw.match ?? ''
+    ).trim();
+    const parentKey = String(
+        raw.parentKey ?? raw.ParentKey ?? raw.parent_key ?? raw.key ?? ''
+    ).trim();
+    if (!pattern || !parentKey) return null;
+    const country = String(raw.country ?? raw.Country ?? '').trim();
+    const state = String(raw.state ?? raw.State ?? '').trim();
+    const priorityRaw = raw.priority ?? raw.Priority ?? (index + 1);
+    const priorityNum = Number.parseInt(priorityRaw, 10);
+    return {
+        pattern,
+        parentKey,
+        country,
+        state,
+        priority: Number.isFinite(priorityNum) ? priorityNum : (index + 1),
+        enabled: parseCampusFamilyEnabled(raw.enabled ?? raw.Enabled)
+    };
+}
+
+function parseCampusFamilyDelimitedText(text) {
+    const lines = String(text || '')
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'));
+    if (!lines.length) return [];
+
+    const firstLine = lines[0];
+    const hasHeader = /pattern/i.test(firstLine) && /parent/i.test(firstLine);
+    const delimiter = firstLine.includes('\t')
+        ? '\t'
+        : firstLine.includes('|')
+            ? '|'
+            : ',';
+    const dataLines = hasHeader ? lines.slice(1) : lines;
+
+    return dataLines.map(line => {
+        if (line.includes('=>')) {
+            const [pattern, parentKey] = line.split('=>').map(v => String(v || '').trim());
+            return { pattern, parentKey };
+        }
+        const parts = line.split(delimiter).map(v => String(v || '').trim());
+        return {
+            pattern: parts[0] || '',
+            parentKey: parts[1] || '',
+            country: parts[2] || '',
+            state: parts[3] || '',
+            priority: parts[4] || '',
+            enabled: parts[5] || ''
+        };
+    });
+}
+
+async function parseCampusFamilyRulesFile(file) {
+    const fileName = String(file?.name || '').toLowerCase();
+    if (!fileName) throw new Error('Missing campus-family file name.');
+
+    let rows = [];
+    if (fileName.endsWith('.json')) {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed?.patterns)) {
+            rows = parsed.patterns;
+        } else if (Array.isArray(parsed)) {
+            rows = parsed;
+        } else {
+            throw new Error('JSON must contain a "patterns" array or an array of rules.');
+        }
+    } else if (fileName.endsWith('.txt')) {
+        rows = parseCampusFamilyDelimitedText(await file.text());
+    } else if (fileName.endsWith('.csv')) {
+        try {
+            rows = await loadFile(file, { expectedHeaders: ['pattern', 'parentKey'] });
+        } catch (_) {
+            rows = parseCampusFamilyDelimitedText(await file.text());
+        }
+    } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        rows = await loadFile(file, { expectedHeaders: ['pattern', 'parentKey'] });
+    } else {
+        throw new Error('Unsupported campus-family format. Use JSON, text, CSV, or Excel.');
+    }
+
+    const normalized = rows
+        .map((row, idx) => normalizeCampusFamilyRule(row, idx))
+        .filter(Boolean);
+    if (!normalized.length) {
+        throw new Error('No valid rules found. Each row needs pattern and parentKey.');
+    }
+    return { version: 1, patterns: normalized };
+}
+
+function setupCampusFamilyTemplateDownloads() {
+    const jsonBtn = document.getElementById('campus-family-template-json-btn');
+    const csvBtn = document.getElementById('campus-family-template-csv-btn');
+    const defaultRules = {
+        version: 1,
+        patterns: [
+            {
+                pattern: 'Texas A&M*',
+                parentKey: 'TAMU-MAIN',
+                country: '',
+                state: '',
+                priority: 1,
+                enabled: true
+            }
+        ]
+    };
+    if (jsonBtn) {
+        jsonBtn.addEventListener('click', function() {
+            downloadTextFile(
+                'campus-family-template.json',
+                `${JSON.stringify(defaultRules, null, 2)}\n`,
+                'application/json'
+            );
+        });
+    }
+    if (csvBtn) {
+        csvBtn.addEventListener('click', function() {
+            const csv = [
+                'pattern,parentKey,country,state,priority,enabled',
+                'Texas A&M*,TAMU-MAIN,,,1,true'
+            ].join('\n');
+            downloadTextFile('campus-family-template.csv', `${csv}\n`, 'text/csv');
+        });
+    }
+}
+
 function setupCampusFamilyUpload() {
     const fileInput = document.getElementById('campus-family-file');
     const statusDiv = document.getElementById('campus-family-status');
     const filenameSpan = document.getElementById('campus-family-filename');
     const rowsSpan = document.getElementById('campus-family-rows');
+    setupCampusFamilyTemplateDownloads();
     if (!fileInput) return;
     fileInput.addEventListener('change', async function(e) {
         const file = e.target.files[0];
@@ -539,24 +746,16 @@ function setupCampusFamilyUpload() {
             return;
         }
         try {
-            const text = await file.text();
-            const data = JSON.parse(text);
-            if (data && Array.isArray(data.patterns)) {
-                campusFamilyRules = data;
-                if (filenameSpan) filenameSpan.textContent = file.name;
-                if (rowsSpan) rowsSpan.textContent = `${data.patterns.length} pattern(s)`;
-                if (statusDiv) statusDiv.classList.remove('hidden');
-            } else {
-                campusFamilyRules = null;
-                if (statusDiv) statusDiv.classList.add('hidden');
-                fileInput.value = '';
-                alert('Campus-family file must have a "patterns" array.');
-            }
+            const parsed = await parseCampusFamilyRulesFile(file);
+            campusFamilyRules = parsed;
+            if (filenameSpan) filenameSpan.textContent = file.name;
+            if (rowsSpan) rowsSpan.textContent = `${parsed.patterns.length} pattern(s)`;
+            if (statusDiv) statusDiv.classList.remove('hidden');
         } catch (err) {
             campusFamilyRules = null;
             if (statusDiv) statusDiv.classList.add('hidden');
             fileInput.value = '';
-            alert(`Error parsing campus-family JSON: ${err.message}`);
+            alert(`Error parsing campus-family rules: ${err.message}`);
         }
     });
 }
@@ -1307,16 +1506,26 @@ function setupColumnSelection() {
 }
 
 function setupShowAllErrorsToggle() {
-    const checkbox = document.getElementById('show-all-errors');
-    if (!checkbox) return;
-    checkbox.addEventListener('change', function() {
-        showAllErrors = checkbox.checked;
-        if (validatedData.length > 0) {
-            const limit = showAllErrors ? 0 : 10;
-            displayErrorDetails(getErrorSamples(validatedData, limit));
-            renderMappingLogicPreview();
-        }
-    });
+    const showAllCheckbox = document.getElementById('show-all-errors');
+    const unresolvedCheckbox = document.getElementById('show-unresolved-errors-only');
+    if (showAllCheckbox) {
+        showAllCheckbox.addEventListener('change', function() {
+            showAllErrors = showAllCheckbox.checked;
+            if (validatedData.length > 0) {
+                refreshErrorPresentation();
+                renderMappingLogicPreview();
+            }
+        });
+    }
+    if (unresolvedCheckbox) {
+        unresolvedCheckbox.addEventListener('change', function() {
+            showUnresolvedErrorsOnly = unresolvedCheckbox.checked;
+            if (validatedData.length > 0) {
+                refreshErrorPresentation();
+            }
+        });
+    }
+    updateUnresolvedErrorsToggleState();
 }
 
 function setupMappingLogicPreviewToggle() {
@@ -1466,6 +1675,8 @@ async function runValidation() {
         // Clear pre-export bulk edits so a new validation run cannot reuse stale queue state.
         actionQueueRowsCache = null;
         preEditedActionQueueRows = null;
+        uploadedSessionApplied = false;
+        updateUnresolvedErrorsToggleState();
         const bulkPanel = document.getElementById('bulk-edit-panel');
         if (bulkPanel) bulkPanel.classList.add('hidden');
         document.getElementById('loading').classList.remove('hidden');
@@ -1881,6 +2092,123 @@ async function createGeneratedTranslationExcel(
     downloadArrayBuffer(result.buffer, result.filename || 'Generated_Translation_Table.xlsx');
 }
 
+function getCurrentActionQueueRows() {
+    return preEditedActionQueueRows || actionQueueRowsCache || [];
+}
+
+function getQueueErrorKey(row) {
+    const type = String(row?.Error_Type || '').trim();
+    const subtype = String(row?.Error_Subtype || '').trim();
+    if (type === 'Output_Not_Found' && subtype === 'Output_Not_Found_Likely_Stale_Key') {
+        return 'Output_Not_Found_Likely_Stale_Key';
+    }
+    return type;
+}
+
+function createEmptyErrorSamples() {
+    const keys = [
+        'Input_Not_Found',
+        'Output_Not_Found',
+        'Output_Not_Found_Likely_Stale_Key',
+        'Duplicate_Target',
+        'Duplicate_Source',
+        'Name_Mismatch',
+        'Ambiguous_Match'
+    ];
+    return keys.reduce((acc, key) => {
+        acc[key] = { count: 0, showing: 0, rows: [] };
+        return acc;
+    }, {});
+}
+
+function buildErrorSamplesFromQueue(rows, limit = 10, unresolvedOnly = true) {
+    const samples = createEmptyErrorSamples();
+    const resolvedLimit = limit && limit > 0 ? limit : null;
+    const reviewRows = (rows || []).filter(row => {
+        if (!unresolvedOnly) return true;
+        return !String(row?.Decision || '').trim();
+    });
+
+    reviewRows.forEach(row => {
+        const key = getQueueErrorKey(row);
+        const bucket = samples[key];
+        if (!bucket) return;
+        bucket.count += 1;
+        if (!resolvedLimit || bucket.rows.length < resolvedLimit) {
+            bucket.rows.push({
+                translate_input: row.translate_input || '',
+                translate_output: row.translate_output || '',
+                Error_Description: row.Mapping_Logic || row.Recommended_Action || row.Error_Description || ''
+            });
+        }
+    });
+
+    Object.keys(samples).forEach(key => {
+        samples[key].showing = samples[key].rows.length;
+    });
+
+    return samples;
+}
+
+function buildChartErrorsFromQueue(rows, unresolvedOnly = true) {
+    const counts = {
+        input_not_found: 0,
+        output_not_found: 0,
+        output_not_found_likely_stale_key: 0,
+        output_not_found_ambiguous_replacement: 0,
+        output_not_found_no_replacement: 0,
+        duplicate_targets: 0,
+        duplicate_sources: 0,
+        name_mismatches: 0,
+        ambiguous_matches: 0,
+        high_confidence_matches: 0
+    };
+    (rows || []).forEach(row => {
+        if (unresolvedOnly && String(row?.Decision || '').trim()) return;
+        const type = String(row?.Error_Type || '').trim();
+        const subtype = String(row?.Error_Subtype || '').trim();
+        if (type === 'Input_Not_Found') counts.input_not_found += 1;
+        if (type === 'Output_Not_Found') {
+            counts.output_not_found += 1;
+            if (subtype === 'Output_Not_Found_Likely_Stale_Key') counts.output_not_found_likely_stale_key += 1;
+            if (subtype === 'Output_Not_Found_Ambiguous_Replacement') counts.output_not_found_ambiguous_replacement += 1;
+            if (subtype === 'Output_Not_Found_No_Replacement') counts.output_not_found_no_replacement += 1;
+        }
+        if (type === 'Duplicate_Target') counts.duplicate_targets += 1;
+        if (type === 'Duplicate_Source') counts.duplicate_sources += 1;
+        if (type === 'Name_Mismatch') counts.name_mismatches += 1;
+        if (type === 'Ambiguous_Match') counts.ambiguous_matches += 1;
+    });
+    return counts;
+}
+
+function updateUnresolvedErrorsToggleState() {
+    const unresolvedCheckbox = document.getElementById('show-unresolved-errors-only');
+    if (!unresolvedCheckbox) return;
+    const hasQueue = getCurrentActionQueueRows().length > 0;
+    unresolvedCheckbox.disabled = !hasQueue;
+    if (!hasQueue) {
+        showUnresolvedErrorsOnly = false;
+        unresolvedCheckbox.checked = false;
+        return;
+    }
+    if (!unresolvedCheckbox.checked) unresolvedCheckbox.checked = true;
+    showUnresolvedErrorsOnly = unresolvedCheckbox.checked;
+}
+
+function refreshErrorPresentation() {
+    if (!validatedData.length) return;
+    const limit = showAllErrors ? 0 : 10;
+    const queueRows = getCurrentActionQueueRows();
+    if (showUnresolvedErrorsOnly && queueRows.length) {
+        displayErrorDetails(buildErrorSamplesFromQueue(queueRows, limit, true));
+        createErrorChart(buildChartErrorsFromQueue(queueRows, true));
+        return;
+    }
+    displayErrorDetails(getErrorSamples(validatedData, limit));
+    createErrorChart(stats.errors || {});
+}
+
 function displayResults(stats, errorSamples) {
     document.getElementById('total-mappings').textContent = stats.validation.total_mappings.toLocaleString();
     document.getElementById('valid-count').textContent = stats.validation.valid_count.toLocaleString();
@@ -1894,10 +2222,13 @@ function displayResults(stats, errorSamples) {
     document.getElementById('error-percentage').textContent = `${displayErrorPercentage}%`;
     document.getElementById('quality-score').textContent = stats.validation.valid_percentage + '%';
 
-    createErrorChart(stats.errors);
-
-    renderRecommendedReviewOrder(stats.errors);
-    displayErrorDetails(errorSamples);
+    updateUnresolvedErrorsToggleState();
+    if (showUnresolvedErrorsOnly && getCurrentActionQueueRows().length) {
+        refreshErrorPresentation();
+    } else {
+        createErrorChart(stats.errors);
+        displayErrorDetails(errorSamples);
+    }
     renderMappingLogicPreview();
     renderMatchingRulesExamples();
 
@@ -2212,36 +2543,6 @@ function createErrorChart(errors) {
     });
 }
 
-function renderRecommendedReviewOrder(errors) {
-    const panel = document.getElementById('recommended-review-order');
-    const list = document.getElementById('review-order-list');
-    if (!panel || !list) return;
-
-    const e = errors || {};
-    const structural = (e.missing_inputs || 0) + (e.missing_outputs || 0) + (e.input_not_found || 0) + (e.output_not_found_no_replacement ?? 0);
-    const duplicates = (e.duplicate_targets || 0) + (e.duplicate_sources || 0);
-    const staleKey = e.output_not_found_likely_stale_key || 0;
-    const nameWarnings = (e.name_mismatches || 0) + (e.ambiguous_matches || 0);
-    const ambiguousReplacement = e.output_not_found_ambiguous_replacement || 0;
-
-    const rawItems = [
-        structural > 0 && `Structural/key failures (${structural})`,
-        duplicates > 0 && `Duplicate conflicts (${duplicates})`,
-        staleKey > 0 && `Stale-key candidates (${staleKey})`,
-        ambiguousReplacement > 0 && `Ambiguous replacement (${ambiguousReplacement})`,
-        nameWarnings > 0 && `Name warnings (${nameWarnings})`
-    ].filter(Boolean);
-    const items = rawItems.map((text, i) => `${i + 1}. ${text}`);
-
-    if (items.length === 0) {
-        panel.classList.add('hidden');
-        list.innerHTML = '';
-        return;
-    }
-    list.innerHTML = items.map(text => `<li>${escapeHtml(text)}</li>`).join('');
-    panel.classList.remove('hidden');
-}
-
 function displayErrorDetails(errorSamples) {
     const detailsDiv = document.getElementById('error-details');
     detailsDiv.innerHTML = '';
@@ -2256,12 +2557,23 @@ function displayErrorDetails(errorSamples) {
         { key: 'Ambiguous_Match', title: 'Ambiguous Matches (Check Alternatives)', color: 'yellow' },
     ];
 
+    const cardsHtml = [];
     errorTypes.forEach(errorType => {
         const sample = errorSamples[errorType.key];
         if (sample && sample.count > 0) {
-            const card = createErrorCard(errorType.title, sample, errorType.color);
-            detailsDiv.innerHTML += card;
+            cardsHtml.push(createErrorCard(errorType.title, sample, errorType.color));
         }
+    });
+    detailsDiv.innerHTML = cardsHtml.join('');
+    detailsDiv.querySelectorAll('.error-card-toggle').forEach(button => {
+        button.addEventListener('click', function() {
+            const targetId = button.getAttribute('data-target');
+            const panel = targetId ? document.getElementById(targetId) : null;
+            const chevron = button.querySelector('[data-chevron]');
+            if (!panel) return;
+            panel.classList.toggle('hidden');
+            if (chevron) chevron.classList.toggle('rotate-180');
+        });
     });
 }
 
@@ -2332,33 +2644,41 @@ function createErrorCard(title, sample, color) {
     const showingLine = sample.showing < sample.count
         ? `Showing first ${sample.showing} of ${sample.count} errors - download Excel for complete list`
         : `Showing all ${sample.count} errors`;
+    const cardId = `error-card-${String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
     return `
         <div class="bg-white rounded-lg shadow-md p-6 border-l-4 ${colorClasses[color]}">
-            <div class="flex items-start justify-between mb-4">
-                <div>
+            <button type="button" data-target="${cardId}" class="error-card-toggle w-full flex items-start justify-between text-left">
+                <div class="pr-2">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">${explanation.icon} ${title}</h3>
                     <p class="text-sm text-gray-700 mb-2">${explanation.text}</p>
                     <p class="text-xs font-semibold text-${color}-700 uppercase">${explanation.impact}</p>
                 </div>
-                <div class="bg-${color}-100 rounded-full px-4 py-2">
-                    <span class="text-2xl font-bold text-${color}-700">${sample.count}</span>
+                <div class="flex items-center gap-2">
+                    <div class="bg-${color}-100 rounded-full px-4 py-2">
+                        <span class="text-2xl font-bold text-${color}-700">${sample.count}</span>
+                    </div>
+                    <svg data-chevron class="h-5 w-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
                 </div>
-            </div>
-            <p class="text-xs text-gray-500 mb-4">${showingLine}</p>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-100">
-                        <tr>
-                            <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">${keyLabels.translateInput || 'Source key'}</th>
-                            <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">${keyLabels.translateOutput || 'Target key'}</th>
-                            <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        ${rowsHtml}
-                    </tbody>
-                </table>
+            </button>
+            <div id="${cardId}" class="hidden mt-4">
+                <p class="text-xs text-gray-500 mb-4">${showingLine}</p>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">${keyLabels.translateInput || 'Source key'}</th>
+                                <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">${keyLabels.translateOutput || 'Target key'}</th>
+                                <th class="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     `;
@@ -2488,6 +2808,38 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     return result;
 }
 
+function applySessionDataToActionQueue(sessionRows, options = {}) {
+    const rows = getCurrentActionQueueRows();
+    if (!rows.length) return false;
+    const sourceLabel = options.sourceLabel || 'Session';
+    const silent = Boolean(options.silent);
+    const toDisplay = (value) => String(value ?? '').trim();
+    const rowMap = new Map(rows.map(row => [String(row.Review_Row_ID || ''), row]));
+    let applied = 0;
+    let missing = 0;
+
+    (sessionRows || []).forEach(entry => {
+        const rid = String(entry?.Review_Row_ID || '').trim();
+        if (!rid) return;
+        const row = rowMap.get(rid);
+        if (!row) {
+            missing += 1;
+            return;
+        }
+        row.Decision = toDisplay(entry.Decision);
+        row.Reason_Code = toDisplay(entry.Reason_Code);
+        row.Manual_Suggested_Key = toDisplay(entry.Manual_Suggested_Key);
+        row.Selected_Candidate_ID = toDisplay(entry.Selected_Candidate_ID);
+        applied += 1;
+    });
+
+    preEditedActionQueueRows = rows;
+    if (!silent) {
+        alert(`${sourceLabel} loaded: ${applied} rows applied${missing ? `, ${missing} unmatched Review_Row_ID` : ''}.`);
+    }
+    return applied > 0;
+}
+
 let actionQueueRowsCache = null;
 
 function setupBulkEditPanel() {
@@ -2497,6 +2849,7 @@ function setupBulkEditPanel() {
     const filterDecisionSelect = document.getElementById('bulk-filter-decision');
     const filterOutcomesNameInput = document.getElementById('bulk-filter-outcomes-name');
     const filterWsuNameInput = document.getElementById('bulk-filter-wsu-name');
+    const filterTranslationOnly = document.getElementById('bulk-filter-translation-only');
     const applyDecisionSelect = document.getElementById('bulk-apply-decision');
     const applyReasonCodeSelect = document.getElementById('bulk-apply-reason-code');
     const applyCandidateIdSelect = document.getElementById('bulk-apply-candidate-id');
@@ -2514,6 +2867,10 @@ function setupBulkEditPanel() {
     const rowCountEl = document.getElementById('bulk-edit-row-count');
     const filterCountEl = document.getElementById('bulk-edit-filter-count');
     const selectedCountEl = document.getElementById('bulk-edit-selected-count');
+    const loadProgressWrap = document.getElementById('bulk-load-progress');
+    const loadProgressText = document.getElementById('bulk-load-progress-text');
+    const loadProgressPercent = document.getElementById('bulk-load-progress-percent');
+    const loadProgressBar = document.getElementById('bulk-load-progress-bar');
     if (!toggleBtn || !panel || !tbody) return;
 
     const MAX_RENDER_ROWS = 400;
@@ -2556,6 +2913,37 @@ function setupBulkEditPanel() {
         const score = Number.isFinite(scoreVal) ? ` | Score: ${scoreVal.toFixed(2)}` : '';
         const base = `${key}: ${name}${loc ? ` - ${loc}` : ''}`;
         return `${base}${score}`;
+    };
+    const normalizeKey = (value) => String(value ?? '').trim().toLowerCase();
+    const buildWsuKeyLookup = () => {
+        const map = new Map();
+        const wsuKeyCol = keyConfig.wsu;
+        const wsuNameCol = getNameColumn('wsu_org');
+        const wsuStateCol = getColumnByToken('wsu_org', 'state');
+        const wsuCountryCol = getColumnByToken('wsu_org', 'country');
+        const wsuCityCol = getColumnByToken('wsu_org', 'city');
+        (loadedData.wsu_org || []).forEach(row => {
+            const keyVal = normalizeKey(wsuKeyCol ? row[wsuKeyCol] : '');
+            if (!keyVal) return;
+            if (map.has(keyVal)) return;
+            map.set(keyVal, {
+                key: toDisplay(wsuKeyCol ? row[wsuKeyCol] : ''),
+                name: toDisplay(wsuNameCol ? row[wsuNameCol] : ''),
+                city: toDisplay(wsuCityCol ? row[wsuCityCol] : ''),
+                state: toDisplay(wsuStateCol ? row[wsuStateCol] : ''),
+                country: toDisplay(wsuCountryCol ? row[wsuCountryCol] : '')
+            });
+        });
+        return map;
+    };
+    const formatPreview = (entry, badgeText = '') => {
+        if (!entry) return '<span class="text-xs text-gray-500">(no override selected)</span>';
+        const parts = [entry.name, entry.city, entry.state, entry.country].filter(Boolean).join(' | ');
+        return `
+            <div class="text-xs">${escapeHtml(entry.key || '(blank)')}</div>
+            <div class="text-xs text-gray-700">${escapeHtml(parts || '(no location)')}</div>
+            ${badgeText ? `<div class="text-[11px] text-orange-700 mt-1">${escapeHtml(badgeText)}</div>` : ''}
+        `;
     };
     const getRoleColumn = (source, roleName) => {
         const roles = columnRoles[source] || {};
@@ -2618,11 +3006,13 @@ function setupBulkEditPanel() {
         const decisionFilter = toDisplay(filterDecisionSelect?.value || '');
         const outcomesContains = normalize(filterOutcomesNameInput?.value || '');
         const wsuContains = normalize(filterWsuNameInput?.value || '');
+        const translationOnly = Boolean(filterTranslationOnly?.checked);
         const matches = getWorkingRows().filter(row => {
             const ctx = row._ctx || {};
             if (errorType && toDisplay(row.Error_Type) !== errorType) return false;
             if (decisionFilter === '(blank)' && toDisplay(row.Decision)) return false;
             if (decisionFilter && decisionFilter !== '(blank)' && toDisplay(row.Decision) !== decisionFilter) return false;
+            if (translationOnly && (toDisplay(row.Source_Sheet) === 'Missing_Mappings' || toDisplay(row.Error_Type) === 'Missing_Mapping')) return false;
             if (outcomesContains && !normalize(ctx.outcomesName).includes(outcomesContains)) return false;
             if (wsuContains && !normalize(ctx.wsuName).includes(wsuContains)) return false;
             return true;
@@ -2646,6 +3036,7 @@ function setupBulkEditPanel() {
     const renderBulkEditTable = () => {
         filteredRowsCache = getFilteredRows();
         const visibleRows = filteredRowsCache.slice(0, MAX_RENDER_ROWS);
+        const wsuKeyLookup = buildWsuKeyLookup();
         tbody.innerHTML = visibleRows.map(row => {
             const rid = String(row.Review_Row_ID || '');
             const ridAttr = encodeRowId(rid);
@@ -2653,6 +3044,37 @@ function setupBulkEditPanel() {
             const outcomesCtx = [ctx.outcomesName, ctx.outcomesState, ctx.outcomesCountry].filter(Boolean).join(' | ');
             const wsuCtx = [ctx.wsuName, ctx.wsuState, ctx.wsuCountry].filter(Boolean).join(' | ');
             const candidateOptions = (row._candidates || []);
+            const selectedCandidate = candidateOptions.find(
+                c => toDisplay(c.candidateId || '') === toDisplay(row.Selected_Candidate_ID)
+            );
+            const manualKey = toDisplay(row.Manual_Suggested_Key);
+            const currentOutputKey = toDisplay(row.translate_output);
+            const currentWsuHtml = `
+                <div class="text-xs">${escapeHtml(currentOutputKey || '(blank)')}</div>
+                <div class="text-xs text-gray-700">${escapeHtml(wsuCtx || '(blank)')}</div>
+            `;
+            let effectivePreview = null;
+            let effectiveBadge = '';
+            if (manualKey) {
+                const fromLookup = wsuKeyLookup.get(normalizeKey(manualKey));
+                effectivePreview = fromLookup || {
+                    key: manualKey,
+                    name: '',
+                    city: '',
+                    state: '',
+                    country: ''
+                };
+                effectiveBadge = 'Manual override active';
+            } else if (selectedCandidate) {
+                effectivePreview = {
+                    key: toDisplay(selectedCandidate.key || ''),
+                    name: toDisplay(selectedCandidate.name || ''),
+                    city: toDisplay(selectedCandidate.city || ''),
+                    state: toDisplay(selectedCandidate.state || ''),
+                    country: toDisplay(selectedCandidate.country || '')
+                };
+                effectiveBadge = `Selected ${toDisplay(selectedCandidate.candidateId || '')}`;
+            }
             const candidateOptionsHtml = [
                 optionHtml('', candidateOptions.length ? '(none)' : '(no location-valid suggestions)', toDisplay(row.Selected_Candidate_ID) === ''),
                 ...candidateOptions.map(c => optionHtml(
@@ -2669,8 +3091,9 @@ function setupBulkEditPanel() {
                     </td>
                     <td class="py-1 px-2">${escapeHtml(toDisplay(row.Error_Type))}</td>
                     <td class="py-1 px-2">${escapeHtml(toDisplay(row.Error_Subtype))}</td>
-                    <td class="py-1 px-2">${escapeHtml(outcomesCtx || '(blank)')}</td>
-                    <td class="py-1 px-2">${escapeHtml(wsuCtx || '(blank)')}</td>
+                    <td class="py-1 px-2 break-words">${escapeHtml(outcomesCtx || '(blank)')}</td>
+                    <td class="py-1 px-2 break-words">${currentWsuHtml}</td>
+                    <td class="py-1 px-2 break-words">${formatPreview(effectivePreview, effectiveBadge)}</td>
                     <td class="py-1 px-2 font-mono text-xs">${escapeHtml(toDisplay(row.translate_input))}</td>
                     <td class="py-1 px-2 font-mono text-xs">${escapeHtml(toDisplay(row.translate_output))}</td>
                     <td class="py-1 px-2">
@@ -2696,9 +3119,10 @@ function setupBulkEditPanel() {
             `;
         }).join('');
         if (filteredRowsCache.length > MAX_RENDER_ROWS) {
-            tbody.innerHTML += `<tr><td colspan="11" class="py-1 px-2 text-gray-500 text-xs">Showing first ${MAX_RENDER_ROWS} of ${filteredRowsCache.length} filtered rows. Bulk actions still apply to all filtered rows.</td></tr>`;
+            tbody.innerHTML += `<tr><td colspan="12" class="py-1 px-2 text-gray-500 text-xs">Showing first ${MAX_RENDER_ROWS} of ${filteredRowsCache.length} filtered rows. Bulk actions still apply to all filtered rows.</td></tr>`;
         }
         refreshCounters();
+        refreshErrorPresentation();
     };
     const getApplyTargets = () => {
         const selectedOnly = Boolean(applySelectedOnly?.checked);
@@ -2707,11 +3131,18 @@ function setupBulkEditPanel() {
     };
     const loadActionQueueRows = async () => {
         if (actionQueueRowsCache) {
+            updateUnresolvedErrorsToggleState();
             renderBulkEditTable();
             return;
         }
         toggleBtn.disabled = true;
         toggleBtn.textContent = 'Loading...';
+        if (loadProgressWrap && loadProgressText && loadProgressPercent && loadProgressBar) {
+            loadProgressWrap.classList.remove('hidden');
+            loadProgressText.textContent = 'Loading review rows...';
+            loadProgressPercent.textContent = '0%';
+            loadProgressBar.style.width = '0%';
+        }
         try {
             const payload = {
                 validated: validatedData,
@@ -2726,13 +3157,27 @@ function setupBulkEditPanel() {
                 },
                 context: { loadedData, columnRoles, keyConfig, keyLabels }
             };
-            const result = await runExportWorkerTask('get_action_queue', payload);
+            const result = await runExportWorkerTask(
+                'get_action_queue',
+                payload,
+                (stage, processed, total) => {
+                    if (!loadProgressWrap || !loadProgressText || !loadProgressPercent || !loadProgressBar) return;
+                    const percent = total ? Math.round((processed / total) * 100) : 0;
+                    loadProgressText.textContent = stage || 'Loading review rows...';
+                    loadProgressPercent.textContent = `${percent}%`;
+                    loadProgressBar.style.width = `${percent}%`;
+                }
+            );
             actionQueueRowsCache = cloneRows(result?.actionQueueRows || []);
             preEditedActionQueueRows = cloneRows(actionQueueRowsCache);
             getWorkingRows().forEach(attachRowContext);
+            updateUnresolvedErrorsToggleState();
             const types = [...new Set(getWorkingRows().map(r => toDisplay(r.Error_Type)).filter(Boolean))].sort();
             if (filterSelect) {
                 filterSelect.innerHTML = '<option value="">All</option>' + types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+            }
+            if (uploadedSessionRows && uploadedSessionRows.length && !uploadedSessionApplied) {
+                uploadedSessionApplied = applySessionDataToActionQueue(uploadedSessionRows, { sourceLabel: 'Upload' });
             }
             renderBulkEditTable();
         } catch (err) {
@@ -2740,29 +3185,10 @@ function setupBulkEditPanel() {
         } finally {
             toggleBtn.disabled = false;
             toggleBtn.textContent = 'Bulk edit before export';
-        }
-    };
-    const applySessionData = (sessionRows) => {
-        const rowMap = new Map(getWorkingRows().map(row => [String(row.Review_Row_ID || ''), row]));
-        let applied = 0;
-        let missing = 0;
-        sessionRows.forEach(entry => {
-            const rid = String(entry.Review_Row_ID || '');
-            if (!rid) return;
-            const row = rowMap.get(rid);
-            if (!row) {
-                missing += 1;
-                return;
+            if (loadProgressWrap) {
+                setTimeout(() => loadProgressWrap.classList.add('hidden'), 500);
             }
-            row.Decision = toDisplay(entry.Decision);
-            row.Reason_Code = toDisplay(entry.Reason_Code);
-            row.Manual_Suggested_Key = toDisplay(entry.Manual_Suggested_Key);
-            row.Selected_Candidate_ID = toDisplay(entry.Selected_Candidate_ID);
-            applied += 1;
-        });
-        preEditedActionQueueRows = getWorkingRows();
-        renderBulkEditTable();
-        alert(`Session loaded: ${applied} rows applied${missing ? `, ${missing} unmatched Review_Row_ID` : ''}.`);
+        }
     };
 
     toggleBtn.addEventListener('click', async function() {
@@ -2776,6 +3202,7 @@ function setupBulkEditPanel() {
     filterDecisionSelect?.addEventListener('change', renderBulkEditTable);
     filterOutcomesNameInput?.addEventListener('input', renderBulkEditTable);
     filterWsuNameInput?.addEventListener('input', renderBulkEditTable);
+    filterTranslationOnly?.addEventListener('change', renderBulkEditTable);
     quickChipButtons.forEach(btn => {
         btn.addEventListener('click', function() {
             const chipValue = toDisplay(btn.getAttribute('data-outcomes-name'));
@@ -2788,6 +3215,7 @@ function setupBulkEditPanel() {
         if (filterWsuNameInput) filterWsuNameInput.value = '';
         if (filterDecisionSelect) filterDecisionSelect.value = '';
         if (filterSelect) filterSelect.value = '';
+        if (filterTranslationOnly) filterTranslationOnly.checked = false;
         renderBulkEditTable();
     });
 
@@ -2919,16 +3347,20 @@ function setupBulkEditPanel() {
             await loadActionQueueRows();
             const text = await file.text();
             const parsed = JSON.parse(text);
-            if (!parsed || !Array.isArray(parsed.rows)) {
-                alert('Invalid session file. Expected JSON with a rows array.');
-                input.value = '';
-                return;
-            }
-            applySessionData(parsed.rows);
+            const rows = parseSessionRowsPayload(parsed);
+            applySessionDataToActionQueue(rows);
+            renderBulkEditTable();
         } catch (err) {
             alert(`Error loading session: ${err.message}`);
         } finally {
             input.value = '';
+        }
+    });
+
+    document.addEventListener('session-upload-applied', function() {
+        if (!panel.classList.contains('hidden') && getWorkingRows().length) {
+            getWorkingRows().forEach(attachRowContext);
+            renderBulkEditTable();
         }
     });
 }

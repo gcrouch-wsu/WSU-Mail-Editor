@@ -73,7 +73,7 @@
                     </p>
                     <div class="mt-2 text-sm text-blue-700">
                         <div id="instructions-validate">
-                            <p>1. Upload Outcomes source, Translation table, and myWSU. Optional: Prior Validate workbook to re-apply decisions from a previous run. Optional: campus-family JSON rules to prefill parent keys for campus variants.</p>
+                            <p>1. Upload Outcomes source, Translation table, and myWSU. Optional: Prior Validate workbook to re-apply decisions from a previous run. Optional: Review Session JSON to resume in-app edits. Optional: campus-family rules file (JSON/text/CSV/Excel) to prefill parent keys for campus variants.</p>
                             <p>2. <strong>Match Options:</strong> Pick Translation input/output columns. Choose validation mode: Key only, or Key + name comparison</p>
                             <p>3. <strong>Name comparison</strong> (if used): Pick Outcomes and myWSU name columns; set threshold (default 0.8) and ambiguity gap (0.03)</p>
                             <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; mark key columns for Outcomes and myWSU; optionally map roles (School, City, State, Country). Include City/State for high-confidence matching</p>
@@ -97,7 +97,7 @@
                             <p>4. Click <strong>Generate Join Preview</strong> -> download Excel</p>
                             <p>5. Review the joined table to verify Outcomes and myWSU data align correctly before publish</p>
                         </div>
-                        <p class="mt-2 font-semibold">Privacy: All files are processed locally in your browser. No data is uploaded to any server.</p>
+                        <p class="mt-2 font-semibold">Privacy: Your uploaded files are processed locally in your browser and are not uploaded by this app. The page loads JavaScript libraries from public CDNs.</p>
                     </div>
                 </div>
             </div>
@@ -210,7 +210,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                     </svg>
                     <h3 class="mt-2 text-sm font-medium text-gray-900">Prior Validate Workbook</h3>
-                    <p class="text-xs text-gray-500 mt-1">Optional – resume prior session</p>
+                    <p class="text-xs text-gray-500 mt-1">Optional - resume prior session</p>
                     <p class="text-xs text-gray-500 mt-1">Excel from previous Validate run</p>
                     <div class="mt-4">
                         <label for="prior-validate-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
@@ -230,19 +230,53 @@
                 </div>
             </div>
 
+            <div id="session-upload-card" class="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-gray-300 hover:border-wsu-crimson transition-colors">
+                <div class="text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M8 4h8a2 2 0 012 2v12a2 2 0 01-2 2H8a2 2 0 01-2-2V6a2 2 0 012-2z"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">Review Session JSON</h3>
+                    <p class="text-xs text-gray-500 mt-1">Optional - resume in-app edits</p>
+                    <p class="text-xs text-gray-500 mt-1">Upload a saved JSON session</p>
+                    <div class="mt-4">
+                        <label for="session-upload-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            Choose File
+                        </label>
+                        <input id="session-upload-file" name="session-upload-file" type="file" accept=".json" class="hidden">
+                    </div>
+                    <div id="session-upload-status" class="mt-3 text-sm hidden">
+                        <div class="flex items-center justify-center text-green-600">
+                            <svg class="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span id="session-upload-filename"></span>
+                        </div>
+                        <p id="session-upload-rows" class="text-gray-600 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+
             <div id="campus-family-card" class="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-gray-300 hover:border-wsu-crimson transition-colors">
                 <div class="text-center">
                     <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                     </svg>
                     <h3 class="mt-2 text-sm font-medium text-gray-900">Campus-Family Rules</h3>
-                    <p class="text-xs text-gray-500 mt-1">Optional – prefill parent keys</p>
-                    <p class="text-xs text-gray-500 mt-1">JSON (pattern, parentKey)</p>
+                    <p class="text-xs text-gray-500 mt-1">Optional - prefill parent keys</p>
+                    <p class="text-xs text-gray-500 mt-1">JSON, text, CSV, or Excel</p>
                     <div class="mt-4">
                         <label for="campus-family-file" class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                             Choose File
                         </label>
-                        <input id="campus-family-file" name="campus-family-file" type="file" accept=".json" class="hidden">
+                        <input id="campus-family-file" name="campus-family-file" type="file" accept=".json,.txt,.csv,.xlsx,.xls" class="hidden">
+                    </div>
+                    <div class="mt-2 flex items-center justify-center gap-2">
+                        <button id="campus-family-template-json-btn" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs font-medium border border-gray-300">
+                            Download JSON Template
+                        </button>
+                        <button id="campus-family-template-csv-btn" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs font-medium border border-gray-300">
+                            Download CSV Template
+                        </button>
                     </div>
                     <div id="campus-family-status" class="mt-3 text-sm hidden">
                         <div class="flex items-center justify-center text-green-600">
@@ -569,16 +603,14 @@
                 <canvas id="error-chart" height="100"></canvas>
             </div>
 
-            <div id="recommended-review-order" class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded hidden">
-                <h3 class="text-base font-semibold text-blue-900 mb-2">Recommended Review Order</h3>
-                <p class="text-sm text-blue-800 mb-3">Process the Review_Workbench queue in this order for fastest results:</p>
-                <ul id="review-order-list" class="text-sm text-blue-800 space-y-1 list-disc list-inside"></ul>
-            </div>
-
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <label class="flex items-center text-sm text-gray-700">
                     <input id="show-all-errors" type="checkbox" class="mr-2">
                     Show all errors in cards
+                </label>
+                <label class="flex items-center text-sm text-gray-700">
+                    <input id="show-unresolved-errors-only" type="checkbox" class="mr-2" checked>
+                    Show unresolved errors only (based on in-app decisions)
                 </label>
                 <label class="flex items-center text-sm text-gray-700">
                     <input id="show-logic-preview" type="checkbox" class="mr-2">
@@ -688,11 +720,11 @@
                 </div>
             </div>
 
-            <div id="bulk-edit-panel" class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 hidden">
+            <div id="bulk-edit-panel" class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 hidden lg:relative lg:left-1/2 lg:-translate-x-1/2 lg:w-[calc(100vw-2rem)]">
                 <h3 class="text-base font-semibold text-gray-800 mb-2">In-app review and bulk apply before export</h3>
                 <p class="text-sm text-gray-600 mb-3">Review context inline (Outcomes/myWSU names + location), set Decision/Reason/Suggestion, then bulk apply to selected or filtered rows.</p>
 
-                <div class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-3">
+                <div class="grid grid-cols-1 lg:grid-cols-6 gap-3 mb-3">
                     <div>
                         <label class="block text-xs text-gray-600 mb-1">Filter Error Type</label>
                         <select id="bulk-filter-error-type" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
@@ -720,9 +752,25 @@
                     </div>
                     <div class="flex items-end">
                         <label class="inline-flex items-center text-sm text-gray-700">
+                            <input id="bulk-filter-translation-only" type="checkbox" class="mr-2">
+                            Translation-table rows only
+                        </label>
+                    </div>
+                    <div class="flex items-end">
+                        <label class="inline-flex items-center text-sm text-gray-700">
                             <input id="bulk-apply-selected-only" type="checkbox" class="mr-2">
                             Apply to selected rows only
                         </label>
+                    </div>
+                </div>
+
+                <div id="bulk-load-progress" class="hidden mb-3">
+                    <div class="flex items-center justify-between text-xs text-gray-600 mb-1">
+                        <span id="bulk-load-progress-text">Loading review rows...</span>
+                        <span id="bulk-load-progress-percent">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="bulk-load-progress-bar" class="bg-wsu-crimson h-2 rounded-full transition-all duration-200" style="width: 0%;"></div>
                     </div>
                 </div>
 
@@ -796,7 +844,7 @@
                 </div>
 
                 <div class="overflow-x-auto max-h-96 border border-gray-200 rounded bg-white">
-                    <table class="text-sm" style="min-width: 1600px;">
+                    <table class="w-full text-sm table-fixed">
                         <thead class="bg-gray-100 sticky top-0">
                             <tr>
                                 <th class="py-1 px-2 text-left">Select</th>
@@ -804,6 +852,7 @@
                                 <th class="py-1 px-2 text-left">Subtype</th>
                                 <th class="py-1 px-2 text-left">Outcomes (Name / State / Country)</th>
                                 <th class="py-1 px-2 text-left">Current myWSU (Name / State / Country)</th>
+                                <th class="py-1 px-2 text-left">Effective myWSU (Preview)</th>
                                 <th class="py-1 px-2 text-left">Input Key</th>
                                 <th class="py-1 px-2 text-left">Output Key</th>
                                 <th class="py-1 px-2 text-left">Decision</th>
@@ -842,7 +891,7 @@
     <footer class="bg-gray-800 text-white mt-16 py-6">
         <div class="container mx-auto px-4 text-center">
             <p>Graduate School | Washington State University</p>
-            <p class="text-xs text-gray-400 mt-1">All processing happens locally in your browser. No data is uploaded to any server.</p>
+            <p class="text-xs text-gray-400 mt-1">Your uploaded files are processed locally in your browser and are not uploaded by this app. This page loads JavaScript libraries from public CDNs.</p>
         </div>
     </footer>
 
