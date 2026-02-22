@@ -155,6 +155,9 @@ async function run() {
         assert.ok(htmlIds.has('show-unresolved-errors-only'));
         assert.ok(htmlIds.has('bulk-filter-translation-only'));
         assert.ok(htmlIds.has('bulk-load-progress'));
+        assert.ok(htmlIds.has('bulk-mark-reviewed-btn'));
+        assert.ok(htmlIds.has('bulk-clear-reviewed-btn'));
+        assert.ok(htmlIds.has('bulk-edit-reviewed-count'));
     });
 
     await runCheck('index: removed review-order card is absent', () => {
@@ -293,6 +296,108 @@ async function run() {
         } finally {
             context.loadFile = originalLoadFile;
         }
+    });
+
+    await runCheck('action queue prefetch: reuses in-flight promise and hydrates cache', async () => {
+        vm.runInContext(`
+            validatedData = [{ Review_Row_ID: 'seed' }];
+            missingData = [];
+            selectedColumns = { outcomes: [], wsu_org: [] };
+            priorDecisions = null;
+            lastNameCompareConfig = {};
+            campusFamilyRules = null;
+            loadedData = { outcomes: [], translate: [], wsu_org: [] };
+            columnRoles = { outcomes: {}, wsu_org: {} };
+            keyConfig = { outcomes: '', translateInput: '', translateOutput: '', wsu: '' };
+            keyLabels = { outcomes: '', translateInput: '', translateOutput: '', wsu: '' };
+            actionQueueRowsCache = null;
+            preEditedActionQueueRows = null;
+            actionQueuePrefetchPromise = null;
+            actionQueuePrefetchInFlight = false;
+        `, context);
+
+        const originalRunExportWorkerTask = context.runExportWorkerTask;
+        let calls = 0;
+        let resolveTask;
+        context.runExportWorkerTask = async () => {
+            calls += 1;
+            return new Promise((resolve) => {
+                resolveTask = resolve;
+            });
+        };
+
+        try {
+            const p1 = context.startActionQueuePrefetch();
+            const p2 = context.startActionQueuePrefetch();
+            assert.equal(calls, 1);
+            assert.equal(p1, p2);
+
+            resolveTask({
+                actionQueueRows: [{ Review_Row_ID: 'RID-PREFETCH', _candidates: [{ candidateId: 'C1' }] }]
+            });
+            await p1;
+
+            const cacheRows = JSON.parse(vm.runInContext('JSON.stringify(actionQueueRowsCache)', context));
+            const editedRows = JSON.parse(vm.runInContext('JSON.stringify(preEditedActionQueueRows)', context));
+            assert.equal(cacheRows.length, 1);
+            assert.equal(cacheRows[0].Review_Row_ID, 'RID-PREFETCH');
+            assert.equal(editedRows.length, 1);
+            assert.equal(editedRows[0].Review_Row_ID, 'RID-PREFETCH');
+            assert.equal(vm.runInContext('actionQueuePrefetchPromise === null', context), true);
+            assert.equal(vm.runInContext('actionQueuePrefetchInFlight === false', context), true);
+        } finally {
+            context.runExportWorkerTask = originalRunExportWorkerTask;
+        }
+    });
+
+    await runCheck('action queue prefetch: cancel terminates active prefetch worker', () => {
+        vm.runInContext(`
+            var __termCount = 0;
+            var __rejectCount = 0;
+            activeExportWorker = { terminate() { __termCount += 1; } };
+            activeExportWorkerReject = () => { __rejectCount += 1; };
+            actionQueuePrefetchPromise = Promise.resolve();
+            actionQueuePrefetchInFlight = true;
+        `, context);
+
+        context.cancelActionQueuePrefetch();
+        assert.equal(vm.runInContext('__termCount', context), 1);
+        assert.equal(vm.runInContext('__rejectCount', context), 1);
+        assert.equal(vm.runInContext('actionQueuePrefetchPromise === null', context), true);
+        assert.equal(vm.runInContext('actionQueuePrefetchInFlight === false', context), true);
+    });
+
+    await runCheck('unresolved view: requires explicit Reviewed plus non-blank decision', () => {
+        const rows = [
+            {
+                Error_Type: 'Duplicate_Source',
+                Error_Subtype: '',
+                Decision: 'Keep As-Is',
+                Reviewed: false,
+                translate_input: 'A',
+                translate_output: '1'
+            },
+            {
+                Error_Type: 'Duplicate_Source',
+                Error_Subtype: '',
+                Decision: 'Keep As-Is',
+                Reviewed: true,
+                translate_input: 'B',
+                translate_output: '2'
+            },
+            {
+                Error_Type: 'Duplicate_Source',
+                Error_Subtype: '',
+                Decision: '',
+                Reviewed: true,
+                translate_input: 'C',
+                translate_output: '3'
+            }
+        ];
+        const samples = context.buildErrorSamplesFromQueue(rows, 10, true);
+        const chart = context.buildChartErrorsFromQueue(rows, true);
+        assert.equal(samples.Duplicate_Source.count, 2);
+        assert.equal(chart.duplicate_sources, 2);
     });
 
     await runCheck('applySessionDataToActionQueue: applies matches and reports unmatched Review_Row_ID', () => {

@@ -74,6 +74,8 @@ let pageBusy = false;
 let runLocked = false;
 let uploadedSessionRows = null;
 let uploadedSessionApplied = false;
+let actionQueuePrefetchPromise = null;
+let actionQueuePrefetchInFlight = false;
 
 function beforeUnloadHandler(event) {
     event.preventDefault();
@@ -237,6 +239,70 @@ function runExportWorkerTask(type, payload, onProgress) {
         };
         worker.postMessage({ type, payload });
     });
+}
+
+function cloneActionQueueRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(row => ({
+        ...row,
+        _candidates: Array.isArray(row._candidates) ? row._candidates.map(c => ({ ...c })) : []
+    }));
+}
+
+function buildActionQueuePayload() {
+    return {
+        validated: validatedData,
+        missing: missingData,
+        selectedCols: selectedColumns,
+        priorDecisions: priorDecisions || null,
+        options: {
+            includeSuggestions: Boolean(document.getElementById('include-suggestions')?.checked),
+            showMappingLogic: Boolean(document.getElementById('show-mapping-logic')?.checked),
+            nameCompareConfig: lastNameCompareConfig,
+            campusFamilyRules: campusFamilyRules || null
+        },
+        context: { loadedData, columnRoles, keyConfig, keyLabels }
+    };
+}
+
+function cancelActionQueuePrefetch() {
+    actionQueuePrefetchPromise = null;
+    if (actionQueuePrefetchInFlight && activeExportWorker) {
+        activeExportWorker.terminate();
+        if (typeof activeExportWorkerReject === 'function') {
+            activeExportWorkerReject(new Error('Action queue prefetch was cancelled.'));
+        }
+        activeExportWorker = null;
+        activeExportWorkerReject = null;
+    }
+    actionQueuePrefetchInFlight = false;
+}
+
+function startActionQueuePrefetch() {
+    if (!Array.isArray(validatedData) || !validatedData.length) return null;
+    if (actionQueueRowsCache && actionQueueRowsCache.length) return Promise.resolve(actionQueueRowsCache);
+    if (actionQueuePrefetchPromise) return actionQueuePrefetchPromise;
+
+    const prefetchPromise = runExportWorkerTask('get_action_queue', buildActionQueuePayload())
+        .then((result) => {
+            const queueRows = cloneActionQueueRows(result?.actionQueueRows || []);
+            actionQueueRowsCache = queueRows;
+            preEditedActionQueueRows = cloneActionQueueRows(queueRows);
+            return queueRows;
+        })
+        .catch((error) => {
+            console.warn('Action queue prefetch failed:', error);
+            return null;
+        })
+        .finally(() => {
+            if (actionQueuePrefetchPromise === prefetchPromise) {
+                actionQueuePrefetchPromise = null;
+            }
+            actionQueuePrefetchInFlight = false;
+        });
+
+    actionQueuePrefetchInFlight = true;
+    actionQueuePrefetchPromise = prefetchPromise;
+    return prefetchPromise;
 }
 
 function downloadArrayBuffer(buffer, filename) {
@@ -1672,6 +1738,7 @@ async function runValidation() {
             alert('Switch to Validate mode to run validation.');
             return;
         }
+        cancelActionQueuePrefetch();
         // Clear pre-export bulk edits so a new validation run cannot reuse stale queue state.
         actionQueueRowsCache = null;
         preEditedActionQueueRows = null;
@@ -1884,6 +1951,7 @@ async function runValidation() {
         }
 
         displayResults(stats, errorSamples);
+        startActionQueuePrefetch();
 
     } catch (error) {
         console.error('Validation error:', error);
@@ -2096,6 +2164,18 @@ function getCurrentActionQueueRows() {
     return preEditedActionQueueRows || actionQueueRowsCache || [];
 }
 
+function isRowReviewed(row) {
+    const value = row?.Reviewed;
+    if (value === true) return true;
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return ['1', 'true', 'yes', 'y'].includes(normalized);
+}
+
+function isRowUnresolvedForReview(row) {
+    const hasDecision = String(row?.Decision || '').trim() !== '';
+    return !isRowReviewed(row) || !hasDecision;
+}
+
 function getQueueErrorKey(row) {
     const type = String(row?.Error_Type || '').trim();
     const subtype = String(row?.Error_Subtype || '').trim();
@@ -2126,7 +2206,7 @@ function buildErrorSamplesFromQueue(rows, limit = 10, unresolvedOnly = true) {
     const resolvedLimit = limit && limit > 0 ? limit : null;
     const reviewRows = (rows || []).filter(row => {
         if (!unresolvedOnly) return true;
-        return !String(row?.Decision || '').trim();
+        return isRowUnresolvedForReview(row);
     });
 
     reviewRows.forEach(row => {
@@ -2164,7 +2244,7 @@ function buildChartErrorsFromQueue(rows, unresolvedOnly = true) {
         high_confidence_matches: 0
     };
     (rows || []).forEach(row => {
-        if (unresolvedOnly && String(row?.Decision || '').trim()) return;
+        if (unresolvedOnly && !isRowUnresolvedForReview(row)) return;
         const type = String(row?.Error_Type || '').trim();
         const subtype = String(row?.Error_Subtype || '').trim();
         if (type === 'Input_Not_Found') counts.input_not_found += 1;
@@ -2830,6 +2910,9 @@ function applySessionDataToActionQueue(sessionRows, options = {}) {
         row.Reason_Code = toDisplay(entry.Reason_Code);
         row.Manual_Suggested_Key = toDisplay(entry.Manual_Suggested_Key);
         row.Selected_Candidate_ID = toDisplay(entry.Selected_Candidate_ID);
+        if (entry && Object.prototype.hasOwnProperty.call(entry, 'Reviewed')) {
+            row.Reviewed = isRowReviewed(entry);
+        }
         applied += 1;
     });
 
@@ -2859,6 +2942,8 @@ function setupBulkEditPanel() {
     const clearSelectedBtn = document.getElementById('bulk-clear-selected-btn');
     const selectFilteredBtn = document.getElementById('bulk-select-filtered-btn');
     const deselectFilteredBtn = document.getElementById('bulk-deselect-filtered-btn');
+    const markReviewedBtn = document.getElementById('bulk-mark-reviewed-btn');
+    const clearReviewedBtn = document.getElementById('bulk-clear-reviewed-btn');
     const saveSessionBtn = document.getElementById('bulk-save-session-btn');
     const loadSessionInput = document.getElementById('bulk-load-session-file');
     const quickChipButtons = panel.querySelectorAll('.bulk-quick-chip');
@@ -2867,6 +2952,7 @@ function setupBulkEditPanel() {
     const rowCountEl = document.getElementById('bulk-edit-row-count');
     const filterCountEl = document.getElementById('bulk-edit-filter-count');
     const selectedCountEl = document.getElementById('bulk-edit-selected-count');
+    const reviewedCountEl = document.getElementById('bulk-edit-reviewed-count');
     const loadProgressWrap = document.getElementById('bulk-load-progress');
     const loadProgressText = document.getElementById('bulk-load-progress-text');
     const loadProgressPercent = document.getElementById('bulk-load-progress-percent');
@@ -2888,6 +2974,12 @@ function setupBulkEditPanel() {
 
     const normalize = (value) => String(value ?? '').trim().toLowerCase();
     const toDisplay = (value) => String(value ?? '').trim();
+    const normalizeKeyToken = (value) => normalize(value).replace(/[\s-]+/g, '_');
+    const isSourceDerivedMissingMapping = (row) => {
+        const source = normalizeKeyToken(toDisplay(row.Source_Sheet));
+        const errorType = normalizeKeyToken(toDisplay(row.Error_Type));
+        return source === 'missing_mappings' || errorType === 'missing_mapping';
+    };
     const encodeRowId = (id) => encodeURIComponent(String(id || ''));
     const decodeRowId = (encoded) => {
         try {
@@ -2994,11 +3086,9 @@ function setupBulkEditPanel() {
         if (typeof row.Reason_Code !== 'string') row.Reason_Code = toDisplay(row.Reason_Code);
         if (typeof row.Manual_Suggested_Key !== 'string') row.Manual_Suggested_Key = toDisplay(row.Manual_Suggested_Key);
         if (typeof row.Selected_Candidate_ID !== 'string') row.Selected_Candidate_ID = toDisplay(row.Selected_Candidate_ID);
+        row.Reviewed = isRowReviewed(row);
     };
-    const cloneRows = (rows) => rows.map(row => ({
-        ...row,
-        _candidates: Array.isArray(row._candidates) ? row._candidates.map(c => ({ ...c })) : []
-    }));
+    const cloneRows = (rows) => cloneActionQueueRows(rows);
     const getWorkingRows = () => preEditedActionQueueRows || actionQueueRowsCache || [];
     const findRowById = (rid) => getWorkingRows().find(row => String(row.Review_Row_ID || '') === rid) || null;
     const getFilteredRows = () => {
@@ -3012,7 +3102,7 @@ function setupBulkEditPanel() {
             if (errorType && toDisplay(row.Error_Type) !== errorType) return false;
             if (decisionFilter === '(blank)' && toDisplay(row.Decision)) return false;
             if (decisionFilter && decisionFilter !== '(blank)' && toDisplay(row.Decision) !== decisionFilter) return false;
-            if (translationOnly && (toDisplay(row.Source_Sheet) === 'Missing_Mappings' || toDisplay(row.Error_Type) === 'Missing_Mapping')) return false;
+            if (translationOnly && isSourceDerivedMissingMapping(row)) return false;
             if (outcomesContains && !normalize(ctx.outcomesName).includes(outcomesContains)) return false;
             if (wsuContains && !normalize(ctx.wsuName).includes(wsuContains)) return false;
             return true;
@@ -3029,9 +3119,11 @@ function setupBulkEditPanel() {
         const allRows = getWorkingRows();
         const validIds = new Set(allRows.map(row => String(row.Review_Row_ID || '')));
         selectedRowIds = new Set([...selectedRowIds].filter(id => validIds.has(id)));
+        const reviewedCount = allRows.reduce((count, row) => (isRowReviewed(row) ? count + 1 : count), 0);
         if (rowCountEl) rowCountEl.textContent = String(allRows.length);
         if (filterCountEl) filterCountEl.textContent = String(filteredRowsCache.length);
         if (selectedCountEl) selectedCountEl.textContent = String(selectedRowIds.size);
+        if (reviewedCountEl) reviewedCountEl.textContent = String(reviewedCount);
     };
     const renderBulkEditTable = () => {
         filteredRowsCache = getFilteredRows();
@@ -3089,6 +3181,9 @@ function setupBulkEditPanel() {
                     <td class="py-1 px-2">
                         <input type="checkbox" class="bulk-row-select" data-rid="${ridAttr}" ${selectedRowIds.has(rid) ? 'checked' : ''}>
                     </td>
+                    <td class="py-1 px-2">
+                        <input type="checkbox" class="bulk-row-reviewed" data-rid="${ridAttr}" ${isRowReviewed(row) ? 'checked' : ''}>
+                    </td>
                     <td class="py-1 px-2">${escapeHtml(toDisplay(row.Error_Type))}</td>
                     <td class="py-1 px-2">${escapeHtml(toDisplay(row.Error_Subtype))}</td>
                     <td class="py-1 px-2 break-words">${escapeHtml(outcomesCtx || '(blank)')}</td>
@@ -3119,7 +3214,7 @@ function setupBulkEditPanel() {
             `;
         }).join('');
         if (filteredRowsCache.length > MAX_RENDER_ROWS) {
-            tbody.innerHTML += `<tr><td colspan="12" class="py-1 px-2 text-gray-500 text-xs">Showing first ${MAX_RENDER_ROWS} of ${filteredRowsCache.length} filtered rows. Bulk actions still apply to all filtered rows.</td></tr>`;
+            tbody.innerHTML += `<tr><td colspan="13" class="py-1 px-2 text-gray-500 text-xs">Showing first ${MAX_RENDER_ROWS} of ${filteredRowsCache.length} filtered rows. Bulk actions still apply to all filtered rows.</td></tr>`;
         }
         refreshCounters();
         refreshErrorPresentation();
@@ -3129,9 +3224,20 @@ function setupBulkEditPanel() {
         if (!selectedOnly) return filteredRowsCache;
         return filteredRowsCache.filter(row => selectedRowIds.has(String(row.Review_Row_ID || '')));
     };
+    const hydrateQueueForPanel = () => {
+        getWorkingRows().forEach(attachRowContext);
+        updateUnresolvedErrorsToggleState();
+        const types = [...new Set(getWorkingRows().map(r => toDisplay(r.Error_Type)).filter(Boolean))].sort();
+        if (filterSelect) {
+            filterSelect.innerHTML = '<option value="">All</option>' + types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+        }
+        if (uploadedSessionRows && uploadedSessionRows.length && !uploadedSessionApplied) {
+            uploadedSessionApplied = applySessionDataToActionQueue(uploadedSessionRows, { sourceLabel: 'Upload' });
+        }
+    };
     const loadActionQueueRows = async () => {
         if (actionQueueRowsCache) {
-            updateUnresolvedErrorsToggleState();
+            hydrateQueueForPanel();
             renderBulkEditTable();
             return;
         }
@@ -3144,41 +3250,31 @@ function setupBulkEditPanel() {
             loadProgressBar.style.width = '0%';
         }
         try {
-            const payload = {
-                validated: validatedData,
-                missing: missingData,
-                selectedCols: selectedColumns,
-                priorDecisions: priorDecisions || null,
-                options: {
-                    includeSuggestions: Boolean(document.getElementById('include-suggestions')?.checked),
-                    showMappingLogic: Boolean(document.getElementById('show-mapping-logic')?.checked),
-                    nameCompareConfig: lastNameCompareConfig,
-                    campusFamilyRules: campusFamilyRules || null
-                },
-                context: { loadedData, columnRoles, keyConfig, keyLabels }
-            };
-            const result = await runExportWorkerTask(
-                'get_action_queue',
-                payload,
-                (stage, processed, total) => {
-                    if (!loadProgressWrap || !loadProgressText || !loadProgressPercent || !loadProgressBar) return;
-                    const percent = total ? Math.round((processed / total) * 100) : 0;
-                    loadProgressText.textContent = stage || 'Loading review rows...';
-                    loadProgressPercent.textContent = `${percent}%`;
-                    loadProgressBar.style.width = `${percent}%`;
+            if (actionQueuePrefetchPromise) {
+                if (loadProgressWrap && loadProgressText && loadProgressPercent && loadProgressBar) {
+                    loadProgressWrap.classList.remove('hidden');
+                    loadProgressText.textContent = 'Finalizing background queue prefetch...';
+                    loadProgressPercent.textContent = '90%';
+                    loadProgressBar.style.width = '90%';
                 }
-            );
-            actionQueueRowsCache = cloneRows(result?.actionQueueRows || []);
-            preEditedActionQueueRows = cloneRows(actionQueueRowsCache);
-            getWorkingRows().forEach(attachRowContext);
-            updateUnresolvedErrorsToggleState();
-            const types = [...new Set(getWorkingRows().map(r => toDisplay(r.Error_Type)).filter(Boolean))].sort();
-            if (filterSelect) {
-                filterSelect.innerHTML = '<option value="">All</option>' + types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+                await actionQueuePrefetchPromise;
             }
-            if (uploadedSessionRows && uploadedSessionRows.length && !uploadedSessionApplied) {
-                uploadedSessionApplied = applySessionDataToActionQueue(uploadedSessionRows, { sourceLabel: 'Upload' });
+            if (!actionQueueRowsCache) {
+                const result = await runExportWorkerTask(
+                    'get_action_queue',
+                    buildActionQueuePayload(),
+                    (stage, processed, total) => {
+                        if (!loadProgressWrap || !loadProgressText || !loadProgressPercent || !loadProgressBar) return;
+                        const percent = total ? Math.round((processed / total) * 100) : 0;
+                        loadProgressText.textContent = stage || 'Loading review rows...';
+                        loadProgressPercent.textContent = `${percent}%`;
+                        loadProgressBar.style.width = `${percent}%`;
+                    }
+                );
+                actionQueueRowsCache = cloneRows(result?.actionQueueRows || []);
+                preEditedActionQueueRows = cloneRows(actionQueueRowsCache);
             }
+            hydrateQueueForPanel();
             renderBulkEditTable();
         } catch (err) {
             alert(`Error loading action queue: ${err.message}`);
@@ -3232,13 +3328,23 @@ function setupBulkEditPanel() {
             refreshCounters();
             return;
         }
+        if (target.classList.contains('bulk-row-reviewed')) {
+            row.Reviewed = Boolean(target.checked);
+            preEditedActionQueueRows = getWorkingRows();
+            refreshCounters();
+            refreshErrorPresentation();
+            return;
+        }
         if (target.classList.contains('bulk-row-decision')) {
             row.Decision = toDisplay(target.value);
+            row.Reviewed = false;
         } else if (target.classList.contains('bulk-row-reason')) {
             row.Reason_Code = toDisplay(target.value);
+            row.Reviewed = false;
         } else if (target.classList.contains('bulk-row-candidate')) {
             row.Selected_Candidate_ID = toDisplay(target.value);
             if (row.Selected_Candidate_ID) row.Manual_Suggested_Key = '';
+            row.Reviewed = false;
         }
         preEditedActionQueueRows = getWorkingRows();
         renderBulkEditTable();
@@ -3253,6 +3359,7 @@ function setupBulkEditPanel() {
         if (!row) return;
         row.Manual_Suggested_Key = toDisplay(target.value);
         if (row.Manual_Suggested_Key) row.Selected_Candidate_ID = '';
+        row.Reviewed = false;
         preEditedActionQueueRows = getWorkingRows();
     });
 
@@ -3281,6 +3388,7 @@ function setupBulkEditPanel() {
                 row.Manual_Suggested_Key = manualKey;
                 row.Selected_Candidate_ID = '';
             }
+            row.Reviewed = false;
         });
         preEditedActionQueueRows = getWorkingRows();
         renderBulkEditTable();
@@ -3297,6 +3405,7 @@ function setupBulkEditPanel() {
             row.Reason_Code = '';
             row.Selected_Candidate_ID = '';
             row.Manual_Suggested_Key = '';
+            row.Reviewed = false;
         });
         preEditedActionQueueRows = getWorkingRows();
         renderBulkEditTable();
@@ -3309,6 +3418,28 @@ function setupBulkEditPanel() {
     deselectFilteredBtn?.addEventListener('click', function() {
         filteredRowsCache.forEach(row => selectedRowIds.delete(String(row.Review_Row_ID || '')));
         refreshCounters();
+        renderBulkEditTable();
+    });
+    markReviewedBtn?.addEventListener('click', function() {
+        if (!filteredRowsCache.length) {
+            alert('No filtered rows to mark reviewed.');
+            return;
+        }
+        filteredRowsCache.forEach(row => {
+            row.Reviewed = true;
+        });
+        preEditedActionQueueRows = getWorkingRows();
+        renderBulkEditTable();
+    });
+    clearReviewedBtn?.addEventListener('click', function() {
+        if (!filteredRowsCache.length) {
+            alert('No filtered rows to clear reviewed state.');
+            return;
+        }
+        filteredRowsCache.forEach(row => {
+            row.Reviewed = false;
+        });
+        preEditedActionQueueRows = getWorkingRows();
         renderBulkEditTable();
     });
     saveSessionBtn?.addEventListener('click', function() {
@@ -3326,7 +3457,8 @@ function setupBulkEditPanel() {
                 Decision: row.Decision || '',
                 Reason_Code: row.Reason_Code || '',
                 Selected_Candidate_ID: row.Selected_Candidate_ID || '',
-                Manual_Suggested_Key: row.Manual_Suggested_Key || ''
+                Manual_Suggested_Key: row.Manual_Suggested_Key || '',
+                Reviewed: isRowReviewed(row)
             }))
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });

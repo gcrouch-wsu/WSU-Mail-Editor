@@ -753,7 +753,7 @@
                     <div class="flex items-end">
                         <label class="inline-flex items-center text-sm text-gray-700">
                             <input id="bulk-filter-translation-only" type="checkbox" class="mr-2">
-                            Translation-table rows only
+                            Uploaded Translate rows only (exclude Missing_Mappings)
                         </label>
                     </div>
                     <div class="flex items-end">
@@ -823,8 +823,11 @@
                     <span><span id="bulk-edit-row-count">0</span> rows total</span>
                     <span><span id="bulk-edit-filter-count">0</span> rows filtered</span>
                     <span><span id="bulk-edit-selected-count">0</span> rows selected</span>
+                    <span><span id="bulk-edit-reviewed-count">0</span> reviewed</span>
                     <button id="bulk-select-filtered-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Select filtered</button>
                     <button id="bulk-deselect-filtered-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Deselect filtered</button>
+                    <button id="bulk-mark-reviewed-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Mark filtered reviewed</button>
+                    <button id="bulk-clear-reviewed-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Clear reviewed (filtered)</button>
                     <button id="bulk-save-session-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Save session</button>
                     <label for="bulk-load-session-file" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium cursor-pointer">Load session</label>
                     <input id="bulk-load-session-file" type="file" accept=".json" class="hidden">
@@ -848,6 +851,7 @@
                         <thead class="bg-gray-100 sticky top-0">
                             <tr>
                                 <th class="py-1 px-2 text-left">Select</th>
+                                <th class="py-1 px-2 text-left">Reviewed</th>
                                 <th class="py-1 px-2 text-left">Error</th>
                                 <th class="py-1 px-2 text-left">Subtype</th>
                                 <th class="py-1 px-2 text-left">Outcomes (Name / State / Country)</th>

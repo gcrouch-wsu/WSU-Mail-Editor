@@ -58,6 +58,7 @@ tmp_xlsx_current/
 *.md
 !README.md
 !**/USER_GUIDE.md
+apps/validate-translation-tables/BUILD.md
 
 # Development files (keep local, don't push)
 arrow.png
