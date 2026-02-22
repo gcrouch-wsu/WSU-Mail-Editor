@@ -52,26 +52,16 @@ export*.xml
 *.csv
 *.xlsx
 *.txt
+tmp_xlsx_current/
 
-# Development/Documentation files (keep local, don't push to repo)
-AI_HANDOFF.md
-VERCEL_DEPLOYMENT_TROUBLESHOOTING.md
-VERCEL_DEPLOYMENT_GUIDE.md
-DEVELOPMENT_GUIDELINES.md
+# Markdown: ignore all except README and USER_GUIDE
+*.md
+!README.md
+!**/USER_GUIDE.md
+
+# Development files (keep local, don't push)
 arrow.png
 scripts/dev-with-browser.js
-MIGRATION_*.md
-ROLLBACK_*.md
-SPLIT_*.md
-STRUCTURE_*.md
-FOLDER_*.md
-*_PLAN.md
-*_COMPLETE.md
-*_EXPLANATION.md
-*_INSTRUCTIONS.md
-
-# Local-only notes (never commit)
-LOCAL_*.md
 
 # Old/unused folders
 apps/wsu-tools/
