@@ -1544,6 +1544,156 @@ async function run() {
         });
     });
 
+    await runCheck('duplicate-target suggestions keep non-current candidates for many-to-one selection', async () => {
+        const harness = createHarness();
+        const queueResult = await harness.buildValidationExport({
+            validated: [
+                {
+                    Error_Type: 'Duplicate_Target',
+                    translate_input: 'IN-ALPHA',
+                    translate_output: 'OUT-LEGACY',
+                    outcomes_school: 'Alpha Campus',
+                    wsu_school: 'Legacy Org'
+                }
+            ],
+            selectedCols: {
+                outcomes: ['school'],
+                wsu_org: ['school']
+            },
+            options: {
+                includeSuggestions: true,
+                nameCompareConfig: {
+                    enabled: true,
+                    outcomes: 'school',
+                    wsu: 'school',
+                    threshold: 0.8
+                }
+            },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'IN-ALPHA', school: 'Alpha Campus' }],
+                    translate: [{ translate_input: 'IN-ALPHA', translate_output: 'OUT-LEGACY' }],
+                    wsu_org: [
+                        { key: 'OUT-LEGACY', school: 'Alpha Campus' },
+                        { key: 'OUT-BETTER', school: 'Alpha Campus' }
+                    ]
+                },
+                keyConfig: {
+                    outcomes: 'key',
+                    translateInput: 'translate_input',
+                    translateOutput: 'translate_output',
+                    wsu: 'key'
+                },
+                keyLabels: {
+                    outcomes: 'key',
+                    wsu: 'key',
+                    translateInput: 'translate_input',
+                    translateOutput: 'translate_output'
+                },
+                columnRoles: {
+                    outcomes: { school: 'School' },
+                    wsu_org: { school: 'School' }
+                }
+            },
+            returnActionQueueOnly: true
+        });
+        assert.ok(Array.isArray(queueResult.actionQueueRows), 'Expected actionQueueRows array');
+        const row = queueResult.actionQueueRows.find(r => String(r.Error_Type || '') === 'Duplicate_Target');
+        assert.ok(row, 'Expected Duplicate_Target row in action queue');
+        const candidateKeys = (row._candidates || []).map(c => String(c.key || ''));
+        assert.ok(candidateKeys.includes('OUT-BETTER'), 'Expected alternate non-current candidate in dropdown list');
+        assert.ok(!candidateKeys.includes('OUT-LEGACY'), 'Current output key should be removed from candidate dropdown list');
+    });
+
+    await runCheck('translation-only export scope excludes Missing_Mappings from report and review queue', async () => {
+        const basePayload = {
+            validated: [
+                {
+                    Error_Type: 'Input_Not_Found',
+                    _rawErrorType: 'Input_Not_Found',
+                    translate_input: 'BAD-KEY',
+                    translate_output: 'WSU-1',
+                    Suggested_Key: 'OUT-1',
+                    Suggested_School: 'UH Maui',
+                    Suggestion_Score: 0.9,
+                    outcomes_school: '',
+                    wsu_school: 'UH Maui'
+                }
+            ],
+            selectedCols: {
+                outcomes: ['school', 'state'],
+                wsu_org: ['school', 'state']
+            },
+            options: {
+                includeSuggestions: true,
+                nameCompareConfig: {
+                    enabled: true,
+                    outcomes: 'school',
+                    wsu: 'school',
+                    threshold: 0.8
+                }
+            },
+            context: {
+                loadedData: {
+                    outcomes: [{ key: 'OUT-1', school: 'UH Maui', state: 'HI' }],
+                    translate: [{ translate_input: 'BAD-KEY', translate_output: 'WSU-1' }],
+                    wsu_org: [{ key: 'WSU-1', school: 'UH Maui', state: 'HI' }]
+                },
+                keyConfig: {
+                    outcomes: 'key',
+                    translateInput: 'translate_input',
+                    translateOutput: 'translate_output',
+                    wsu: 'key'
+                },
+                keyLabels: {
+                    outcomes: 'key',
+                    wsu: 'key',
+                    translateInput: 'translate_input',
+                    translateOutput: 'translate_output'
+                },
+                columnRoles: {
+                    outcomes: { school: 'School', state: 'State' },
+                    wsu_org: { school: 'School', state: 'State' }
+                }
+            }
+        };
+
+        const harnessDefault = createHarness();
+        const defaultResult = await harnessDefault.buildValidationExport(basePayload);
+        assertExportResult(defaultResult);
+        const workbookDefault = harnessDefault.getLastWorkbook();
+        const defaultMissingSheet = workbookDefault.getWorksheet('Missing_Mappings');
+        assert.ok(defaultMissingSheet, 'Expected Missing_Mappings sheet in default export');
+        const defaultReview = workbookDefault.getWorksheet('Review_Workbench');
+        const defaultErrorTypeCol = findHeaderIndex(defaultReview, 'Error Type');
+        let defaultMissingRows = 0;
+        for (let r = 2; r <= (defaultReview.rowCount || 0); r += 1) {
+            const value = String(defaultReview.getRow(r).getCell(defaultErrorTypeCol).value || '');
+            if (value === 'Missing_Mapping') defaultMissingRows += 1;
+        }
+        assert.ok(defaultMissingRows > 0, 'Expected Missing_Mapping rows in default review queue');
+
+        const harnessScoped = createHarness();
+        const scopedResult = await harnessScoped.buildValidationExport({
+            ...basePayload,
+            options: {
+                ...basePayload.options,
+                translationOnlyExport: true
+            }
+        });
+        assertExportResult(scopedResult);
+        const workbookScoped = harnessScoped.getLastWorkbook();
+        assert.equal(workbookScoped.getWorksheet('Missing_Mappings'), undefined, 'Missing_Mappings sheet should be excluded when translation-only export scope is active');
+        const scopedReview = workbookScoped.getWorksheet('Review_Workbench');
+        const scopedErrorTypeCol = findHeaderIndex(scopedReview, 'Error Type');
+        let scopedMissingRows = 0;
+        for (let r = 2; r <= (scopedReview.rowCount || 0); r += 1) {
+            const value = String(scopedReview.getRow(r).getCell(scopedErrorTypeCol).value || '');
+            if (value === 'Missing_Mapping') scopedMissingRows += 1;
+        }
+        assert.equal(scopedMissingRows, 0, 'Missing_Mapping rows should be excluded when translation-only export scope is active');
+    });
+
     if (failures > 0) {
         console.error(`\n${failures} export test(s) failed.`);
         process.exit(1);

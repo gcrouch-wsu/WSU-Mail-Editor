@@ -940,6 +940,7 @@ async function buildValidationExport(payload) {
     };
     const includeSuggestions = Boolean(options.includeSuggestions);
     const showMappingLogic = Boolean(options.showMappingLogic);
+    const translationOnlyExport = Boolean(options.translationOnlyExport);
     const nameCompareConfig = options.nameCompareConfig || {};
     const campusFamilyRules = options.campusFamilyRules || null;
     const loadedData = context.loadedData || { outcomes: [], translate: [], wsu_org: [] };
@@ -1494,15 +1495,15 @@ async function buildValidationExport(payload) {
                 const candidates = canSuggestNames
                     ? getBestNameCandidates(outcomesName, outcomesState, outcomesCountry)
                     : [];
-                let outputSuggestion = candidates.length ? candidates[0] : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
-                if (outputSuggestion && normalizeValue(outputSuggestion.key) === normalizeValue(row.translate_output)) {
+                const currentOutputNorm = normalizeValue(row.translate_output);
+                const nonCurrentCandidates = candidates.filter(c => normalizeValue(c.key) !== currentOutputNorm);
+                let outputSuggestion = nonCurrentCandidates.length
+                    ? nonCurrentCandidates[0]
+                    : getBestKeySuggestion(row.translate_output, wsuKeyCandidates);
+                if (outputSuggestion && normalizeValue(outputSuggestion.key) === currentOutputNorm) {
                     outputSuggestion = null;
-                    rowData._candidates = [];
-                } else if (candidates.length) {
-                    rowData._candidates = candidates.map((c, i) => ({ candidateId: `C${i + 1}`, ...c }));
-                } else {
-                    rowData._candidates = [];
                 }
+                rowData._candidates = nonCurrentCandidates.map((c, i) => ({ candidateId: `C${i + 1}`, ...c }));
                 if (outputSuggestion) {
                     fillSuggestedFields(
                         rowData,
@@ -1842,86 +1843,6 @@ async function buildValidationExport(payload) {
     });
 
     reportProgress('Building Missing_Mappings...', 74);
-    const highConfidenceCandidates = [];
-    outcomesEntriesForMissing.forEach(outcomesEntry => {
-        let best = null;
-        let secondBest = null;
-        wsuEntriesForMissing.forEach(wsuEntry => {
-            if (
-                outcomesEntry.country && wsuEntry.country &&
-                !countriesMatch(outcomesEntry.country, wsuEntry.country)
-            ) {
-                return;
-            }
-            const stateComparable = Boolean(
-                outcomesEntry.state &&
-                wsuEntry.state &&
-                String(outcomesEntry.state).trim().toLowerCase() !== 'ot' &&
-                String(wsuEntry.state).trim().toLowerCase() !== 'ot'
-            );
-            if (
-                stateComparable &&
-                outcomesEntry.country &&
-                wsuEntry.country &&
-                countriesMatch(outcomesEntry.country, wsuEntry.country) &&
-                !statesMatch(outcomesEntry.state, wsuEntry.state)
-            ) {
-                return;
-            }
-
-            const similarity = calculateNameSimilarity(outcomesEntry.name, wsuEntry.name, suggestionIDFTable);
-            const highConfidence = isHighConfidenceNameMatch(
-                outcomesEntry.name,
-                wsuEntry.name,
-                outcomesEntry.state,
-                wsuEntry.state,
-                outcomesEntry.city,
-                wsuEntry.city,
-                outcomesEntry.country,
-                wsuEntry.country,
-                similarity,
-                threshold,
-                suggestionIDFTable
-            );
-            if (!highConfidence) {
-                return;
-            }
-            const candidate = {
-                outcomesEntry,
-                wsuEntry,
-                score: similarity
-            };
-            if (!best || candidate.score > best.score) {
-                secondBest = best;
-                best = candidate;
-            } else if (!secondBest || candidate.score > secondBest.score) {
-                secondBest = candidate;
-            }
-        });
-        if (!best) {
-            return;
-        }
-        if (secondBest && (best.score - secondBest.score) < ambiguityGap) {
-            return;
-        }
-        highConfidenceCandidates.push(best);
-    });
-
-    highConfidenceCandidates.sort((a, b) => b.score - a.score);
-    const usedOutcomes = new Set();
-    const usedWsu = new Set();
-    const highConfidencePairs = [];
-    highConfidenceCandidates.forEach(candidate => {
-        const outcomesId = candidate.outcomesEntry.idx;
-        const wsuId = candidate.wsuEntry.idx;
-        if (usedOutcomes.has(outcomesId) || usedWsu.has(wsuId)) {
-            return;
-        }
-        usedOutcomes.add(outcomesId);
-        usedWsu.add(wsuId);
-        highConfidencePairs.push(candidate);
-    });
-
     const missingMappingColumns = [
         'Missing_In',
         ...outcomesColumns,
@@ -1931,52 +1852,134 @@ async function buildValidationExport(payload) {
         'Similarity',
         ...mappingColumns
     ];
+    let missingMappingsRows = [];
+    if (!translationOnlyExport) {
+        const highConfidenceCandidates = [];
+        outcomesEntriesForMissing.forEach(outcomesEntry => {
+            let best = null;
+            let secondBest = null;
+            wsuEntriesForMissing.forEach(wsuEntry => {
+                if (
+                    outcomesEntry.country && wsuEntry.country &&
+                    !countriesMatch(outcomesEntry.country, wsuEntry.country)
+                ) {
+                    return;
+                }
+                const stateComparable = Boolean(
+                    outcomesEntry.state &&
+                    wsuEntry.state &&
+                    String(outcomesEntry.state).trim().toLowerCase() !== 'ot' &&
+                    String(wsuEntry.state).trim().toLowerCase() !== 'ot'
+                );
+                if (
+                    stateComparable &&
+                    outcomesEntry.country &&
+                    wsuEntry.country &&
+                    countriesMatch(outcomesEntry.country, wsuEntry.country) &&
+                    !statesMatch(outcomesEntry.state, wsuEntry.state)
+                ) {
+                    return;
+                }
 
-    const missingMappingsRows = highConfidencePairs
-        .map(pair => {
-            const outcomesEntry = pair.outcomesEntry;
-            const wsuEntry = pair.wsuEntry;
-            const inputPresent = translateInputs.has(outcomesEntry.keyNorm);
-            const outputPresent = translateOutputs.has(wsuEntry.keyNorm);
-            if (inputPresent && outputPresent) {
-                return null;
-            }
-
-            const rowData = {};
-            rowData.Missing_In = (!inputPresent && !outputPresent)
-                ? 'Input and Output missing in Translate'
-                : (!inputPresent ? 'Input missing in Translate' : 'Output missing in Translate');
-            selectedCols.outcomes.forEach(col => {
-                rowData[`outcomes_${col}`] = outcomesEntry.row[col] ?? '';
+                const similarity = calculateNameSimilarity(outcomesEntry.name, wsuEntry.name, suggestionIDFTable);
+                const highConfidence = isHighConfidenceNameMatch(
+                    outcomesEntry.name,
+                    wsuEntry.name,
+                    outcomesEntry.state,
+                    wsuEntry.state,
+                    outcomesEntry.city,
+                    wsuEntry.city,
+                    outcomesEntry.country,
+                    wsuEntry.country,
+                    similarity,
+                    threshold,
+                    suggestionIDFTable
+                );
+                if (!highConfidence) {
+                    return;
+                }
+                const candidate = {
+                    outcomesEntry,
+                    wsuEntry,
+                    score: similarity
+                };
+                if (!best || candidate.score > best.score) {
+                    secondBest = best;
+                    best = candidate;
+                } else if (!secondBest || candidate.score > secondBest.score) {
+                    secondBest = candidate;
+                }
             });
-            rowData.translate_input = outcomesEntry.keyRaw ?? outcomesEntry.keyNorm;
-            rowData.translate_output = wsuEntry.keyRaw ?? wsuEntry.keyNorm;
-            selectedCols.wsu_org.forEach(col => {
-                rowData[`wsu_${col}`] = wsuEntry.row[col] ?? '';
-            });
-            rowData.Similarity = formatSuggestionScore(pair.score);
-            if (showMappingLogic) {
-                rowData.Mapping_Logic = `High-confidence Outcomes<->myWSU name/location match (${formatScore(pair.score)}); ${rowData.Missing_In.toLowerCase()}.`;
+            if (!best) {
+                return;
             }
-            return rowData;
-        })
-        .filter(Boolean)
-        .sort((a, b) => {
-            const missingOrder = { 'Input and Output missing in Translate': 0, 'Input missing in Translate': 1, 'Output missing in Translate': 2 };
-            const orderA = missingOrder[a.Missing_In] ?? 99;
-            const orderB = missingOrder[b.Missing_In] ?? 99;
-            if (orderA !== orderB) return orderA - orderB;
-            return String(a.translate_input || '').localeCompare(String(b.translate_input || ''));
+            if (secondBest && (best.score - secondBest.score) < ambiguityGap) {
+                return;
+            }
+            highConfidenceCandidates.push(best);
         });
 
-    addSheetWithRows(workbook, {
-        sheetName: 'Missing_Mappings',
-        outputColumns: missingMappingColumns,
-        rows: missingMappingsRows,
-        style: baseStyle,
-        headers: buildHeaders(missingMappingColumns, keyLabels),
-        rowBorderByError
-    });
+        highConfidenceCandidates.sort((a, b) => b.score - a.score);
+        const usedOutcomes = new Set();
+        const usedWsu = new Set();
+        const highConfidencePairs = [];
+        highConfidenceCandidates.forEach(candidate => {
+            const outcomesId = candidate.outcomesEntry.idx;
+            const wsuId = candidate.wsuEntry.idx;
+            if (usedOutcomes.has(outcomesId) || usedWsu.has(wsuId)) {
+                return;
+            }
+            usedOutcomes.add(outcomesId);
+            usedWsu.add(wsuId);
+            highConfidencePairs.push(candidate);
+        });
+
+        missingMappingsRows = highConfidencePairs
+            .map(pair => {
+                const outcomesEntry = pair.outcomesEntry;
+                const wsuEntry = pair.wsuEntry;
+                const inputPresent = translateInputs.has(outcomesEntry.keyNorm);
+                const outputPresent = translateOutputs.has(wsuEntry.keyNorm);
+                if (inputPresent && outputPresent) {
+                    return null;
+                }
+
+                const rowData = {};
+                rowData.Missing_In = (!inputPresent && !outputPresent)
+                    ? 'Input and Output missing in Translate'
+                    : (!inputPresent ? 'Input missing in Translate' : 'Output missing in Translate');
+                selectedCols.outcomes.forEach(col => {
+                    rowData[`outcomes_${col}`] = outcomesEntry.row[col] ?? '';
+                });
+                rowData.translate_input = outcomesEntry.keyRaw ?? outcomesEntry.keyNorm;
+                rowData.translate_output = wsuEntry.keyRaw ?? wsuEntry.keyNorm;
+                selectedCols.wsu_org.forEach(col => {
+                    rowData[`wsu_${col}`] = wsuEntry.row[col] ?? '';
+                });
+                rowData.Similarity = formatSuggestionScore(pair.score);
+                if (showMappingLogic) {
+                    rowData.Mapping_Logic = `High-confidence Outcomes<->myWSU name/location match (${formatScore(pair.score)}); ${rowData.Missing_In.toLowerCase()}.`;
+                }
+                return rowData;
+            })
+            .filter(Boolean)
+            .sort((a, b) => {
+                const missingOrder = { 'Input and Output missing in Translate': 0, 'Input missing in Translate': 1, 'Output missing in Translate': 2 };
+                const orderA = missingOrder[a.Missing_In] ?? 99;
+                const orderB = missingOrder[b.Missing_In] ?? 99;
+                if (orderA !== orderB) return orderA - orderB;
+                return String(a.translate_input || '').localeCompare(String(b.translate_input || ''));
+            });
+
+        addSheetWithRows(workbook, {
+            sheetName: 'Missing_Mappings',
+            outputColumns: missingMappingColumns,
+            rows: missingMappingsRows,
+            style: baseStyle,
+            headers: buildHeaders(missingMappingColumns, keyLabels),
+            rowBorderByError
+        });
+    }
 
     reportProgress('Building Action_Queue...', 78);
     const defaultDecisionThreshold = Number.isFinite(nameCompareConfig?.threshold)
@@ -2050,7 +2053,7 @@ async function buildValidationExport(payload) {
             Notes: ''
         };
     });
-    const actionQueueFromMissing = missingMappingsRows.map(row => {
+    const actionQueueFromMissing = translationOnlyExport ? [] : missingMappingsRows.map(row => {
         const priority = getActionPriority('Missing_Mapping', row.Missing_In);
         const action = getRecommendedAction('Missing_Mapping', row.Missing_In);
         return {

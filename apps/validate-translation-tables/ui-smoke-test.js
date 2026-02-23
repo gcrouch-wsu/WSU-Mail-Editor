@@ -36,6 +36,9 @@ function extractIds(html) {
 }
 
 function createElementStub(id) {
+    const listeners = new Map();
+    const classes = new Set();
+    const attrs = new Map();
     return {
         id,
         value: '',
@@ -47,19 +50,55 @@ function createElementStub(id) {
         style: { width: '' },
         dataset: {},
         classList: {
-            add() {},
-            remove() {},
-            toggle() {},
-            contains() { return false; }
+            add(...tokens) {
+                tokens.forEach(token => classes.add(String(token)));
+            },
+            remove(...tokens) {
+                tokens.forEach(token => classes.delete(String(token)));
+            },
+            toggle(token) {
+                const key = String(token);
+                if (classes.has(key)) {
+                    classes.delete(key);
+                    return false;
+                }
+                classes.add(key);
+                return true;
+            },
+            contains(token) {
+                return classes.has(String(token));
+            }
         },
-        addEventListener() {},
-        removeEventListener() {},
+        addEventListener(type, handler) {
+            const key = String(type);
+            if (!listeners.has(key)) listeners.set(key, []);
+            listeners.get(key).push(handler);
+        },
+        removeEventListener(type, handler) {
+            const key = String(type);
+            const bucket = listeners.get(key) || [];
+            listeners.set(key, bucket.filter(fn => fn !== handler));
+        },
+        dispatchEvent(event) {
+            const evt = event || { type: '' };
+            if (!evt.target) evt.target = this;
+            const key = String(evt.type || '');
+            (listeners.get(key) || []).forEach(handler => handler.call(this, evt));
+            return true;
+        },
+        click() {
+            return this.dispatchEvent({ type: 'click', target: this });
+        },
         querySelector() { return null; },
         querySelectorAll() { return []; },
         appendChild() {},
         removeChild() {},
-        setAttribute() {},
-        getAttribute() { return ''; },
+        setAttribute(name, value) {
+            attrs.set(String(name), String(value));
+        },
+        getAttribute(name) {
+            return attrs.has(String(name)) ? attrs.get(String(name)) : '';
+        },
         scrollIntoView() {},
         getContext() { return {}; }
     };
@@ -69,22 +108,42 @@ function createAppContext(htmlIds) {
     const elementMap = new Map();
     const alerts = [];
     let domContentLoadedHandler = null;
+    const documentListeners = new Map();
+    function ChartStub() {
+        return {
+            destroy() {}
+        };
+    }
+    ChartStub.getChart = () => null;
 
     const documentStub = {
         body: createElementStub('body'),
         addEventListener(type, handler) {
             if (type === 'DOMContentLoaded') {
                 domContentLoadedHandler = handler;
+                return;
             }
+            const key = String(type);
+            if (!documentListeners.has(key)) documentListeners.set(key, []);
+            documentListeners.get(key).push(handler);
         },
-        dispatchEvent() {},
+        dispatchEvent(event) {
+            const evt = event || { type: '' };
+            const key = String(evt.type || '');
+            (documentListeners.get(key) || []).forEach(handler => handler.call(documentStub, evt));
+            return true;
+        },
         createElement(tagName) {
             return createElementStub(tagName);
         },
         getElementById(id) {
             if (!htmlIds.has(id)) return null;
             if (!elementMap.has(id)) {
-                elementMap.set(id, createElementStub(id));
+                const el = createElementStub(id);
+                if (id === 'bulk-edit-panel') {
+                    el.classList.add('hidden');
+                }
+                elementMap.set(id, el);
             }
             return elementMap.get(id);
         }
@@ -96,7 +155,9 @@ function createAppContext(htmlIds) {
         clearTimeout,
         Blob,
         document: documentStub,
+        Chart: ChartStub,
         window: {
+            Chart: ChartStub,
             URL: {
                 createObjectURL() { return 'blob:stub'; },
                 revokeObjectURL() {}
@@ -137,6 +198,9 @@ function createAppContext(htmlIds) {
             const json = vm.runInContext('JSON.stringify(getCurrentActionQueueRows())', context);
             return JSON.parse(json);
         },
+        getElement(id) {
+            return documentStub.getElementById(id);
+        },
         runDomReady() {
             assert.equal(typeof domContentLoadedHandler, 'function', 'Expected DOMContentLoaded handler to register');
             domContentLoadedHandler();
@@ -158,6 +222,10 @@ async function run() {
         assert.ok(htmlIds.has('bulk-mark-reviewed-btn'));
         assert.ok(htmlIds.has('bulk-clear-reviewed-btn'));
         assert.ok(htmlIds.has('bulk-edit-reviewed-count'));
+        assert.ok(htmlIds.has('bulk-page-size'));
+        assert.ok(htmlIds.has('bulk-page-prev-btn'));
+        assert.ok(htmlIds.has('bulk-page-next-btn'));
+        assert.ok(htmlIds.has('bulk-apply-scope'));
     });
 
     await runCheck('index: removed review-order card is absent', () => {
@@ -169,7 +237,7 @@ async function run() {
         assert.ok(!appCode.includes('function renderRecommendedReviewOrder'));
     });
 
-    const { context, clearAlerts, getAlerts, setActionQueueRows, getActionQueueRows, runDomReady } = createAppContext(htmlIds);
+    const { context, clearAlerts, getAlerts, setActionQueueRows, getActionQueueRows, getElement, runDomReady } = createAppContext(htmlIds);
 
     await runCheck('app smoke: DOMContentLoaded bootstrap does not throw', async () => {
         runDomReady();
@@ -449,6 +517,85 @@ async function run() {
         const alerts = getAlerts();
         assert.equal(alerts.length, 1);
         assert.match(alerts[0], /Session Resume loaded: 1 rows applied, 1 unmatched Review_Row_ID\./);
+    });
+
+    await runCheck('bulk pagination: next/prev updates displayed range and page status', async () => {
+        const rows = Array.from({ length: 450 }, (_, idx) => ({
+            Review_Row_ID: `RID-${idx + 1}`,
+            Error_Type: 'Name_Mismatch',
+            Error_Subtype: '',
+            Decision: '',
+            Reason_Code: '',
+            translate_input: `IN-${String(idx + 1).padStart(4, '0')}`,
+            translate_output: `OUT-${String(idx + 1).padStart(4, '0')}`,
+            _candidates: []
+        }));
+        setActionQueueRows(rows);
+        getElement('bulk-page-size').value = '200';
+
+        const panel = getElement('bulk-edit-panel');
+        if (!panel.classList.contains('hidden')) {
+            getElement('bulk-edit-toggle-btn').click();
+            await Promise.resolve();
+        }
+        getElement('bulk-edit-toggle-btn').click();
+        await Promise.resolve();
+        assert.equal(getElement('bulk-page-range').textContent, '1-200');
+        assert.equal(getElement('bulk-page-status').textContent, 'Page 1 of 3');
+
+        getElement('bulk-page-next-btn').click();
+        await Promise.resolve();
+        assert.equal(getElement('bulk-page-range').textContent, '201-400');
+        assert.equal(getElement('bulk-page-status').textContent, 'Page 2 of 3');
+
+        getElement('bulk-page-next-btn').click();
+        await Promise.resolve();
+        assert.equal(getElement('bulk-page-range').textContent, '401-450');
+        assert.equal(getElement('bulk-page-status').textContent, 'Page 3 of 3');
+        assert.equal(getElement('bulk-page-next-btn').disabled, true);
+
+        getElement('bulk-page-prev-btn').click();
+        await Promise.resolve();
+        assert.equal(getElement('bulk-page-range').textContent, '201-400');
+        assert.equal(getElement('bulk-page-status').textContent, 'Page 2 of 3');
+    });
+
+    await runCheck('bulk apply scope: current page applies only page rows', async () => {
+        const rows = Array.from({ length: 450 }, (_, idx) => ({
+            Review_Row_ID: `RID-SCOPE-${idx + 1}`,
+            Error_Type: 'Name_Mismatch',
+            Error_Subtype: '',
+            Decision: '',
+            Reason_Code: '',
+            translate_input: `IN-SCOPE-${String(idx + 1).padStart(4, '0')}`,
+            translate_output: `OUT-SCOPE-${String(idx + 1).padStart(4, '0')}`,
+            _candidates: []
+        }));
+        setActionQueueRows(rows);
+        getElement('bulk-page-size').value = '200';
+        getElement('bulk-apply-selected-only').checked = false;
+        getElement('bulk-apply-decision').value = 'Ignore';
+        getElement('bulk-apply-scope').value = 'page';
+
+        const panel = getElement('bulk-edit-panel');
+        if (!panel.classList.contains('hidden')) {
+            getElement('bulk-edit-toggle-btn').click();
+            await Promise.resolve();
+        }
+        getElement('bulk-edit-toggle-btn').click();
+        await Promise.resolve();
+        getElement('bulk-page-next-btn').click();
+        await Promise.resolve();
+        getElement('bulk-page-next-btn').click();
+        await Promise.resolve();
+        assert.equal(getElement('bulk-page-status').textContent, 'Page 3 of 3');
+
+        getElement('bulk-apply-btn').click();
+        const updatedRows = getActionQueueRows();
+        const ignoreCount = updatedRows.filter(row => String(row.Decision || '') === 'Ignore').length;
+        const blankCount = updatedRows.filter(row => String(row.Decision || '') === '').length;
+        assert.equal(ignoreCount, 50, 'Only current page rows should be updated');
+        assert.equal(blankCount, 400, 'Rows outside current page should remain unchanged');
     });
 
     if (failures > 0) {

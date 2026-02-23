@@ -2791,6 +2791,9 @@ function setupDownloadButton() {
             const showMappingLogic = Boolean(
                 document.getElementById('show-mapping-logic')?.checked
             );
+            const translationOnlyExport = Boolean(
+                document.getElementById('bulk-filter-translation-only')?.checked
+            );
             const result = await createExcelOutput(
                 validatedData,
                 missingData,
@@ -2798,6 +2801,7 @@ function setupDownloadButton() {
                 {
                     includeSuggestions,
                     showMappingLogic,
+                    translationOnlyExport,
                     nameCompareConfig: lastNameCompareConfig,
                     priorDecisions: priorDecisions || undefined,
                     campusFamilyRules: campusFamilyRules || undefined,
@@ -2864,6 +2868,7 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         options: {
             includeSuggestions: Boolean(options.includeSuggestions),
             showMappingLogic: Boolean(options.showMappingLogic),
+            translationOnlyExport: Boolean(options.translationOnlyExport),
             nameCompareConfig: options.nameCompareConfig || {},
             campusFamilyRules: options.campusFamilyRules || null
         },
@@ -2933,10 +2938,16 @@ function setupBulkEditPanel() {
     const filterOutcomesNameInput = document.getElementById('bulk-filter-outcomes-name');
     const filterWsuNameInput = document.getElementById('bulk-filter-wsu-name');
     const filterTranslationOnly = document.getElementById('bulk-filter-translation-only');
+    const pageSizeSelect = document.getElementById('bulk-page-size');
+    const pageStatusEl = document.getElementById('bulk-page-status');
+    const pageRangeEl = document.getElementById('bulk-page-range');
+    const pagePrevBtn = document.getElementById('bulk-page-prev-btn');
+    const pageNextBtn = document.getElementById('bulk-page-next-btn');
     const applyDecisionSelect = document.getElementById('bulk-apply-decision');
     const applyReasonCodeSelect = document.getElementById('bulk-apply-reason-code');
     const applyCandidateIdSelect = document.getElementById('bulk-apply-candidate-id');
     const applyManualInput = document.getElementById('bulk-apply-manual-key');
+    const applyScopeSelect = document.getElementById('bulk-apply-scope');
     const applySelectedOnly = document.getElementById('bulk-apply-selected-only');
     const applyBtn = document.getElementById('bulk-apply-btn');
     const clearSelectedBtn = document.getElementById('bulk-clear-selected-btn');
@@ -2959,7 +2970,7 @@ function setupBulkEditPanel() {
     const loadProgressBar = document.getElementById('bulk-load-progress-bar');
     if (!toggleBtn || !panel || !tbody) return;
 
-    const MAX_RENDER_ROWS = 400;
+    const DEFAULT_PAGE_SIZE = 200;
     const DECISION_OPTIONS = ['', 'Keep As-Is', 'Use Suggestion', 'Allow One-to-Many', 'Ignore'];
     const REASON_CODE_OPTIONS = [
         '',
@@ -2971,6 +2982,7 @@ function setupBulkEditPanel() {
     ];
     let filteredRowsCache = [];
     let selectedRowIds = new Set();
+    let currentPage = 1;
 
     const normalize = (value) => String(value ?? '').trim().toLowerCase();
     const toDisplay = (value) => String(value ?? '').trim();
@@ -3090,6 +3102,26 @@ function setupBulkEditPanel() {
     };
     const cloneRows = (rows) => cloneActionQueueRows(rows);
     const getWorkingRows = () => preEditedActionQueueRows || actionQueueRowsCache || [];
+    const getPageSize = () => {
+        const raw = parseInt(toDisplay(pageSizeSelect?.value || DEFAULT_PAGE_SIZE), 10);
+        return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PAGE_SIZE;
+    };
+    const getTotalPages = () => {
+        const count = filteredRowsCache.length;
+        const pageSize = getPageSize();
+        return Math.max(1, Math.ceil(count / pageSize));
+    };
+    const clampCurrentPage = () => {
+        const totalPages = getTotalPages();
+        if (currentPage < 1) currentPage = 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        return totalPages;
+    };
+    const getCurrentPageRows = () => {
+        const pageSize = getPageSize();
+        const startIndex = (currentPage - 1) * pageSize;
+        return filteredRowsCache.slice(startIndex, startIndex + pageSize);
+    };
     const findRowById = (rid) => getWorkingRows().find(row => String(row.Review_Row_ID || '') === rid) || null;
     const getFilteredRows = () => {
         const errorType = toDisplay(filterSelect?.value || '');
@@ -3120,14 +3152,29 @@ function setupBulkEditPanel() {
         const validIds = new Set(allRows.map(row => String(row.Review_Row_ID || '')));
         selectedRowIds = new Set([...selectedRowIds].filter(id => validIds.has(id)));
         const reviewedCount = allRows.reduce((count, row) => (isRowReviewed(row) ? count + 1 : count), 0);
+        const pageSize = getPageSize();
+        const totalFiltered = filteredRowsCache.length;
+        const totalPages = clampCurrentPage();
+        const startIndex = totalFiltered ? ((currentPage - 1) * pageSize) + 1 : 0;
+        const endIndex = totalFiltered ? Math.min(totalFiltered, (currentPage * pageSize)) : 0;
         if (rowCountEl) rowCountEl.textContent = String(allRows.length);
-        if (filterCountEl) filterCountEl.textContent = String(filteredRowsCache.length);
+        if (filterCountEl) filterCountEl.textContent = String(totalFiltered);
+        if (pageRangeEl) pageRangeEl.textContent = `${startIndex}-${endIndex}`;
+        if (pageStatusEl) pageStatusEl.textContent = `Page ${currentPage} of ${totalPages}`;
+        if (pagePrevBtn) pagePrevBtn.disabled = currentPage <= 1;
+        if (pageNextBtn) pageNextBtn.disabled = currentPage >= totalPages;
         if (selectedCountEl) selectedCountEl.textContent = String(selectedRowIds.size);
         if (reviewedCountEl) reviewedCountEl.textContent = String(reviewedCount);
     };
     const renderBulkEditTable = () => {
         filteredRowsCache = getFilteredRows();
-        const visibleRows = filteredRowsCache.slice(0, MAX_RENDER_ROWS);
+        const pageSize = getPageSize();
+        const totalPages = Math.max(1, Math.ceil(filteredRowsCache.length / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const visibleRows = filteredRowsCache.slice(startIndex, endIndex);
         const wsuKeyLookup = buildWsuKeyLookup();
         tbody.innerHTML = visibleRows.map(row => {
             const rid = String(row.Review_Row_ID || '');
@@ -3213,20 +3260,25 @@ function setupBulkEditPanel() {
                 </tr>
             `;
         }).join('');
-        if (filteredRowsCache.length > MAX_RENDER_ROWS) {
-            tbody.innerHTML += `<tr><td colspan="13" class="py-1 px-2 text-gray-500 text-xs">Showing first ${MAX_RENDER_ROWS} of ${filteredRowsCache.length} filtered rows. Bulk actions still apply to all filtered rows.</td></tr>`;
+        if (filteredRowsCache.length > pageSize) {
+            const shownStart = filteredRowsCache.length ? (startIndex + 1) : 0;
+            const shownEnd = Math.min(filteredRowsCache.length, endIndex);
+            tbody.innerHTML += `<tr><td colspan="13" class="py-1 px-2 text-gray-500 text-xs">Showing rows ${shownStart}-${shownEnd} of ${filteredRowsCache.length} filtered rows.</td></tr>`;
         }
         refreshCounters();
         refreshErrorPresentation();
     };
     const getApplyTargets = () => {
+        const applyScope = toDisplay(applyScopeSelect?.value || 'filtered');
+        const scopeRows = applyScope === 'page' ? getCurrentPageRows() : filteredRowsCache;
         const selectedOnly = Boolean(applySelectedOnly?.checked);
-        if (!selectedOnly) return filteredRowsCache;
-        return filteredRowsCache.filter(row => selectedRowIds.has(String(row.Review_Row_ID || '')));
+        if (!selectedOnly) return scopeRows;
+        return scopeRows.filter(row => selectedRowIds.has(String(row.Review_Row_ID || '')));
     };
     const hydrateQueueForPanel = () => {
         getWorkingRows().forEach(attachRowContext);
         updateUnresolvedErrorsToggleState();
+        currentPage = 1;
         const types = [...new Set(getWorkingRows().map(r => toDisplay(r.Error_Type)).filter(Boolean))].sort();
         if (filterSelect) {
             filterSelect.innerHTML = '<option value="">All</option>' + types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
@@ -3294,15 +3346,46 @@ function setupBulkEditPanel() {
         }
     });
 
-    filterSelect?.addEventListener('change', renderBulkEditTable);
-    filterDecisionSelect?.addEventListener('change', renderBulkEditTable);
-    filterOutcomesNameInput?.addEventListener('input', renderBulkEditTable);
-    filterWsuNameInput?.addEventListener('input', renderBulkEditTable);
-    filterTranslationOnly?.addEventListener('change', renderBulkEditTable);
+    filterSelect?.addEventListener('change', () => {
+        currentPage = 1;
+        renderBulkEditTable();
+    });
+    filterDecisionSelect?.addEventListener('change', () => {
+        currentPage = 1;
+        renderBulkEditTable();
+    });
+    filterOutcomesNameInput?.addEventListener('input', () => {
+        currentPage = 1;
+        renderBulkEditTable();
+    });
+    filterWsuNameInput?.addEventListener('input', () => {
+        currentPage = 1;
+        renderBulkEditTable();
+    });
+    filterTranslationOnly?.addEventListener('change', () => {
+        currentPage = 1;
+        renderBulkEditTable();
+    });
+    pageSizeSelect?.addEventListener('change', () => {
+        currentPage = 1;
+        renderBulkEditTable();
+    });
+    pagePrevBtn?.addEventListener('click', () => {
+        if (currentPage <= 1) return;
+        currentPage -= 1;
+        renderBulkEditTable();
+    });
+    pageNextBtn?.addEventListener('click', () => {
+        const totalPages = getTotalPages();
+        if (currentPage >= totalPages) return;
+        currentPage += 1;
+        renderBulkEditTable();
+    });
     quickChipButtons.forEach(btn => {
         btn.addEventListener('click', function() {
             const chipValue = toDisplay(btn.getAttribute('data-outcomes-name'));
             if (filterOutcomesNameInput) filterOutcomesNameInput.value = chipValue;
+            currentPage = 1;
             renderBulkEditTable();
         });
     });
@@ -3312,6 +3395,7 @@ function setupBulkEditPanel() {
         if (filterDecisionSelect) filterDecisionSelect.value = '';
         if (filterSelect) filterSelect.value = '';
         if (filterTranslationOnly) filterTranslationOnly.checked = false;
+        currentPage = 1;
         renderBulkEditTable();
     });
 
@@ -3371,6 +3455,14 @@ function setupBulkEditPanel() {
         const targets = getApplyTargets();
         if (!targets.length) {
             alert('No rows match current filters/selection.');
+            return;
+        }
+        const applyScope = toDisplay(applyScopeSelect?.value || 'filtered');
+        const selectedOnly = Boolean(applySelectedOnly?.checked);
+        const scopeLabel = selectedOnly
+            ? (applyScope === 'page' ? 'selected rows on current page' : 'selected rows in all filtered rows')
+            : (applyScope === 'page' ? 'all rows on current page' : 'all filtered rows');
+        if (!confirm(`Apply changes to ${targets.length} row${targets.length === 1 ? '' : 's'} (${scopeLabel})?`)) {
             return;
         }
         targets.forEach(row => {

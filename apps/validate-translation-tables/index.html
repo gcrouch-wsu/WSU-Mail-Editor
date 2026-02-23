@@ -724,7 +724,7 @@
                 <h3 class="text-base font-semibold text-gray-800 mb-2">In-app review and bulk apply before export</h3>
                 <p class="text-sm text-gray-600 mb-3">Review context inline (Outcomes/myWSU names + location), set Decision/Reason/Suggestion, then bulk apply to selected or filtered rows.</p>
 
-                <div class="grid grid-cols-1 lg:grid-cols-6 gap-3 mb-3">
+                <div class="grid grid-cols-1 lg:grid-cols-7 gap-3 mb-3">
                     <div>
                         <label class="block text-xs text-gray-600 mb-1">Filter Error Type</label>
                         <select id="bulk-filter-error-type" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
@@ -811,6 +811,13 @@
                         <label class="block text-xs text-gray-600 mb-1">Apply Manual Key</label>
                         <input id="bulk-apply-manual-key" type="text" placeholder="Optional" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
                     </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Apply Scope</label>
+                        <select id="bulk-apply-scope" class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
+                            <option value="filtered">All filtered rows</option>
+                            <option value="page">Current page only</option>
+                        </select>
+                    </div>
                     <div class="flex items-end">
                         <button id="bulk-apply-btn" class="bg-wsu-crimson hover:bg-red-800 text-white px-4 py-2 rounded text-sm font-medium w-full">Apply</button>
                     </div>
@@ -822,8 +829,20 @@
                 <div class="flex flex-wrap items-center gap-3 text-xs text-gray-500 mb-2">
                     <span><span id="bulk-edit-row-count">0</span> rows total</span>
                     <span><span id="bulk-edit-filter-count">0</span> rows filtered</span>
+                    <span><span id="bulk-page-range">0-0</span> shown</span>
+                    <span id="bulk-page-status">Page 1 of 1</span>
                     <span><span id="bulk-edit-selected-count">0</span> rows selected</span>
                     <span><span id="bulk-edit-reviewed-count">0</span> reviewed</span>
+                    <label class="inline-flex items-center gap-1 text-xs text-gray-600">
+                        Page size
+                        <select id="bulk-page-size" class="border border-gray-300 rounded px-1 py-0.5 text-xs">
+                            <option value="100">100</option>
+                            <option value="200" selected>200</option>
+                            <option value="400">400</option>
+                        </select>
+                    </label>
+                    <button id="bulk-page-prev-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Prev</button>
+                    <button id="bulk-page-next-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Next</button>
                     <button id="bulk-select-filtered-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Select filtered</button>
                     <button id="bulk-deselect-filtered-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Deselect filtered</button>
                     <button id="bulk-mark-reviewed-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-medium">Mark filtered reviewed</button>
@@ -843,7 +862,7 @@
                 </div>
 
                 <div class="text-xs text-gray-500 mb-2">
-                    For performance, the grid renders up to 400 rows. Bulk actions still apply to all filtered rows.
+                    Use filters + pagination to work through large review sets. Bulk actions can target all filtered rows or the current page.
                 </div>
 
                 <div class="overflow-x-auto border border-gray-200 rounded bg-white">
