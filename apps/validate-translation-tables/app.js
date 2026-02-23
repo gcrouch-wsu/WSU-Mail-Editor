@@ -3337,14 +3337,11 @@ function setupBulkEditPanel() {
         }
         if (target.classList.contains('bulk-row-decision')) {
             row.Decision = toDisplay(target.value);
-            row.Reviewed = false;
         } else if (target.classList.contains('bulk-row-reason')) {
             row.Reason_Code = toDisplay(target.value);
-            row.Reviewed = false;
         } else if (target.classList.contains('bulk-row-candidate')) {
             row.Selected_Candidate_ID = toDisplay(target.value);
             if (row.Selected_Candidate_ID) row.Manual_Suggested_Key = '';
-            row.Reviewed = false;
         }
         preEditedActionQueueRows = getWorkingRows();
         renderBulkEditTable();
@@ -3359,7 +3356,6 @@ function setupBulkEditPanel() {
         if (!row) return;
         row.Manual_Suggested_Key = toDisplay(target.value);
         if (row.Manual_Suggested_Key) row.Selected_Candidate_ID = '';
-        row.Reviewed = false;
         preEditedActionQueueRows = getWorkingRows();
     });
 
@@ -3388,7 +3384,6 @@ function setupBulkEditPanel() {
                 row.Manual_Suggested_Key = manualKey;
                 row.Selected_Candidate_ID = '';
             }
-            row.Reviewed = false;
         });
         preEditedActionQueueRows = getWorkingRows();
         renderBulkEditTable();
@@ -3405,7 +3400,6 @@ function setupBulkEditPanel() {
             row.Reason_Code = '';
             row.Selected_Candidate_ID = '';
             row.Manual_Suggested_Key = '';
-            row.Reviewed = false;
         });
         preEditedActionQueueRows = getWorkingRows();
         renderBulkEditTable();
