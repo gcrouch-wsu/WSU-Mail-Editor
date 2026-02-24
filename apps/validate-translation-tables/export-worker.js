@@ -940,7 +940,14 @@ async function buildValidationExport(payload) {
     };
     const includeSuggestions = Boolean(options.includeSuggestions);
     const showMappingLogic = Boolean(options.showMappingLogic);
-    const translationOnlyExport = Boolean(options.translationOnlyExport);
+    const requestedReviewScope = String(options.reviewScope || '').trim().toLowerCase();
+    const reviewScope = (
+        requestedReviewScope === 'translation_only' || requestedReviewScope === 'missing_only'
+    )
+        ? requestedReviewScope
+        : (Boolean(options.translationOnlyExport) ? 'translation_only' : 'all');
+    const translationOnlyExport = reviewScope === 'translation_only';
+    const missingOnlyExport = reviewScope === 'missing_only';
     const nameCompareConfig = options.nameCompareConfig || {};
     const campusFamilyRules = options.campusFamilyRules || null;
     const loadedData = context.loadedData || { outcomes: [], translate: [], wsu_org: [] };
@@ -1211,6 +1218,23 @@ async function buildValidationExport(payload) {
     };
 
     const MAX_CANDIDATES = 5;
+    const dedupeCandidatesByKey = (candidates) => {
+        const seen = new Set();
+        const deduped = [];
+        candidates.forEach(candidate => {
+            const keyNorm = normalizeValue(candidate?.key || '');
+            const dedupeKey = keyNorm || [
+                normalizeValue(candidate?.name || ''),
+                normalizeValue(candidate?.city || ''),
+                normalizeValue(candidate?.state || ''),
+                normalizeValue(candidate?.country || '')
+            ].join('|');
+            if (seen.has(dedupeKey)) return;
+            seen.add(dedupeKey);
+            deduped.push(candidate);
+        });
+        return deduped;
+    };
     const getBestNameCandidates = (outcomesName, sourceState, sourceCountry, topN = MAX_CANDIDATES) => {
         if (!canSuggestNames || !outcomesName) return [];
         const candidates = [];
@@ -1277,7 +1301,9 @@ async function buildValidationExport(payload) {
         }
         if (!candidates.length) return [];
         candidates.sort((a, b) => b.score - a.score);
-        return candidates.slice(0, topN);
+        const uniqueCandidates = dedupeCandidatesByKey(candidates);
+        if (!Number.isFinite(topN) || topN <= 0) return uniqueCandidates;
+        return uniqueCandidates.slice(0, topN);
     };
     const getBestNameSuggestion = (outcomesName, sourceState, sourceCountry) => {
         const arr = getBestNameCandidates(outcomesName, sourceState, sourceCountry, 1);
@@ -1765,82 +1791,87 @@ async function buildValidationExport(payload) {
         defaultBodyColor: 'FFFFFFFF'
     };
 
-    reportProgress('Building Errors_in_Translate...', 20);
-    addSheetWithRows(workbook, {
-        sheetName: 'Errors_in_Translate',
-        outputColumns: errorColumns,
-        rows: errorDataRows,
-        style: baseStyle,
-        headers: buildHeaders(errorColumns, keyLabels),
-        rowBorderByError
-    });
-
-    const filterBySubtype = (typeof ValidationExportHelpers !== 'undefined' && ValidationExportHelpers &&
-        typeof ValidationExportHelpers.filterOutputNotFoundBySubtype === 'function')
-        ? ValidationExportHelpers.filterOutputNotFoundBySubtype
-        : (rows, subtype) => rows.filter(row =>
-            row._rawErrorType === 'Output_Not_Found' && row._rawErrorSubtype === subtype
-        );
-    const outputNotFoundAmbiguousFiltered = filterBySubtype(errorDataRows, EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT);
-    const outputNotFoundNoReplacementFiltered = filterBySubtype(errorDataRows, EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT);
-
-    reportProgress('Building Output_Not_Found_Ambiguous...', 28);
-    if (outputNotFoundAmbiguousFiltered.length > 0) {
+    const includeNonMissingDiagnosticSheets = !missingOnlyExport;
+    if (includeNonMissingDiagnosticSheets) {
+        reportProgress('Building Errors_in_Translate...', 20);
         addSheetWithRows(workbook, {
-            sheetName: 'Output_Not_Found_Ambiguous',
+            sheetName: 'Errors_in_Translate',
             outputColumns: errorColumns,
-            rows: outputNotFoundAmbiguousFiltered,
+            rows: errorDataRows,
             style: baseStyle,
             headers: buildHeaders(errorColumns, keyLabels),
             rowBorderByError
         });
-    }
-    reportProgress('Building Output_Not_Found_No_Replacement...', 32);
-    if (outputNotFoundNoReplacementFiltered.length > 0) {
+
+        const filterBySubtype = (typeof ValidationExportHelpers !== 'undefined' && ValidationExportHelpers &&
+            typeof ValidationExportHelpers.filterOutputNotFoundBySubtype === 'function')
+            ? ValidationExportHelpers.filterOutputNotFoundBySubtype
+            : (rows, subtype) => rows.filter(row =>
+                row._rawErrorType === 'Output_Not_Found' && row._rawErrorSubtype === subtype
+            );
+        const outputNotFoundAmbiguousFiltered = filterBySubtype(errorDataRows, EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.AMBIGUOUS_REPLACEMENT);
+        const outputNotFoundNoReplacementFiltered = filterBySubtype(errorDataRows, EXPORT_OUTPUT_NOT_FOUND_SUBTYPE.NO_REPLACEMENT);
+
+        reportProgress('Building Output_Not_Found_Ambiguous...', 28);
+        if (outputNotFoundAmbiguousFiltered.length > 0) {
+            addSheetWithRows(workbook, {
+                sheetName: 'Output_Not_Found_Ambiguous',
+                outputColumns: errorColumns,
+                rows: outputNotFoundAmbiguousFiltered,
+                style: baseStyle,
+                headers: buildHeaders(errorColumns, keyLabels),
+                rowBorderByError
+            });
+        }
+        reportProgress('Building Output_Not_Found_No_Replacement...', 32);
+        if (outputNotFoundNoReplacementFiltered.length > 0) {
+            addSheetWithRows(workbook, {
+                sheetName: 'Output_Not_Found_No_Replacement',
+                outputColumns: errorColumns,
+                rows: outputNotFoundNoReplacementFiltered,
+                style: baseStyle,
+                headers: buildHeaders(errorColumns, keyLabels),
+                rowBorderByError
+            });
+        }
+
+        reportProgress('Building One_to_Many...', 35);
         addSheetWithRows(workbook, {
-            sheetName: 'Output_Not_Found_No_Replacement',
-            outputColumns: errorColumns,
-            rows: outputNotFoundNoReplacementFiltered,
+            sheetName: 'One_to_Many',
+            outputColumns: oneToManyColumns,
+            rows: oneToManyDataRows,
             style: baseStyle,
-            headers: buildHeaders(errorColumns, keyLabels),
+            headers: buildHeaders(oneToManyColumns, keyLabels),
+            rowBorderByError,
+            groupColumn: 'Duplicate_Group'
+        });
+
+        reportProgress('Building High_Confidence_Matches...', 50);
+        addSheetWithRows(workbook, {
+            sheetName: 'High_Confidence_Matches',
+            outputColumns: highConfidenceColumns,
+            rows: highConfidenceDataRows,
+            style: baseStyle,
+            headers: buildHeaders(highConfidenceColumns, keyLabels),
             rowBorderByError
         });
+
+        reportProgress('Building Valid_Mappings...', 62);
+        addSheetWithRows(workbook, {
+            sheetName: 'Valid_Mappings',
+            outputColumns: validColumns,
+            rows: validDataRows,
+            style: {
+                ...baseStyle,
+                errorHeaderColor: 'FF16A34A',
+                errorBodyColor: 'FFDCFCE7'
+            },
+            headers: buildHeaders(validColumns, keyLabels),
+            rowBorderByError
+        });
+    } else {
+        reportProgress('Skipping non-missing diagnostic sheets for missing-only scope...', 62);
     }
-
-    reportProgress('Building One_to_Many...', 35);
-    addSheetWithRows(workbook, {
-        sheetName: 'One_to_Many',
-        outputColumns: oneToManyColumns,
-        rows: oneToManyDataRows,
-        style: baseStyle,
-        headers: buildHeaders(oneToManyColumns, keyLabels),
-        rowBorderByError,
-        groupColumn: 'Duplicate_Group'
-    });
-
-    reportProgress('Building High_Confidence_Matches...', 50);
-    addSheetWithRows(workbook, {
-        sheetName: 'High_Confidence_Matches',
-        outputColumns: highConfidenceColumns,
-        rows: highConfidenceDataRows,
-        style: baseStyle,
-        headers: buildHeaders(highConfidenceColumns, keyLabels),
-        rowBorderByError
-    });
-
-    reportProgress('Building Valid_Mappings...', 62);
-    addSheetWithRows(workbook, {
-        sheetName: 'Valid_Mappings',
-        outputColumns: validColumns,
-        rows: validDataRows,
-        style: {
-            ...baseStyle,
-            errorHeaderColor: 'FF16A34A',
-            errorBodyColor: 'FFDCFCE7'
-        },
-        headers: buildHeaders(validColumns, keyLabels),
-        rowBorderByError
-    });
 
     reportProgress('Building Missing_Mappings...', 74);
     const missingMappingColumns = [
@@ -2004,7 +2035,7 @@ async function buildValidationExport(payload) {
         if (rawType === 'Duplicate_Target') return 'Keep As-Is';
         return '';
     };
-    const actionQueueFromErrors = errorDataRows.map(row => {
+    const actionQueueFromErrors = missingOnlyExport ? [] : errorDataRows.map(row => {
         const rawType = row._rawErrorType || row.Error_Type;
         const rawSub = row._rawErrorSubtype || row.Error_Subtype;
         const priority = getActionPriority(rawType, rawSub);
@@ -2026,7 +2057,7 @@ async function buildValidationExport(payload) {
             Notes: ''
         };
     });
-    const actionQueueFromOneToMany = oneToManyDataRows.map(row => {
+    const actionQueueFromOneToMany = missingOnlyExport ? [] : oneToManyDataRows.map(row => {
         const rawType = row.Error_Type || '';
         const priority = getActionPriority(rawType, '');
         const action = getRecommendedAction(rawType, '');

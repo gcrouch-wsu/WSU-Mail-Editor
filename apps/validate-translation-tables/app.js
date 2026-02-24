@@ -248,6 +248,16 @@ function cloneActionQueueRows(rows) {
     }));
 }
 
+function normalizeBulkReviewScope(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'translation_only' || raw === 'missing_only') return raw;
+    return 'all';
+}
+
+function getBulkReviewScope() {
+    return normalizeBulkReviewScope(document.getElementById('bulk-filter-review-scope')?.value);
+}
+
 function buildActionQueuePayload() {
     return {
         validated: validatedData,
@@ -2791,9 +2801,7 @@ function setupDownloadButton() {
             const showMappingLogic = Boolean(
                 document.getElementById('show-mapping-logic')?.checked
             );
-            const translationOnlyExport = Boolean(
-                document.getElementById('bulk-filter-translation-only')?.checked
-            );
+            const reviewScope = getBulkReviewScope();
             const result = await createExcelOutput(
                 validatedData,
                 missingData,
@@ -2801,7 +2809,7 @@ function setupDownloadButton() {
                 {
                     includeSuggestions,
                     showMappingLogic,
-                    translationOnlyExport,
+                    reviewScope,
                     nameCompareConfig: lastNameCompareConfig,
                     priorDecisions: priorDecisions || undefined,
                     campusFamilyRules: campusFamilyRules || undefined,
@@ -2860,6 +2868,9 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
     const onProgressCb = typeof options.onProgress === 'function'
         ? options.onProgress
         : null;
+    const reviewScope = normalizeBulkReviewScope(
+        options.reviewScope || (options.translationOnlyExport ? 'translation_only' : 'all')
+    );
     const payload = {
         validated,
         missing,
@@ -2868,7 +2879,9 @@ async function createExcelOutput(validated, missing, selectedCols, options = {})
         options: {
             includeSuggestions: Boolean(options.includeSuggestions),
             showMappingLogic: Boolean(options.showMappingLogic),
-            translationOnlyExport: Boolean(options.translationOnlyExport),
+            reviewScope,
+            // Legacy flag kept for compatibility with older consumers/tests.
+            translationOnlyExport: reviewScope === 'translation_only',
             nameCompareConfig: options.nameCompareConfig || {},
             campusFamilyRules: options.campusFamilyRules || null
         },
@@ -2937,12 +2950,17 @@ function setupBulkEditPanel() {
     const filterDecisionSelect = document.getElementById('bulk-filter-decision');
     const filterOutcomesNameInput = document.getElementById('bulk-filter-outcomes-name');
     const filterWsuNameInput = document.getElementById('bulk-filter-wsu-name');
-    const filterTranslationOnly = document.getElementById('bulk-filter-translation-only');
+    const filterReviewScope = document.getElementById('bulk-filter-review-scope');
     const pageSizeSelect = document.getElementById('bulk-page-size');
+    const pageSizeBottomSelect = document.getElementById('bulk-page-size-bottom');
     const pageStatusEl = document.getElementById('bulk-page-status');
+    const pageStatusBottomEl = document.getElementById('bulk-page-status-bottom');
     const pageRangeEl = document.getElementById('bulk-page-range');
+    const pageRangeBottomEl = document.getElementById('bulk-page-range-bottom');
     const pagePrevBtn = document.getElementById('bulk-page-prev-btn');
+    const pagePrevBottomBtn = document.getElementById('bulk-page-prev-btn-bottom');
     const pageNextBtn = document.getElementById('bulk-page-next-btn');
+    const pageNextBottomBtn = document.getElementById('bulk-page-next-btn-bottom');
     const applyDecisionSelect = document.getElementById('bulk-apply-decision');
     const applyReasonCodeSelect = document.getElementById('bulk-apply-reason-code');
     const applyCandidateIdSelect = document.getElementById('bulk-apply-candidate-id');
@@ -2983,6 +3001,12 @@ function setupBulkEditPanel() {
     let filteredRowsCache = [];
     let selectedRowIds = new Set();
     let currentPage = 1;
+    let currentPageSize = DEFAULT_PAGE_SIZE;
+    const pageSizeControls = [pageSizeSelect, pageSizeBottomSelect].filter(Boolean);
+    const pageStatusControls = [pageStatusEl, pageStatusBottomEl].filter(Boolean);
+    const pageRangeControls = [pageRangeEl, pageRangeBottomEl].filter(Boolean);
+    const pagePrevControls = [pagePrevBtn, pagePrevBottomBtn].filter(Boolean);
+    const pageNextControls = [pageNextBtn, pageNextBottomBtn].filter(Boolean);
 
     const normalize = (value) => String(value ?? '').trim().toLowerCase();
     const toDisplay = (value) => String(value ?? '').trim();
@@ -3102,10 +3126,27 @@ function setupBulkEditPanel() {
     };
     const cloneRows = (rows) => cloneActionQueueRows(rows);
     const getWorkingRows = () => preEditedActionQueueRows || actionQueueRowsCache || [];
-    const getPageSize = () => {
-        const raw = parseInt(toDisplay(pageSizeSelect?.value || DEFAULT_PAGE_SIZE), 10);
+    const parsePageSize = (value) => {
+        const raw = parseInt(toDisplay(value), 10);
         return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PAGE_SIZE;
     };
+    const syncPageSizeControls = (value) => {
+        pageSizeControls.forEach(control => {
+            if (!control) return;
+            if (toDisplay(control.value) !== toDisplay(value)) {
+                control.value = toDisplay(value);
+            }
+        });
+    };
+    const setPageSize = (value) => {
+        currentPageSize = parsePageSize(value);
+        syncPageSizeControls(String(currentPageSize));
+        return currentPageSize;
+    };
+    const getPageSize = () => {
+        return currentPageSize;
+    };
+    setPageSize(pageSizeControls.find(control => control && toDisplay(control.value))?.value || DEFAULT_PAGE_SIZE);
     const getTotalPages = () => {
         const count = filteredRowsCache.length;
         const pageSize = getPageSize();
@@ -3122,19 +3163,45 @@ function setupBulkEditPanel() {
         const startIndex = (currentPage - 1) * pageSize;
         return filteredRowsCache.slice(startIndex, startIndex + pageSize);
     };
+    const sortCandidateIds = (ids) => [...ids].sort((a, b) => {
+        const matchA = /^c(\d+)$/i.exec(a);
+        const matchB = /^c(\d+)$/i.exec(b);
+        if (matchA && matchB) return Number(matchA[1]) - Number(matchB[1]);
+        return a.localeCompare(b, undefined, { sensitivity: 'base' });
+    });
+    const refreshBulkCandidateApplyOptions = () => {
+        if (!applyCandidateIdSelect) return;
+        const prev = toDisplay(applyCandidateIdSelect.value);
+        const ids = new Set();
+        filteredRowsCache.forEach(row => {
+            (row._candidates || []).forEach(candidate => {
+                const candidateId = toDisplay(candidate?.candidateId || '');
+                if (candidateId) ids.add(candidateId);
+            });
+        });
+        const optionsHtml = [
+            optionHtml('', '(no change)', prev === ''),
+            ...sortCandidateIds(ids).map(candidateId => optionHtml(candidateId, candidateId, candidateId === prev))
+        ].join('');
+        applyCandidateIdSelect.innerHTML = optionsHtml;
+        if (prev && !ids.has(prev)) {
+            applyCandidateIdSelect.value = '';
+        }
+    };
     const findRowById = (rid) => getWorkingRows().find(row => String(row.Review_Row_ID || '') === rid) || null;
     const getFilteredRows = () => {
         const errorType = toDisplay(filterSelect?.value || '');
         const decisionFilter = toDisplay(filterDecisionSelect?.value || '');
         const outcomesContains = normalize(filterOutcomesNameInput?.value || '');
         const wsuContains = normalize(filterWsuNameInput?.value || '');
-        const translationOnly = Boolean(filterTranslationOnly?.checked);
+        const reviewScope = normalizeBulkReviewScope(filterReviewScope?.value || 'all');
         const matches = getWorkingRows().filter(row => {
             const ctx = row._ctx || {};
             if (errorType && toDisplay(row.Error_Type) !== errorType) return false;
             if (decisionFilter === '(blank)' && toDisplay(row.Decision)) return false;
             if (decisionFilter && decisionFilter !== '(blank)' && toDisplay(row.Decision) !== decisionFilter) return false;
-            if (translationOnly && isSourceDerivedMissingMapping(row)) return false;
+            if (reviewScope === 'translation_only' && isSourceDerivedMissingMapping(row)) return false;
+            if (reviewScope === 'missing_only' && !isSourceDerivedMissingMapping(row)) return false;
             if (outcomesContains && !normalize(ctx.outcomesName).includes(outcomesContains)) return false;
             if (wsuContains && !normalize(ctx.wsuName).includes(wsuContains)) return false;
             return true;
@@ -3159,15 +3226,24 @@ function setupBulkEditPanel() {
         const endIndex = totalFiltered ? Math.min(totalFiltered, (currentPage * pageSize)) : 0;
         if (rowCountEl) rowCountEl.textContent = String(allRows.length);
         if (filterCountEl) filterCountEl.textContent = String(totalFiltered);
-        if (pageRangeEl) pageRangeEl.textContent = `${startIndex}-${endIndex}`;
-        if (pageStatusEl) pageStatusEl.textContent = `Page ${currentPage} of ${totalPages}`;
-        if (pagePrevBtn) pagePrevBtn.disabled = currentPage <= 1;
-        if (pageNextBtn) pageNextBtn.disabled = currentPage >= totalPages;
+        pageRangeControls.forEach(control => {
+            control.textContent = `${startIndex}-${endIndex}`;
+        });
+        pageStatusControls.forEach(control => {
+            control.textContent = `Page ${currentPage} of ${totalPages}`;
+        });
+        pagePrevControls.forEach(control => {
+            control.disabled = currentPage <= 1;
+        });
+        pageNextControls.forEach(control => {
+            control.disabled = currentPage >= totalPages;
+        });
         if (selectedCountEl) selectedCountEl.textContent = String(selectedRowIds.size);
         if (reviewedCountEl) reviewedCountEl.textContent = String(reviewedCount);
     };
     const renderBulkEditTable = () => {
         filteredRowsCache = getFilteredRows();
+        refreshBulkCandidateApplyOptions();
         const pageSize = getPageSize();
         const totalPages = Math.max(1, Math.ceil(filteredRowsCache.length / pageSize));
         if (currentPage > totalPages) currentPage = totalPages;
@@ -3362,24 +3438,31 @@ function setupBulkEditPanel() {
         currentPage = 1;
         renderBulkEditTable();
     });
-    filterTranslationOnly?.addEventListener('change', () => {
+    filterReviewScope?.addEventListener('change', () => {
         currentPage = 1;
         renderBulkEditTable();
     });
-    pageSizeSelect?.addEventListener('change', () => {
-        currentPage = 1;
-        renderBulkEditTable();
+    pageSizeControls.forEach(control => {
+        control.addEventListener('change', () => {
+            setPageSize(control.value || currentPageSize);
+            currentPage = 1;
+            renderBulkEditTable();
+        });
     });
-    pagePrevBtn?.addEventListener('click', () => {
-        if (currentPage <= 1) return;
-        currentPage -= 1;
-        renderBulkEditTable();
+    pagePrevControls.forEach(control => {
+        control.addEventListener('click', () => {
+            if (currentPage <= 1) return;
+            currentPage -= 1;
+            renderBulkEditTable();
+        });
     });
-    pageNextBtn?.addEventListener('click', () => {
-        const totalPages = getTotalPages();
-        if (currentPage >= totalPages) return;
-        currentPage += 1;
-        renderBulkEditTable();
+    pageNextControls.forEach(control => {
+        control.addEventListener('click', () => {
+            const totalPages = getTotalPages();
+            if (currentPage >= totalPages) return;
+            currentPage += 1;
+            renderBulkEditTable();
+        });
     });
     quickChipButtons.forEach(btn => {
         btn.addEventListener('click', function() {
@@ -3394,7 +3477,7 @@ function setupBulkEditPanel() {
         if (filterWsuNameInput) filterWsuNameInput.value = '';
         if (filterDecisionSelect) filterDecisionSelect.value = '';
         if (filterSelect) filterSelect.value = '';
-        if (filterTranslationOnly) filterTranslationOnly.checked = false;
+        if (filterReviewScope) filterReviewScope.value = 'all';
         currentPage = 1;
         renderBulkEditTable();
     });

@@ -1575,7 +1575,13 @@ async function run() {
                     translate: [{ translate_input: 'IN-ALPHA', translate_output: 'OUT-LEGACY' }],
                     wsu_org: [
                         { key: 'OUT-LEGACY', school: 'Alpha Campus' },
-                        { key: 'OUT-BETTER', school: 'Alpha Campus' }
+                        { key: 'OUT-BETTER', school: 'Alpha Campus' },
+                        { key: 'OUT-BEST', school: 'Alpha Campus' },
+                        { key: 'OUT-ALT-1', school: 'Alpha Campus' },
+                        { key: 'OUT-ALT-2', school: 'Alpha Campus' },
+                        { key: 'OUT-ALT-3', school: 'Alpha Campus' },
+                        { key: 'OUT-ALT-4', school: 'Alpha Campus' },
+                        { key: 'OUT-ALT-5', school: 'Alpha Campus' }
                     ]
                 },
                 keyConfig: {
@@ -1603,6 +1609,8 @@ async function run() {
         const candidateKeys = (row._candidates || []).map(c => String(c.key || ''));
         assert.ok(candidateKeys.includes('OUT-BETTER'), 'Expected alternate non-current candidate in dropdown list');
         assert.ok(!candidateKeys.includes('OUT-LEGACY'), 'Current output key should be removed from candidate dropdown list');
+        assert.ok(candidateKeys.length > 0, 'Duplicate-target candidate list should include at least one non-current option');
+        assert.ok(candidateKeys.length <= 5, 'Duplicate-target candidate list should be capped at 5 location-valid matches');
     });
 
     await runCheck('translation-only export scope excludes Missing_Mappings from report and review queue', async () => {
@@ -1678,7 +1686,7 @@ async function run() {
             ...basePayload,
             options: {
                 ...basePayload.options,
-                translationOnlyExport: true
+                reviewScope: 'translation_only'
             }
         });
         assertExportResult(scopedResult);
@@ -1692,6 +1700,34 @@ async function run() {
             if (value === 'Missing_Mapping') scopedMissingRows += 1;
         }
         assert.equal(scopedMissingRows, 0, 'Missing_Mapping rows should be excluded when translation-only export scope is active');
+
+        const harnessMissingOnly = createHarness();
+        const missingOnlyResult = await harnessMissingOnly.buildValidationExport({
+            ...basePayload,
+            options: {
+                ...basePayload.options,
+                reviewScope: 'missing_only'
+            }
+        });
+        assertExportResult(missingOnlyResult);
+        const workbookMissingOnly = harnessMissingOnly.getLastWorkbook();
+        const missingOnlySheet = workbookMissingOnly.getWorksheet('Missing_Mappings');
+        assert.ok(missingOnlySheet, 'Missing_Mappings sheet should be present when missing-only export scope is active');
+        assert.equal(workbookMissingOnly.getWorksheet('Errors_in_Translate'), undefined, 'Errors_in_Translate sheet should be excluded in missing-only export scope');
+        assert.equal(workbookMissingOnly.getWorksheet('One_to_Many'), undefined, 'One_to_Many sheet should be excluded in missing-only export scope');
+        assert.equal(workbookMissingOnly.getWorksheet('High_Confidence_Matches'), undefined, 'High_Confidence_Matches sheet should be excluded in missing-only export scope');
+        assert.equal(workbookMissingOnly.getWorksheet('Valid_Mappings'), undefined, 'Valid_Mappings sheet should be excluded in missing-only export scope');
+        const missingOnlyReview = workbookMissingOnly.getWorksheet('Review_Workbench');
+        const missingOnlyErrorTypeCol = findHeaderIndex(missingOnlyReview, 'Error Type');
+        let missingOnlyRows = 0;
+        let nonMissingOnlyRows = 0;
+        for (let r = 2; r <= (missingOnlyReview.rowCount || 0); r += 1) {
+            const value = String(missingOnlyReview.getRow(r).getCell(missingOnlyErrorTypeCol).value || '');
+            if (value === 'Missing_Mapping') missingOnlyRows += 1;
+            else if (value) nonMissingOnlyRows += 1;
+        }
+        assert.ok(missingOnlyRows > 0, 'Missing-only export scope should include Missing_Mapping rows in review queue');
+        assert.equal(nonMissingOnlyRows, 0, 'Missing-only export scope should exclude non-missing rows from review queue');
     });
 
     if (failures > 0) {

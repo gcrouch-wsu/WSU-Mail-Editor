@@ -37,7 +37,7 @@
         <p><strong>2. Match Options</strong> -> pick key columns (Translation input/output), validation mode (Key only or Key + name).</p>
         <p><strong>3. Name comparison</strong> (if used): pick Outcomes/myWSU name columns, threshold (default 0.8), ambiguity gap (0.03).</p>
         <p><strong>4. Select Columns, Keys, and Roles</strong> -> pick included columns, key columns, optional role mapping (School, City, State, Country). Include City/State for high-confidence matching.</p>
-        <p><strong>5. Validate Mappings</strong> -> review cards -> optional <strong>Bulk edit before export</strong> (context grid + suggestion dropdown + reason code + quick family chips). Grid renders up to 400 rows at a time for performance; bulk actions still apply to all filtered rows. Optional <strong>Save session</strong>/<strong>Load session</strong> -> <strong>Download Full Report</strong>.</p>
+        <p><strong>5. Validate Mappings</strong> -> review cards -> optional <strong>Bulk edit before export</strong> (context grid + suggestion dropdown + reason code + quick family chips + synced top/bottom pagination controls). Use <strong>Review Scope</strong> (`All review rows`, `Uploaded Translate rows only`, `Missing mappings only`) to control both in-app rows and download scope. For duplicate/one-to-many rows, suggestions are capped to top 5 location-valid matches. Optional <strong>Save session</strong>/<strong>Load session</strong> -> <strong>Download Full Report</strong>.</p>
     </div>
 
     <h2>What the Excel file contains</h2>
@@ -65,6 +65,7 @@
         <p><strong>2. Final_Translation_Table:</strong> auto-matched rows + approved review rows (not sortable directly).</p>
         <p><strong>3. Translation_Key_Updates (What changed):</strong> only key pairs that differ from current. Use this to verify all changes before publish.</p>
         <p><strong>4. QA_Checks_Validate:</strong> all blocking checks must pass before publish.</p>
+        <p><strong>Scope behavior:</strong> `Uploaded Translate rows only` excludes Missing_Mappings from review/export. `Missing mappings only` keeps only Missing_Mapping review rows and suppresses non-missing diagnostic tabs in that workbook.</p>
         <p><strong>Blocking QA highlights:</strong> B10 risky decisions without reason code, B13 duplicate input keys, B14 duplicate output keys (with intentional many-to-one exemption), B15 duplicate pairs.</p>
         <p><strong>Final step before updating Outcomes Translation Table:</strong></p>
         <ol>

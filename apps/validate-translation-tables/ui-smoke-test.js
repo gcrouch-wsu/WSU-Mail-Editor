@@ -217,7 +217,7 @@ async function run() {
         assert.ok(htmlIds.has('campus-family-template-json-btn'));
         assert.ok(htmlIds.has('campus-family-template-csv-btn'));
         assert.ok(htmlIds.has('show-unresolved-errors-only'));
-        assert.ok(htmlIds.has('bulk-filter-translation-only'));
+        assert.ok(htmlIds.has('bulk-filter-review-scope'));
         assert.ok(htmlIds.has('bulk-load-progress'));
         assert.ok(htmlIds.has('bulk-mark-reviewed-btn'));
         assert.ok(htmlIds.has('bulk-clear-reviewed-btn'));
@@ -225,6 +225,9 @@ async function run() {
         assert.ok(htmlIds.has('bulk-page-size'));
         assert.ok(htmlIds.has('bulk-page-prev-btn'));
         assert.ok(htmlIds.has('bulk-page-next-btn'));
+        assert.ok(htmlIds.has('bulk-page-size-bottom'));
+        assert.ok(htmlIds.has('bulk-page-prev-btn-bottom'));
+        assert.ok(htmlIds.has('bulk-page-next-btn-bottom'));
         assert.ok(htmlIds.has('bulk-apply-scope'));
     });
 

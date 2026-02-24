@@ -83,7 +83,7 @@ Technical notes:
 - `Review_Workbench` is intentionally unprotected so sort/filter works in Excel.
 - `Final_Translation_Table` is built from hidden staging sheets via Excel `FILTER` (compact approved rows).
 - Final table is formula-driven; copy/paste values to a new sheet if sorting is needed.
-- Hidden diagnostic/staging tabs are included for traceability and QA.
+- Hidden diagnostic/staging tabs are included for traceability and QA (scope-dependent in missing-only export mode).
 
 ### Validate decision model
 
@@ -100,7 +100,10 @@ For risky decisions, reviewers select a controlled `Reason_Code` (manual-key `Us
 - Inline C1/C2/C3 options in `Review_Workbench` include city/state/country and score
 - Manual key override (`Manual_Suggested_Key`) with valid-key checks
 - Optional pre-export bulk edit panel with contextual rows, quick family chips, and bulk Decision/manual key actions on filtered rows
-- Review panel renders up to 400 rows for performance; bulk actions still apply to all filtered rows
+- Pagination controls (100/200/400 page size) are shown above and below the review grid, with synced state
+- Review Scope selector supports `All review rows`, `Uploaded Translate rows only`, and `Missing mappings only`
+- Review Scope affects both in-app rows and download scope; missing-only exports suppress non-missing diagnostic tabs
+- Duplicate-target/source suggestion dropdowns are capped to top 5 location-valid candidates
 - `Translation_Key_Updates` serves as the primary "What changed" verification sheet
 - Optional re-import summary after export (`applied`, `conflicts`, `newRows`, `orphaned`)
 
@@ -191,7 +194,7 @@ Other:
 - `npm run lint`
 - `npm run format`
 - `npm run checkfmt`
-- `npm run check:validate-translation` - validate app regression checks (`checks.js` + `export-test.js`)
+- `npm run check:validate-translation` - validate app regression checks (`checks.js` + `export-test.js` + `ui-smoke-test.js`)
 
 ## Deployment (Vercel)
 

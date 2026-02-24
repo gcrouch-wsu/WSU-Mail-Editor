@@ -54,7 +54,15 @@ Use this when you already have a translation table and want to correct it.
 8. Optional: click `Bulk edit before export` to apply `Decision` and/or `Manual_Suggested_Key` to filtered rows in one step.
    - New in-app review grid includes Outcomes/myWSU name + state + country context, per-row suggestion dropdown, and `Reason_Code`.
    - Use quick family chips (for example, `Texas A&M`, `Troy University`) to jump to common campus groups.
-   - For performance, use pagination controls (100/200/400 rows per page) with filters. Bulk actions can target all filtered rows or only the current page.
+   - For performance, use pagination controls (100/200/400 rows per page) with synced controls above and below the grid. Bulk actions can target all filtered rows or only the current page.
+   - For duplicate and one-to-many style review rows, the Suggested myWSU dropdown lists the top 5 location-valid name matches, ranked by similarity.
+   - `Review Scope` controls both what appears in the in-app grid and what is included in the downloaded report:
+     - `All review rows`
+     - `Uploaded Translate rows only`
+     - `Missing mappings only`
+   - `Review Scope` export behavior:
+     - `Uploaded Translate rows only` excludes Missing_Mapping rows from the export review queue and omits the `Missing_Mappings` sheet.
+     - `Missing mappings only` keeps only Missing_Mapping rows in the export review queue and suppresses non-missing diagnostic sheets.
    - Use `Save session` to download a JSON snapshot and `Load session` to resume later.
 9. Click `Download Full Report`.
 
@@ -92,6 +100,8 @@ Hidden by default (diagnostic/internal):
 - `Candidate_Reference`
 - `Approved_Mappings`
 - `Final_Staging`
+
+**Scope note:** When you export with `Missing mappings only`, non-missing diagnostic sheets are intentionally not created for that workbook.
 
 **To unhide Candidate_Pool or Candidate_Reference:** Right-click the tab bar at the bottom of Excel, choose **Unhide**, then select the sheet you need. These sheets support the C1/C2/C3 candidate lookup; unhide them only when you need to inspect candidate details.
 
