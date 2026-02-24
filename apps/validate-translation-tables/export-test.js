@@ -1613,6 +1613,85 @@ async function run() {
         assert.ok(candidateKeys.length <= 5, 'Duplicate-target candidate list should be capped at 5 location-valid matches');
     });
 
+    await runCheck('missing-mapping suggestions require strong non-location name evidence', async () => {
+        const harness = createHarness();
+        const result = await harness.buildValidationExport({
+            validated: [],
+            selectedCols: {
+                outcomes: ['school', 'city', 'state', 'country'],
+                wsu_org: ['school', 'city', 'state', 'country']
+            },
+            options: {
+                includeSuggestions: true,
+                nameCompareConfig: {
+                    enabled: true,
+                    outcomes: 'school',
+                    wsu: 'school',
+                    threshold: 0.8
+                }
+            },
+            context: {
+                loadedData: {
+                    outcomes: [
+                        { mdb_code: 'O1', school: 'ACADEMY IN ARCHITECTURE', city: '', state: 'OT', country: 'IN' },
+                        { mdb_code: 'O2', school: 'ADLER UNIVERSITY - VANCOUVER', city: 'Vancouver', state: 'BC', country: 'CA' },
+                        { mdb_code: 'O3', school: 'AGA KHAN UNIVERSITY', city: '', state: 'OT', country: 'PK' },
+                        { mdb_code: 'O4', school: 'ALPHA CAMPUS', city: 'Seattle', state: 'WA', country: 'US' }
+                    ],
+                    translate: [],
+                    wsu_org: [
+                        { 'Org ID': '011612666', school: 'Jawaharlal Nehru Arch Fin Art', city: 'Hyderabad', state: 'AP', country: 'IND' },
+                        { 'Org ID': '011814422', school: 'LaSalle College Vancouver', city: 'Vancouver', state: 'BC', country: 'CAN' },
+                        { 'Org ID': '011456413', school: 'Al-Khair University', city: '', state: '', country: 'PAK' },
+                        { 'Org ID': '011900004', school: 'Alpha Campus', city: 'Seattle', state: 'WA', country: 'USA' }
+                    ]
+                },
+                keyConfig: {
+                    outcomes: 'mdb_code',
+                    translateInput: 'input',
+                    translateOutput: 'output',
+                    wsu: 'Org ID'
+                },
+                keyLabels: {
+                    outcomes: 'mdb_code',
+                    wsu: 'Org ID',
+                    translateInput: 'input',
+                    translateOutput: 'output'
+                },
+                columnRoles: {
+                    outcomes: { school: 'School', city: 'City', state: 'State', country: 'Country' },
+                    wsu_org: { school: 'School', city: 'City', state: 'State', country: 'Country' }
+                }
+            }
+        });
+        assertExportResult(result);
+        const workbook = harness.getLastWorkbook();
+        const reviewSheet = workbook.getWorksheet('Review_Workbench');
+        assert.ok(reviewSheet, 'Expected Review_Workbench worksheet');
+        const errorTypeCol = findHeaderIndex(reviewSheet, 'Error Type');
+        const currentInputCol = findHeaderIndex(reviewSheet, 'Current Translate Input');
+        const currentOutputCol = findHeaderIndex(reviewSheet, 'Current Translate Output');
+        assert.ok(errorTypeCol > 0, 'Review sheet should have Error Type column');
+        assert.ok(currentInputCol > 0, 'Review sheet should have Current Translate Input column');
+        assert.ok(currentOutputCol > 0, 'Review sheet should have Current Translate Output column');
+
+        const missingPairs = [];
+        for (let r = 2; r <= (reviewSheet.rowCount || 0); r += 1) {
+            const errorType = String(reviewSheet.getRow(r).getCell(errorTypeCol).value || '');
+            if (errorType !== 'Missing_Mapping') continue;
+            const inputKey = String(reviewSheet.getRow(r).getCell(currentInputCol).value || '');
+            const outputKey = String(reviewSheet.getRow(r).getCell(currentOutputCol).value || '');
+            missingPairs.push([inputKey, outputKey]);
+        }
+
+        assert.equal(missingPairs.length, 1, 'Only strong missing-mapping pair should remain');
+        assert.deepEqual(
+            missingPairs[0],
+            ['O4', '011900004'],
+            'Weak location-driven name pairs should be excluded from Missing_Mapping suggestions'
+        );
+    });
+
     await runCheck('translation-only export scope excludes Missing_Mappings from report and review queue', async () => {
         const basePayload = {
             validated: [

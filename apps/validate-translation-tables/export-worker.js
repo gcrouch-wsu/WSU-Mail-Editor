@@ -1662,6 +1662,67 @@ async function buildValidationExport(payload) {
             .filter(Boolean)
     );
 
+    const getLocationTokenSet = (outcomesEntry, wsuEntry) => {
+        const tokens = new Set();
+        [
+            outcomesEntry?.city,
+            outcomesEntry?.state,
+            outcomesEntry?.country,
+            wsuEntry?.city,
+            wsuEntry?.state,
+            wsuEntry?.country
+        ].forEach(value => {
+            getNameTokens(value).forEach(token => tokens.add(token));
+        });
+        return tokens;
+    };
+
+    const hasStrongMissingMappingNameEvidence = (outcomesEntry, wsuEntry, similarity) => {
+        const outcomesTokens = new Set(getNameTokens(outcomesEntry?.name));
+        const wsuTokens = new Set(getNameTokens(wsuEntry?.name));
+        const overlapTokens = [];
+        outcomesTokens.forEach(token => {
+            if (wsuTokens.has(token)) {
+                overlapTokens.push(token);
+            }
+        });
+        const locationTokens = getLocationTokenSet(outcomesEntry, wsuEntry);
+        const nonLocationOverlapCount = overlapTokens.filter(token => !locationTokens.has(token)).length;
+
+        const countriesAlign = Boolean(
+            outcomesEntry?.country &&
+            wsuEntry?.country &&
+            (
+                (typeof countriesMatch === 'function' && countriesMatch(outcomesEntry.country, wsuEntry.country)) ||
+                normalizeValue(outcomesEntry.country) === normalizeValue(wsuEntry.country)
+            )
+        );
+        const hasComparableStates = typeof hasComparableStateValues === 'function'
+            ? hasComparableStateValues(outcomesEntry?.state, wsuEntry?.state)
+            : Boolean(
+                String(outcomesEntry?.state || '').trim() &&
+                String(wsuEntry?.state || '').trim()
+            );
+        const statesAlign = Boolean(
+            outcomesEntry?.state &&
+            wsuEntry?.state &&
+            (
+                (typeof statesMatch === 'function' && statesMatch(outcomesEntry.state, wsuEntry.state)) ||
+                normalizeValue(outcomesEntry.state) === normalizeValue(wsuEntry.state)
+            )
+        );
+
+        const singleTokenFloor = Math.max(0.72, threshold - 0.08);
+        const strictFloor = (countriesAlign && hasComparableStates && statesAlign)
+            ? Math.max(0.7, threshold - 0.1)
+            : Math.max(0.82, threshold);
+
+        if (nonLocationOverlapCount >= 2) return true;
+        if (nonLocationOverlapCount === 1 && similarity >= singleTokenFloor) return true;
+        if (nonLocationOverlapCount >= 1 && similarity >= strictFloor) return true;
+        return similarity >= Math.max(0.9, threshold + 0.08);
+    };
+
     const rowBorderByError = {
         'Input key not found in Outcomes': 'FFEF4444',
         'Output key not found in myWSU': 'FFEF4444'
@@ -1927,6 +1988,9 @@ async function buildValidationExport(payload) {
                     suggestionIDFTable
                 );
                 if (!highConfidence) {
+                    return;
+                }
+                if (!hasStrongMissingMappingNameEvidence(outcomesEntry, wsuEntry, similarity)) {
                     return;
                 }
                 const candidate = {
