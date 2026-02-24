@@ -34,20 +34,22 @@ Use this when you already have a translation table and want to correct it.
 - Outcomes source file
 - Translate table file
 - myWSU source file
-- **Optional:** Prior Validate workbook (Excel from a previous Validate run) - to re-apply your decisions and resume a prior session
 - **Optional:** Campus-family JSON rules file - to prefill parent keys for campus variants (for example, Texas A&M* -> TAMU-MAIN)
+- **Optional (in editor panel after validation):**
+  - Prior Validate workbook (Excel from a previous Validate run) - to re-apply prior decisions
+  - Review session JSON - to resume saved in-app edits
 
 ### Steps in the app
 
 1. Select `Validate`.
-2. Upload all 3 required files. Optionally upload a **Prior Validate workbook** to re-apply decisions from a previous run (works best when source data is unchanged). Optionally upload a **Campus-family JSON** file to prefill parent keys.
+2. Upload all 3 required files. Optionally upload a **Campus-family JSON** file to prefill parent keys.
 3. In `Select Columns, Keys, and Roles`:
    - Pick key columns for Outcomes, Translate input/output, and myWSU.
    - Pick included columns.
    - Optionally map roles (`School`, `City`, `State`, `Country`).
 4. Choose validation mode:
    - `Key only`, or
-   - `Key + name comparison`.
+   - `Key + name comparison` (default).
 5. If using name comparison, pick name columns and adjust threshold/ambiguity gap.
 6. Click `Validate Mappings`.
 7. Review on-screen cards and counts.
@@ -63,6 +65,7 @@ Use this when you already have a translation table and want to correct it.
    - `Review Scope` export behavior:
      - `Uploaded Translate rows only` excludes Missing_Mapping rows from the export review queue and omits the `Missing_Mappings` sheet.
      - `Missing mappings only` keeps only Missing_Mapping rows in the export review queue and suppresses non-missing diagnostic sheets.
+   - In the editor panel, upload **Prior Validate workbook** and/or **Review session JSON** to resume prior work after validation.
    - Use `Save session` to download a JSON snapshot and `Load session` to resume later.
 9. Click `Download Full Report`.
 

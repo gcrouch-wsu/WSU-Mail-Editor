@@ -47,7 +47,7 @@ let keyLabels = {
     wsu: ''
 };
 let matchMethodTouched = false;
-let validateNameMode = 'key';
+let validateNameMode = 'key+name';
 let lastNameCompareConfig = {
     enabled: false,
     outcomes: '',
@@ -539,6 +539,39 @@ function parseSessionRowsPayload(payload) {
     return payload.rows;
 }
 
+function applyPriorDecisionsToActionQueue(priorDecisionMap) {
+    const rows = getCurrentActionQueueRows();
+    if (!rows.length) return { applied: 0, unmatched: 0 };
+    const decisions = priorDecisionMap && typeof priorDecisionMap === 'object'
+        ? priorDecisionMap
+        : {};
+    const rowMap = new Map(rows.map(row => [String(row.Review_Row_ID || ''), row]));
+    let applied = 0;
+    Object.keys(decisions).forEach((rid) => {
+        const row = rowMap.get(String(rid || ''));
+        if (!row) return;
+        const prior = decisions[rid] || {};
+        const priorDecision = String(prior.Decision || '').trim();
+        const priorManual = String(prior.Manual_Suggested_Key || '').trim();
+        const priorSuggested = String(prior.Suggested_Key || '').trim();
+        const effectiveKey = priorManual || (priorDecision === 'Use Suggestion' ? priorSuggested : '');
+        if (priorDecision) row.Decision = priorDecision;
+        if (effectiveKey) {
+            row.Manual_Suggested_Key = effectiveKey;
+            row.Selected_Candidate_ID = '';
+        }
+        if (prior.Reason_Code !== undefined && prior.Reason_Code !== null) {
+            row.Reason_Code = String(prior.Reason_Code).trim();
+        }
+        applied += 1;
+    });
+    preEditedActionQueueRows = rows;
+    return {
+        applied,
+        unmatched: Math.max(0, Object.keys(decisions).length - applied)
+    };
+}
+
 function setupSessionUploadCard() {
     const sessionInput = document.getElementById('session-upload-file');
     const statusDiv = document.getElementById('session-upload-status');
@@ -619,8 +652,16 @@ function setupFileUploads() {
                 if (parsed && parsed.priorDecisions && Object.keys(parsed.priorDecisions).length > 0) {
                     priorDecisions = parsed.priorDecisions;
                     if (filenameSpan) filenameSpan.textContent = file.name;
-                    if (rowsSpan) rowsSpan.textContent = `${parsed.rowCount} decisions to re-apply`;
+                    if (rowsSpan) rowsSpan.textContent = `${parsed.rowCount} decisions ready to apply`;
                     if (statusDiv) statusDiv.classList.remove('hidden');
+                    if (actionQueueRowsCache && actionQueueRowsCache.length) {
+                        const summary = applyPriorDecisionsToActionQueue(priorDecisions);
+                        if (rowsSpan) {
+                            rowsSpan.textContent = `${parsed.rowCount} decisions loaded; ${summary.applied} applied to current review queue${summary.unmatched ? `, ${summary.unmatched} unmatched` : ''}`;
+                        }
+                        document.dispatchEvent(new CustomEvent('prior-upload-applied'));
+                        refreshErrorPresentation();
+                    }
                 } else if (parsed && parsed.priorDecisions) {
                     priorDecisions = parsed.priorDecisions;
                     if (filenameSpan) filenameSpan.textContent = file.name;
@@ -1710,6 +1751,7 @@ function setupValidateNameModeControls() {
 
     keyOnlyRadio.addEventListener('change', syncMode);
     keyNameRadio.addEventListener('change', syncMode);
+    syncMode();
 }
 
 function updateMatchMethodUI() {
@@ -3658,12 +3700,14 @@ function setupBulkEditPanel() {
         }
     });
 
-    document.addEventListener('session-upload-applied', function() {
+    const refreshFromExternalLoad = () => {
         if (!panel.classList.contains('hidden') && getWorkingRows().length) {
             getWorkingRows().forEach(attachRowContext);
             renderBulkEditTable();
         }
-    });
+    };
+    document.addEventListener('session-upload-applied', refreshFromExternalLoad);
+    document.addEventListener('prior-upload-applied', refreshFromExternalLoad);
 }
 
 function setupResetButton() {

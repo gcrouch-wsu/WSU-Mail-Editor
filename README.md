@@ -54,8 +54,9 @@ It supports three workflows:
 - Translation table file (`translate_input` -> `translate_output`)
 - myWSU source file
 - User-selected key columns and optional role mappings (`School`, `City`, `State`, `Country`)
-- Optional prior Validate workbook for `Review_Row_ID`-based decision re-import
 - Optional campus-family JSON rules for parent-key prefills (for example, campus variants)
+- Optional prior Validate workbook for `Review_Row_ID`-based decision re-import (loaded in the in-app editor panel after validation)
+- Optional review session JSON (loaded in the in-app editor panel after validation)
 
 ### Name matching (technical)
 
@@ -101,6 +102,7 @@ For risky decisions, reviewers select a controlled `Reason_Code` (manual-key `Us
 - Manual key override (`Manual_Suggested_Key`) with valid-key checks
 - Optional pre-export bulk edit panel with contextual rows, quick family chips, and bulk Decision/manual key actions on filtered rows
 - Pagination controls (100/200/400 page size) are shown above and below the review grid, with synced state
+- Validate mode defaults to `Key + name comparison` (can be switched to `Key only`)
 - Review Scope selector supports `All review rows`, `Uploaded Translate rows only`, and `Missing mappings only`
 - Review Scope affects both in-app rows and download scope; missing-only exports suppress non-missing diagnostic tabs
 - Duplicate-target/source suggestion dropdowns are capped to top 5 location-valid candidates
