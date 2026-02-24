@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Graduate Application Review — WSU</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --crimson: #981e32;
+      --crimson-dark: #6e1524;
+      --gray-100: #f7f7f8;
+      --gray-200: #eaebec;
+      --gray-300: #d0d2d4;
+      --gray-500: #767b80;
+      --gray-700: #3d4145;
+      --gray-900: #1a1c1e;
+      --blue-soft: #e8f0fe;
+      --green-soft: #e8f5e9;
+      --yellow-soft: #fffde7;
+      --radius: 6px;
+      --shadow: 0 1px 4px rgba(0,0,0,.10);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      color: var(--gray-900);
+      background: var(--gray-100);
+      padding-bottom: 80px;
+    }
+
+    /* ── Header ── */
+    .page-header {
+      background: var(--crimson);
+      color: #fff;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .page-header h1 { font-size: 18px; font-weight: 600; letter-spacing: .02em; }
+    .page-header .meta { font-size: 12px; opacity: .8; margin-top: 2px; }
+    .badge {
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    /* ── Layout ── */
+    .page-body { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+
+    /* ── Cards ── */
+    .card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .card-header {
+      background: var(--gray-900);
+      color: #fff;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-header.crimson { background: var(--crimson); }
+    .card-header.slate   { background: #2d3748; }
+    .card-header .domain-tag {
+      font-size: 10px;
+      font-weight: 700;
+      background: rgba(255,255,255,.18);
+      border-radius: 3px;
+      padding: 2px 7px;
+      letter-spacing: .08em;
+    }
+    .card-header .section-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,.2);
+      border-radius: 50%;
+      width: 22px; height: 22px;
+      font-size: 11px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .card-body { padding: 20px; }
+    .card-intro {
+      background: var(--blue-soft);
+      border-left: 3px solid #4a6cf7;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #2c3e70;
+      margin-bottom: 16px;
+      border-radius: 0 4px 4px 0;
+    }
+
+    /* ── Applicant data ── */
+    .data-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .data-field { display: flex; flex-direction: column; gap: 3px; }
+    .data-field label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .data-field .value {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--gray-900);
+      padding: 6px 10px;
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 4px;
+    }
+    .data-field .value.highlight {
+      background: var(--yellow-soft);
+      border-color: #f9d94e;
+    }
+    .app-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--crimson);
+      color: #fff;
+      text-decoration: none;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-weight: 600;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .app-link:hover { background: var(--crimson-dark); }
+    .app-link svg { width: 14px; height: 14px; fill: currentColor; }
+
+    /* ── Form elements ── */
+    .field-group { margin-bottom: 22px; }
+    .field-group:last-child { margin-bottom: 0; }
+    .field-label {
+      display: block;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: var(--gray-700);
+    }
+    .field-label .points {
+      font-weight: 400;
+      color: var(--gray-500);
+      font-size: 12px;
+      margin-left: 6px;
+    }
+    .field-note {
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-bottom: 8px;
+      font-style: italic;
+    }
+
+    /* ── Radio scale ── */
+    .radio-scale { display: flex; flex-direction: column; gap: 6px; }
+    .radio-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 12px;
+      border: 1px solid var(--gray-200);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background .1s, border-color .1s;
+    }
+    .radio-option:hover { background: var(--gray-100); border-color: var(--gray-300); }
+    .radio-option:has(input:checked) { background: #fef5f6; border-color: var(--crimson); }
+    .radio-option.nm:has(input:checked) { background: var(--gray-100); border-color: var(--gray-500); }
+    .radio-option input[type="radio"] { margin-top: 2px; flex-shrink: 0; accent-color: var(--crimson); }
+    .option-score {
+      display: inline-block;
+      min-width: 28px;
+      font-weight: 700;
+      font-size: 12px;
+      color: var(--crimson);
+      flex-shrink: 0;
+    }
+    .radio-option.nm .option-score { color: var(--gray-500); }
+    .option-body { font-size: 13px; color: var(--gray-700); line-height: 1.45; }
+    .option-body strong { color: var(--gray-900); }
+
+    /* ── Inline radio pills ── */
+    .radio-inline { display: flex; gap: 12px; flex-wrap: wrap; }
+    .radio-inline label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border: 1px solid var(--gray-300);
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all .1s;
+    }
+    .radio-inline label:has(input:checked) { background: var(--crimson); color: #fff; border-color: var(--crimson); }
+    .radio-inline input[type="radio"] { display: none; }
+
+    /* ── Matrix table ── */
+    .matrix-wrap { overflow-x: auto; }
+    table.matrix { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.matrix th {
+      background: var(--gray-200);
+      padding: 7px 10px;
+      text-align: center;
+      font-weight: 600;
+      color: var(--gray-700);
+      border: 1px solid var(--gray-300);
+      white-space: nowrap;
+    }
+    table.matrix th:first-child { text-align: left; min-width: 160px; }
+    table.matrix td { padding: 7px 10px; border: 1px solid var(--gray-300); text-align: center; vertical-align: middle; }
+    table.matrix td:first-child { text-align: left; font-weight: 500; }
+    table.matrix tr:nth-child(even) td { background: var(--gray-100); }
+    table.matrix input[type="radio"] { accent-color: var(--crimson); }
+
+    /* ── Textarea / input ── */
+    textarea.form-textarea {
+      width: 100%; padding: 10px;
+      border: 1px solid var(--gray-300); border-radius: 4px;
+      font-size: 13px; font-family: inherit;
+      resize: vertical; min-height: 80px; color: var(--gray-900);
+    }
+    textarea.form-textarea:focus { outline: none; border-color: var(--crimson); box-shadow: 0 0 0 2px rgba(152,30,50,.15); }
+    .char-hint { font-size: 11px; color: var(--gray-500); margin-top: 4px; }
+    input.form-input {
+      padding: 7px 10px; border: 1px solid var(--gray-300);
+      border-radius: 4px; font-size: 13px; font-family: inherit; width: 140px;
+    }
+    input.form-input:focus { outline: none; border-color: var(--crimson); }
+
+    /* ── Checkboxes ── */
+    .check-list { display: flex; flex-direction: column; gap: 6px; }
+    .check-item { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+    .check-item input { accent-color: var(--crimson); }
+
+    /* ── Program routing card ── */
+    .routing-card {
+      background: #fff;
+      border: 2px solid var(--crimson);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .routing-card .routing-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .routing-card h3 {
+      font-size: 13px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--crimson);
+    }
+    .routing-card .routing-note {
+      font-size: 12px; color: var(--gray-500); font-style: italic;
+    }
+    .program-options { display: flex; gap: 12px; flex-wrap: wrap; }
+    .program-option {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 18px;
+      border: 1px solid var(--gray-300); border-radius: var(--radius);
+      cursor: pointer; font-size: 13px; font-weight: 500;
+      transition: all .15s;
+    }
+    .program-option:hover { border-color: var(--crimson); background: #fef5f6; }
+    .program-option:has(input:checked) { border-color: var(--crimson); background: var(--crimson); color: #fff; }
+    .program-option input[type="radio"] { display: none; }
+
+    /* ── Utility ── */
+    .hidden { display: none !important; }
+    .divider { border: none; border-top: 1px solid var(--gray-200); margin: 18px 0; }
+    .warning-box {
+      background: #fff8e1; border: 1px solid #ffe082;
+      border-radius: 4px; padding: 10px 14px;
+      font-size: 12px; color: #6d4c00; margin-bottom: 14px;
+    }
+    .part-divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 28px 0 20px;
+    }
+    .part-divider span {
+      background: var(--crimson); color: #fff;
+      font-size: 13px; font-weight: 700;
+      padding: 5px 16px; border-radius: 20px;
+      white-space: nowrap; text-transform: uppercase; letter-spacing: .06em;
+    }
+    .part-divider::before, .part-divider::after { content: ''; flex: 1; border-top: 2px solid var(--gray-300); }
+    .reviewer-block { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px; }
+    .reviewer-block .field-group { margin-bottom: 0; }
+
+    /* ── Scale legend ── */
+    .scale-legend {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .scale-legend span {
+      font-size: 11px; font-weight: 600;
+      padding: 3px 9px; border-radius: 3px;
+    }
+    .legend-nm  { background: var(--gray-200); color: var(--gray-700); }
+    .legend-low { background: #fde8ea; color: #7a1525; }
+    .legend-med { background: #fff3cd; color: #7a5400; }
+    .legend-hi  { background: #d4edda; color: #1a5928; }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <div>
+    <h1>Graduate Application Review</h1>
+    <div class="meta">WSU Graduate School &mdash; Liaison Outcomes</div>
+  </div>
+  <div class="badge">MOCK-UP &nbsp;·&nbsp; Spring 2026 Cycle</div>
+</header>
+
+<div class="page-body">
+
+  <!-- ════════════════════════════════════════════
+       PART 1 — UNIVERSAL REVIEW
+  ════════════════════════════════════════════ -->
+  <div class="part-divider"><span>Part 1 &mdash; Universal Review</span></div>
+
+  <!-- Applicant summary -->
+  <div class="card">
+    <div class="card-header crimson">
+      Applicant Information
+      <small style="font-weight:400;opacity:.75;text-transform:none;margin-left:4px;">(pulled from application record — read only)</small>
+    </div>
+    <div class="card-body">
+      <div class="data-grid">
+        <div class="data-field"><label>Last Name</label><div class="value">Mitchell</div></div>
+        <div class="data-field"><label>First Name</label><div class="value">Sarah</div></div>
+        <div class="data-field"><label>Applicant ID</label><div class="value">WSU-2026-04821</div></div>
+        <div class="data-field"><label>Entry Term</label><div class="value">Fall 2026</div></div>
+        <div class="data-field"><label>Degree Status</label><div class="value">Attended Graduate School</div></div>
+        <div class="data-field"><label>Citizenship</label><div class="value">U.S. Citizen</div></div>
+      </div>
+      <hr class="divider">
+      <p class="field-label" style="margin-bottom:10px;">Academic Background (Self-Reported)</p>
+      <div class="data-grid">
+        <div class="data-field"><label>Undergrad Institution</label><div class="value">University of Washington</div></div>
+        <div class="data-field"><label>Undergrad Major</label><div class="value">Psychology</div></div>
+        <div class="data-field"><label>Self-Reported UG GPA</label><div class="value highlight">3.72 / 4.0</div></div>
+        <div class="data-field"><label>Grad Institution</label><div class="value">Portland State University</div></div>
+        <div class="data-field"><label>Grad Major</label><div class="value">Clinical Psychology</div></div>
+        <div class="data-field"><label>Self-Reported Grad GPA</label><div class="value highlight">3.88 / 4.0</div></div>
+      </div>
+      <hr class="divider">
+      <p class="field-label" style="margin-bottom:10px;">Test Scores &amp; Additional Info (Self-Reported)</p>
+      <div class="data-grid">
+        <div class="data-field"><label>GRE Verbal</label><div class="value">162 (90th %ile)</div></div>
+        <div class="data-field"><label>GRE Quantitative</label><div class="value">155 (67th %ile)</div></div>
+        <div class="data-field"><label>GRE Analytical Writing</label><div class="value">4.5</div></div>
+        <div class="data-field"><label>English Proficiency</label><div class="value">N/A (Domestic)</div></div>
+        <div class="data-field"><label>Faculty / Lab Interest</label><div class="value">Dr. James Whitfield</div></div>
+        <div class="data-field"><label>Seeking Assistantship</label><div class="value">Yes — RA</div></div>
+      </div>
+      <hr class="divider">
+      <a class="app-link" href="#" onclick="alert('In production, opens the applicant\'s full PDF package.'); return false;">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        View Full Application (PDF)
+      </a>
+    </div>
+  </div>
+
+  <!-- Reviewer info + prerequisites -->
+  <div class="card">
+    <div class="card-header slate">Reviewer &amp; Prerequisites</div>
+    <div class="card-body">
+      <div class="reviewer-block">
+        <div class="field-group">
+          <label class="field-label">Reviewer Name</label>
+          <input class="form-input" type="text" placeholder="Your name" style="width:220px;">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Review Date</label>
+          <input class="form-input" type="date" style="width:160px;">
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="field-group">
+        <label class="field-label">Has the applicant met the Graduate School minimum GPA requirement?</label>
+        <div class="radio-inline">
+          <label><input type="radio" name="gpa_req" value="yes"> Yes</label>
+          <label><input type="radio" name="gpa_req" value="no"> No</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">English Language Proficiency</label>
+        <div class="field-note">Mark "Above Minimum" for U.S. residents with a Master's degree, or international applicants who earned a U.S. Master's degree within the last 2 years.</div>
+        <div class="radio-inline">
+          <label><input type="radio" name="lang_prof" value="above"> Above Minimum</label>
+          <label><input type="radio" name="lang_prof" value="at"> At Minimum</label>
+          <label><input type="radio" name="lang_prof" value="below"> Below Minimum</label>
+          <label><input type="radio" name="lang_prof" value="na"> N/A — Domestic</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Application Completeness</label>
+        <div class="radio-inline">
+          <label><input type="radio" name="completeness" value="complete"> Complete</label>
+          <label><input type="radio" name="completeness" value="incomplete"> Incomplete — materials missing</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scale legend (shown once, applies to all four domains) -->
+  <div class="card">
+    <div class="card-header">Universal Evaluation Domains</div>
+    <div class="card-body">
+      <div class="card-intro">
+        Rate each domain using the four-point scale below. <strong>Not Measurable (NM)</strong> should be used when the application does not provide sufficient evidence to assess a domain — it is not the same as a low score. All four domains are evaluated for every applicant regardless of program.
+      </div>
+      <div class="scale-legend">
+        <span class="legend-nm">NM — Not Measurable</span>
+        <span class="legend-low">1 — Low</span>
+        <span class="legend-med">2 — Medium</span>
+        <span class="legend-hi">3 — High</span>
+      </div>
+      <p style="font-size:12px;color:var(--gray-500);">Based on the CGS framework adopted across R1 graduate programs: Academic Achievement · Research Experience &amp; Program Fit · Motivation &amp; Mission Alignment · Personal Attributes.</p>
+    </div>
+  </div>
+
+  <!-- Domain 1: Academic Achievement -->
+  <div class="card">
+    <div class="card-header">
+      <span class="domain-tag">Domain 1</span>
+      Academic Achievement
+    </div>
+    <div class="card-body">
+      <div class="field-note">Self-reported GPA is shown above for reference. Consider academic trajectory, institutional selectivity, and the rigor of relevant coursework — not the number alone. Account for documented extenuating circumstances where applicable.</div>
+      <div class="field-group">
+        <label class="field-label">Rate the applicant's academic preparation in the context of their institution, degree level, and field.</label>
+        <div class="radio-scale">
+          <label class="radio-option nm">
+            <input type="radio" name="d1_academics" value="nm">
+            <span class="option-score">NM</span>
+            <span class="option-body">Insufficient information to assess — unusual institutional context, missing materials, or other circumstances prevent a meaningful rating.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d1_academics" value="1">
+            <span class="option-score">1</span>
+            <span class="option-body"><strong>Low.</strong> Academic preparation raises substantive concerns; performance is below program expectations with no evident compensating factors.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d1_academics" value="2">
+            <span class="option-score">2</span>
+            <span class="option-body"><strong>Medium.</strong> Adequate preparation; meets program minimums; relevant coursework demonstrates foundational competence.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d1_academics" value="3">
+            <span class="option-score">3</span>
+            <span class="option-body"><strong>High.</strong> Strong preparation; above-average performance in relevant coursework, a rigorous curriculum, or a clear and sustained upward trajectory.</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Domain 2: Research Experience & Program Fit -->
+  <div class="card">
+    <div class="card-header">
+      <span class="domain-tag">Domain 2</span>
+      Research Experience &amp; Program Fit
+    </div>
+    <div class="card-body">
+      <div class="card-intro">Two separate ratings are required. Research experience (track record) and research fit (direction and alignment) are related but distinct — an applicant may have substantial experience but a vague direction, or vice versa.</div>
+
+      <div class="field-group">
+        <label class="field-label">2a &nbsp;·&nbsp; Prior research experience — rate the depth and quality of the applicant's research track record.</label>
+        <div class="field-note">Consider duration, independence, and range. Publications and presentations are indicators of strength, not requirements for admission.</div>
+        <div class="radio-scale">
+          <label class="radio-option nm">
+            <input type="radio" name="d2_experience" value="nm">
+            <span class="option-score">NM</span>
+            <span class="option-body">No research experience is evident in the application, or materials are insufficient to assess.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d2_experience" value="1">
+            <span class="option-score">1</span>
+            <span class="option-body"><strong>Low.</strong> Minimal — course-based or a single brief exposure; limited independent contribution to a research project.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d2_experience" value="2">
+            <span class="option-score">2</span>
+            <span class="option-body"><strong>Medium.</strong> Meaningful — sustained involvement across multiple semesters, an honors thesis, or an equivalent independent research contribution.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d2_experience" value="3">
+            <span class="option-score">3</span>
+            <span class="option-body"><strong>High.</strong> Substantial — led or independently managed research; evidence of scholarly output (presentations, publications, grants, or paid research position).</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">2b &nbsp;·&nbsp; Program fit — rate the correspondence between the applicant's stated interests and available faculty and program expertise.</label>
+        <div class="field-note">If research interests are not clearly stated in the application, select Not Measurable rather than Low.</div>
+        <div class="radio-scale">
+          <label class="radio-option nm">
+            <input type="radio" name="d2_fit" value="nm">
+            <span class="option-score">NM</span>
+            <span class="option-body">Research interests are not clearly articulated in the application materials.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d2_fit" value="1">
+            <span class="option-score">1</span>
+            <span class="option-body"><strong>Low.</strong> General interest in the field; no specific faculty or research area identified; limited evidence the applicant has researched this program.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d2_fit" value="2">
+            <span class="option-score">2</span>
+            <span class="option-body"><strong>Medium.</strong> Clear research focus; meaningful alignment with at least one faculty member's active program; applicant has identified the program as a good match.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d2_fit" value="3">
+            <span class="option-score">3</span>
+            <span class="option-body"><strong>High.</strong> Specific, well-developed research direction; demonstrates familiarity with faculty work; articulates a compelling and well-informed case for this program.</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Domain 3: Motivation & Mission Alignment -->
+  <div class="card">
+    <div class="card-header">
+      <span class="domain-tag">Domain 3</span>
+      Motivation &amp; Mission Alignment
+    </div>
+    <div class="card-body">
+      <div class="field-note">Consider whether past experience and future goals form a coherent narrative, and whether the applicant demonstrates genuine understanding of what graduate study at this program entails.</div>
+      <div class="field-group">
+        <label class="field-label">Rate the clarity and credibility of the applicant's motivation for pursuing this degree at this program.</label>
+        <div class="radio-scale">
+          <label class="radio-option nm">
+            <input type="radio" name="d3_motivation" value="nm">
+            <span class="option-score">NM</span>
+            <span class="option-body">Motivation is not meaningfully addressed in the available materials.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d3_motivation" value="1">
+            <span class="option-score">1</span>
+            <span class="option-body"><strong>Low.</strong> Motivation is stated but generic, unconvincing, or inconsistent with the applicant's background and stated goals.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d3_motivation" value="2">
+            <span class="option-score">2</span>
+            <span class="option-body"><strong>Medium.</strong> Clear motivation; past experience and future direction are reasonably connected; the applicant articulates a purpose for choosing this program.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d3_motivation" value="3">
+            <span class="option-score">3</span>
+            <span class="option-body"><strong>High.</strong> Compelling, specific motivation; a coherent narrative connects prior experience, the degree, and well-defined goals; applicant demonstrates genuine knowledge of the program and field.</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Domain 4: Personal Attributes -->
+  <div class="card">
+    <div class="card-header">
+      <span class="domain-tag">Domain 4</span>
+      Personal Attributes
+    </div>
+    <div class="card-body">
+      <div class="card-intro">Two separate ratings are required. Written communication and personal attributes (persistence, initiative, leadership potential) are both evaluated here. Evidence may appear in any part of the application — personal statement, work history, letters, or descriptions of how the applicant overcame obstacles.</div>
+
+      <div class="field-group">
+        <label class="field-label">4a &nbsp;·&nbsp; Written communication — rate the quality of writing across all application materials.</label>
+        <div class="field-note">Consider the personal statement, writing sample (if provided), and any other written components together.</div>
+        <div class="radio-scale">
+          <label class="radio-option nm">
+            <input type="radio" name="d4_writing" value="nm">
+            <span class="option-score">NM</span>
+            <span class="option-body">Insufficient written materials to assess.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d4_writing" value="1">
+            <span class="option-score">1</span>
+            <span class="option-body"><strong>Low.</strong> Writing raises significant concerns; errors, lack of clarity, or poor organization impede comprehension of the applicant's ideas.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d4_writing" value="2">
+            <span class="option-score">2</span>
+            <span class="option-body"><strong>Medium.</strong> Adequate writing; communicates the applicant's ideas clearly with minor lapses in convention, depth, or precision.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d4_writing" value="3">
+            <span class="option-score">3</span>
+            <span class="option-body"><strong>High.</strong> Strong writing; clear, well-organized, and demonstrates depth of thought; writing reflects the applicant's intellectual engagement with the field.</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">4b &nbsp;·&nbsp; Persistence, initiative, and leadership potential — rate the evidence of personal qualities that support success in doctoral-level work.</label>
+        <div class="field-note">Consider initiative in research or other pursuits, resilience in the face of obstacles, capacity for independent work, and potential for mentoring or leading others.</div>
+        <div class="radio-scale">
+          <label class="radio-option nm">
+            <input type="radio" name="d4_attributes" value="nm">
+            <span class="option-score">NM</span>
+            <span class="option-body">Insufficient evidence across application materials to assess.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d4_attributes" value="1">
+            <span class="option-score">1</span>
+            <span class="option-body"><strong>Low.</strong> Application raises concerns about readiness or persistence; limited evidence of self-direction or initiative.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d4_attributes" value="2">
+            <span class="option-score">2</span>
+            <span class="option-body"><strong>Medium.</strong> Adequate evidence; applicant demonstrates appropriate work ethic, commitment, and ability to follow through on extended projects.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="d4_attributes" value="3">
+            <span class="option-score">3</span>
+            <span class="option-body"><strong>High.</strong> Strong evidence across multiple application elements; clear initiative, resilience, and capacity for the intellectual and practical demands of doctoral work.</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Letters of Recommendation (universal) -->
+  <div class="card">
+    <div class="card-header">
+      <span class="domain-tag">All Programs</span>
+      Letters of Recommendation — Overall Quality
+    </div>
+    <div class="card-body">
+      <div class="field-note">The strongest letters are written by someone with direct knowledge of the applicant's academic or research work, include specific examples, and rank the applicant relative to others the writer has supervised. Use Not Measurable only if letters have not been received. Program-specific letter requirements (e.g., individual ratings, faculty origin checks) appear in Part 2.</div>
+      <div class="field-group">
+        <label class="field-label">Rate the overall quality and specificity of the letters of recommendation.</label>
+        <div class="radio-scale">
+          <label class="radio-option nm">
+            <input type="radio" name="lor_overall" value="nm">
+            <span class="option-score">NM</span>
+            <span class="option-body">Letters not yet received, or materials are insufficient to assess.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="lor_overall" value="1">
+            <span class="option-score">1</span>
+            <span class="option-body"><strong>Low.</strong> Weak or generic; letters offer little meaningful evidence of the applicant's capabilities; recommenders may not know the applicant well, or endorsements are hedged or ambiguous.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="lor_overall" value="2">
+            <span class="option-score">2</span>
+            <span class="option-body"><strong>Medium.</strong> Adequate; recommenders speak to the applicant's abilities with some specific observations; endorsements are generally supportive and credible.</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="lor_overall" value="3">
+            <span class="option-score">3</span>
+            <span class="option-body"><strong>High.</strong> Strong or exceptional; at least one letter provides detailed, evidence-based endorsement from someone with direct supervisory or research knowledge; applicant is ranked highly among those the writer has taught or supervised.</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       PART 2 — PROGRAM-SPECIFIC REVIEW
+  ════════════════════════════════════════════ -->
+  <div class="part-divider"><span>Part 2 &mdash; Program Review</span></div>
+
+  <div class="routing-card">
+    <div class="routing-head">
+      <h3>Program Assignment</h3>
+      <span class="routing-note">In Outcomes, this form is automatically routed based on the application's program assignment. Use the selector below to preview each program form.</span>
+    </div>
+    <div class="program-options">
+      <label class="program-option" onclick="showProgram('psych-clinical')">
+        <input type="radio" name="program" value="psych-clinical">
+        Psychology &mdash; Clinical PhD
+      </label>
+      <label class="program-option" onclick="showProgram('neuro')">
+        <input type="radio" name="program" value="neuro">
+        Neuroscience &mdash; PhD
+      </label>
+      <label class="program-option" onclick="showProgram('ed-math-sci')">
+        <input type="radio" name="program" value="ed-math-sci">
+        Math &amp; Science Education &mdash; PhD
+      </label>
+      <label class="program-option" onclick="showProgram('soil-sci')">
+        <input type="radio" name="program" value="soil-sci">
+        Soil Science &mdash; PhD
+      </label>
+    </div>
+  </div>
+
+  <div id="prog-placeholder" style="text-align:center;padding:40px;color:var(--gray-500);font-size:14px;background:#fff;border:1px dashed var(--gray-300);border-radius:var(--radius);">
+    ← Select a program above to load the program-specific review form.
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       PROGRAM: PSYCHOLOGY — CLINICAL PhD
+  ══════════════════════════════════════ -->
+  <div id="form-psych-clinical" class="hidden">
+
+    <div class="card">
+      <div class="card-header crimson">Psychology — Clinical PhD &nbsp;<small style="font-weight:400;opacity:.8;text-transform:none;">Program-Specific Review</small></div>
+      <div class="card-body">
+        <div class="card-intro">The following questions supplement the universal domains above. They reflect the clinical program's specific scoring rubric and should be completed in addition to Part 1, not instead of it.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">I</span> Academic Record — Program GPA Ratings</div>
+      <div class="card-body">
+        <div class="card-intro">The clinical program uses specific GPA thresholds that differ from the general academic achievement rating in Domain 1. Complete both; they serve different purposes.</div>
+        <div class="field-group">
+          <label class="field-label">Undergraduate GPA Rating <span class="points">(use transcript — not self-report)</span></label>
+          <div class="matrix-wrap">
+            <table class="matrix">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>≥3.0 &amp; &lt;3.25<br><small>1 pt</small></th>
+                  <th>≥3.25 &amp; &lt;3.50<br><small>2 pts</small></th>
+                  <th>≥3.50 &amp; &lt;3.75<br><small>3 pts</small></th>
+                  <th>≥3.75 &amp; &lt;3.90<br><small>4 pts</small></th>
+                  <th>≥3.90<br><small>5 pts</small></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>UG GPA</td>
+                  <td><input type="radio" name="pc_ug_gpa" value="1"></td>
+                  <td><input type="radio" name="pc_ug_gpa" value="2"></td>
+                  <td><input type="radio" name="pc_ug_gpa" value="3"></td>
+                  <td><input type="radio" name="pc_ug_gpa" value="4"></td>
+                  <td><input type="radio" name="pc_ug_gpa" value="5"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Graduate GPA Rating <span class="points">(if applicable — skip if undergraduate only)</span></label>
+          <div class="radio-scale">
+            <label class="radio-option"><input type="radio" name="pc_grad_gpa" value="0"><span class="option-score">0</span><span class="option-body">GPA &lt; 3.3</span></label>
+            <label class="radio-option"><input type="radio" name="pc_grad_gpa" value="1"><span class="option-score">1</span><span class="option-body">GPA ≥ 3.3 and &lt; 3.95</span></label>
+            <label class="radio-option"><input type="radio" name="pc_grad_gpa" value="2"><span class="option-score">2</span><span class="option-body">GPA ≥ 3.95</span></label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Notes on Academic Record <span class="points">(optional)</span></label>
+          <textarea class="form-textarea" placeholder="Note any relevant context — upward trend, extenuating circumstances, relevant coursework performance…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">II</span> Personal Statement — Program-Specific Dimensions</div>
+      <div class="card-body">
+        <div class="field-note">Writing quality is assessed in Domain 4a above. The ratings below address the clinical program's specific content requirements.</div>
+        <div class="field-group">
+          <label class="field-label">Program-specific personal statement dimensions <span class="points">(0–2 per row)</span></label>
+          <div class="matrix-wrap">
+            <table class="matrix">
+              <thead>
+                <tr>
+                  <th>Dimension</th>
+                  <th>Absent / Inadequate<br><small>0</small></th>
+                  <th>Adequate<br><small>1</small></th>
+                  <th>Strong<br><small>2</small></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Fit with scientist-practitioner program model</td>
+                  <td><input type="radio" name="pc_ps_fit" value="0"></td>
+                  <td><input type="radio" name="pc_ps_fit" value="1"></td>
+                  <td><input type="radio" name="pc_ps_fit" value="2"></td>
+                </tr>
+                <tr>
+                  <td>Reasons for applying to a clinical PhD program specifically</td>
+                  <td><input type="radio" name="pc_ps_reasons" value="0"></td>
+                  <td><input type="radio" name="pc_ps_reasons" value="1"></td>
+                  <td><input type="radio" name="pc_ps_reasons" value="2"></td>
+                </tr>
+                <tr>
+                  <td>Identified major professor / clinical faculty fit</td>
+                  <td><input type="radio" name="pc_ps_mentor" value="0"></td>
+                  <td><input type="radio" name="pc_ps_mentor" value="1"></td>
+                  <td><input type="radio" name="pc_ps_mentor" value="2"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">III</span> Research Experience &amp; Scholarly Productivity</div>
+      <div class="card-body">
+        <div class="field-note">Domain 2a above provides an overall research experience rating. The ratings below capture clinical-program-specific distinctions and scholarly output separately.</div>
+        <div class="field-group">
+          <label class="field-label">Scholarly productivity — rate the highest level achieved</label>
+          <div class="radio-scale">
+            <label class="radio-option"><input type="radio" name="pc_scholarly" value="0"><span class="option-score">0</span><span class="option-body">None</span></label>
+            <label class="radio-option"><input type="radio" name="pc_scholarly" value="1"><span class="option-score">1</span><span class="option-body">Co-author on a conference presentation</span></label>
+            <label class="radio-option"><input type="radio" name="pc_scholarly" value="2"><span class="option-score">2</span><span class="option-body">First author on a conference presentation</span></label>
+            <label class="radio-option"><input type="radio" name="pc_scholarly" value="3"><span class="option-score">3</span><span class="option-body">Co-author on a peer-reviewed publication</span></label>
+            <label class="radio-option"><input type="radio" name="pc_scholarly" value="4"><span class="option-score">4</span><span class="option-body">First author on a peer-reviewed publication; co-author on multiple publications; or research grant recipient</span></label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Honors thesis or independent senior project?</label>
+          <div class="field-note">If yes, add 1 point to the Research Experience domain above.</div>
+          <div class="radio-inline">
+            <label><input type="radio" name="pc_honors" value="yes"> Yes (+1 pt)</label>
+            <label><input type="radio" name="pc_honors" value="no"> No</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">IV</span> Clinical Experience</div>
+      <div class="card-body">
+        <div class="field-group">
+          <label class="field-label">Prior clinical experience</label>
+          <div class="field-note">1 point = full-time paid work at a mental health agency or facility, and/or extensive externship/internship/practicum in a mental health position (one or more years).</div>
+          <div class="radio-scale">
+            <label class="radio-option"><input type="radio" name="pc_clinical" value="0"><span class="option-score">0</span><span class="option-body">No prior clinical experience</span></label>
+            <label class="radio-option"><input type="radio" name="pc_clinical" value="1"><span class="option-score">1</span><span class="option-body">Some clinical experience, but limited (e.g., brief volunteer, single-semester practicum)</span></label>
+            <label class="radio-option"><input type="radio" name="pc_clinical" value="2"><span class="option-score">2</span><span class="option-body">Substantial clinical experience — meets the paid work / extensive internship criterion above</span></label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Notes on clinical experience <span class="points">(optional)</span></label>
+          <textarea class="form-textarea" placeholder="Describe the nature and duration of relevant clinical experience…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">V</span> Individual Letter Ratings</div>
+      <div class="card-body">
+        <div class="field-note">Overall letter quality is rated in Part 1. Rate each of up to three letters individually here. If four or more letters were submitted, randomly select three. Consider percentile rank stated by the letter writer when assessing tone.</div>
+        <div class="warning-box">At least 2 letters must be from a faculty member in a university or medical setting. Confirm this before proceeding.</div>
+        <div class="field-group">
+          <label class="field-label">At least 2 letters from a faculty member (university/medical setting)?</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="pc_lor_faculty" value="yes"> Yes</label>
+            <label><input type="radio" name="pc_lor_faculty" value="no"> No</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Individual letter ratings <span class="points">(average of 3 = final score, 0–4)</span></label>
+          <div class="matrix-wrap">
+            <table class="matrix">
+              <thead>
+                <tr>
+                  <th>Letter</th>
+                  <th>Below Avg (0)<br><small>Tepid, vague</small></th>
+                  <th>Average (1)<br><small>Minimal specifics</small></th>
+                  <th>Above Avg (2)<br><small>Strong, top 10–20%</small></th>
+                  <th>Superior (3)<br><small>Highly, top 5–10%</small></th>
+                  <th>Exceptional (4)<br><small>Outstanding, top 1–5%</small></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>LR 1</td>
+                  <td><input type="radio" name="pc_lor1" value="0"></td><td><input type="radio" name="pc_lor1" value="1"></td>
+                  <td><input type="radio" name="pc_lor1" value="2"></td><td><input type="radio" name="pc_lor1" value="3"></td><td><input type="radio" name="pc_lor1" value="4"></td>
+                </tr>
+                <tr><td>LR 2</td>
+                  <td><input type="radio" name="pc_lor2" value="0"></td><td><input type="radio" name="pc_lor2" value="1"></td>
+                  <td><input type="radio" name="pc_lor2" value="2"></td><td><input type="radio" name="pc_lor2" value="3"></td><td><input type="radio" name="pc_lor2" value="4"></td>
+                </tr>
+                <tr><td>LR 3</td>
+                  <td><input type="radio" name="pc_lor3" value="0"></td><td><input type="radio" name="pc_lor3" value="1"></td>
+                  <td><input type="radio" name="pc_lor3" value="2"></td><td><input type="radio" name="pc_lor3" value="3"></td><td><input type="radio" name="pc_lor3" value="4"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">VI</span> Enrichment, Adversity &amp; Concerns</div>
+      <div class="card-body">
+        <div class="card-intro">These three adjustments modify the applicant's total score. Add points for enrichment experiences and resilience; subtract for identifiable concerns. Document each item scored below.</div>
+
+        <div class="field-group">
+          <label class="field-label">Enrichment Experiences <span class="points">(+0 to +5)</span></label>
+          <div class="field-note">Add 1 point per identifiable EE, up to 5. Examples: military service; additional degree in a related field; honor's program; awards beyond high-achieving undergrad norms; multilingual; Peace Corps / AmeriCorps / Teach for America; research or volunteer work with marginalized populations; McNair Scholars, Gates Millennium, MARC, etc.</div>
+          <div class="matrix-wrap">
+            <table class="matrix"><thead><tr><th>0</th><th>+1</th><th>+2</th><th>+3</th><th>+4</th><th>+5</th></tr></thead>
+              <tbody><tr>
+                <td><input type="radio" name="pc_ee" value="0"></td><td><input type="radio" name="pc_ee" value="1"></td>
+                <td><input type="radio" name="pc_ee" value="2"></td><td><input type="radio" name="pc_ee" value="3"></td>
+                <td><input type="radio" name="pc_ee" value="4"></td><td><input type="radio" name="pc_ee" value="5"></td>
+              </tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Overcoming Adversity / Resilience <span class="points">(+0 to +5)</span></label>
+          <div class="field-note">Add 1 point per identifiable indicator, up to 5. Examples: significant socioeconomic challenges; disability; marked GPA improvement after major change; first-generation college student; under-resourced prior education; non-English primary home language; historically underrepresented in higher education.</div>
+          <div class="matrix-wrap">
+            <table class="matrix"><thead><tr><th>0</th><th>+1</th><th>+2</th><th>+3</th><th>+4</th><th>+5</th></tr></thead>
+              <tbody><tr>
+                <td><input type="radio" name="pc_oar" value="0"></td><td><input type="radio" name="pc_oar" value="1"></td>
+                <td><input type="radio" name="pc_oar" value="2"></td><td><input type="radio" name="pc_oar" value="3"></td>
+                <td><input type="radio" name="pc_oar" value="4"></td><td><input type="radio" name="pc_oar" value="5"></td>
+              </tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Evidence of Potential Problems <span class="points">(0 to −5)</span></label>
+          <div class="field-note">Subtract 1 point per identifiable concern, up to −5. Examples: vague/unfocused career plans, apparent training deficits, inconsistent grades, application problems. A questionable undergraduate diploma (unaccredited or online-only institution) is an automatic disqualifier.</div>
+          <div class="matrix-wrap">
+            <table class="matrix"><thead><tr><th>0</th><th>−1</th><th>−2</th><th>−3</th><th>−4</th><th>−5</th></tr></thead>
+              <tbody><tr>
+                <td><input type="radio" name="pc_pp" value="0"></td><td><input type="radio" name="pc_pp" value="-1"></td>
+                <td><input type="radio" name="pc_pp" value="-2"></td><td><input type="radio" name="pc_pp" value="-3"></td>
+                <td><input type="radio" name="pc_pp" value="-4"></td><td><input type="radio" name="pc_pp" value="-5"></td>
+              </tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Notes on adjustments</label>
+          <textarea class="form-textarea" placeholder="List each item scored above — both additions and deductions. Required if any non-zero value is selected."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">VII</span> Red Flags</div>
+      <div class="card-body">
+        <div class="field-group">
+          <label class="field-label">Select all that apply</label>
+          <div class="check-list">
+            <label class="check-item"><input type="checkbox"> Low GPA (&lt;3.0 undergraduate and/or &lt;3.3 graduate)</label>
+            <label class="check-item"><input type="checkbox"> Problematic personal statement</label>
+            <label class="check-item"><input type="checkbox"> Inconsistent grades (low outliers masked by overall GPA)</label>
+            <label class="check-item"><input type="checkbox"> Academic dishonesty noted on transcript</label>
+            <label class="check-item"><input type="checkbox"> Problematic letter(s) of recommendation</label>
+            <label class="check-item"><input type="checkbox"> Evidence of limited sensitivity to diversity</label>
+            <label class="check-item"><input type="checkbox"> Problems with the application process</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Notes on red flags / additional comments</label>
+          <textarea class="form-textarea" placeholder="Describe any red flags and provide context for the committee…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header crimson">Final Recommendation — Psychology Clinical PhD</div>
+      <div class="card-body">
+        <div class="field-group">
+          <label class="field-label">Recommended Decision</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="pc_decision" value="admit"> Admit</label>
+            <label><input type="radio" name="pc_decision" value="deny"> Deny</label>
+            <label><input type="radio" name="pc_decision" value="waitlist"> Waitlist</label>
+            <label><input type="radio" name="pc_decision" value="info"> Need More Info</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Justification / Summary Comments</label>
+          <textarea class="form-textarea" style="min-height:120px;" placeholder="Summarize your recommendation. Reference specific strengths and concerns from both the universal domains and the program-specific review above…"></textarea>
+          <div class="char-hint">Aim for 2–4 sentences. This may be shared with the committee.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /form-psych-clinical -->
+
+
+  <!-- ══════════════════════════════════════
+       PROGRAM: NEUROSCIENCE — PhD
+  ══════════════════════════════════════ -->
+  <div id="form-neuro" class="hidden">
+
+    <div class="card">
+      <div class="card-header crimson">Neuroscience — PhD &nbsp;<small style="font-weight:400;opacity:.8;text-transform:none;">Program-Specific Review</small></div>
+      <div class="card-body">
+        <div class="card-intro">The universal domains above cover academic achievement, research experience, program fit, motivation, written communication, personal attributes, and letter quality. The questions below address neuroscience-specific context that the universal form cannot capture.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">I</span> Neuroscience-Relevant Academic Preparation</div>
+      <div class="card-body">
+        <div class="field-note">Domain 1 assesses overall academic preparation. This question addresses specifically whether the applicant's coursework prepares them for neuroscience doctoral training.</div>
+        <div class="field-group">
+          <label class="field-label">Preparation in neuroscience-relevant disciplines</label>
+          <div class="field-note">Consider coursework in neuroscience, biology, chemistry, physiology, psychology, or related quantitative fields.</div>
+          <div class="radio-scale">
+            <label class="radio-option"><input type="radio" name="n_neuro_prep" value="0"><span class="option-score">0</span><span class="option-body">Minimal or no coursework in neuroscience-relevant disciplines; significant preparation gaps</span></label>
+            <label class="radio-option"><input type="radio" name="n_neuro_prep" value="1"><span class="option-score">1</span><span class="option-body">Some relevant coursework; foundational preparation but missing key disciplinary areas</span></label>
+            <label class="radio-option"><input type="radio" name="n_neuro_prep" value="2"><span class="option-score">2</span><span class="option-body">Solid preparation; coursework covers core relevant sciences with appropriate breadth</span></label>
+            <label class="radio-option"><input type="radio" name="n_neuro_prep" value="3"><span class="option-score">3</span><span class="option-body">Strong preparation; advanced coursework in at least one relevant discipline; well-positioned to begin doctoral-level neuroscience training</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">II</span> Faculty Mentor Recommendation</div>
+      <div class="card-body">
+        <div class="field-note">Domain 2b rates general program fit. Note here whether a specific faculty mentor has been identified and whether the match is strong enough to name.</div>
+        <div class="field-group">
+          <label class="field-label">Suggested faculty mentor(s)</label>
+          <input class="form-input" type="text" placeholder="Faculty name(s)" style="width:100%;">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Additional notes on program fit or disciplinary context</label>
+          <textarea class="form-textarea" placeholder="Note any neuroscience-specific strengths, gaps, or observations not captured by the universal form…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header crimson">Final Recommendation — Neuroscience PhD</div>
+      <div class="card-body">
+        <div class="field-group">
+          <label class="field-label">Recommended Decision</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="n_decision" value="admit"> Admit</label>
+            <label><input type="radio" name="n_decision" value="admit_ra"> Admit + RA Funding</label>
+            <label><input type="radio" name="n_decision" value="deny"> Deny</label>
+            <label><input type="radio" name="n_decision" value="waitlist"> Waitlist</label>
+            <label><input type="radio" name="n_decision" value="info"> Need More Info</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Justification / Summary Comments</label>
+          <textarea class="form-textarea" style="min-height:120px;" placeholder="Summarize your recommendation, drawing from both the universal domains and program-specific observations above…"></textarea>
+          <div class="char-hint">Aim for 2–4 sentences. This may be shared with the committee.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /form-neuro -->
+
+
+  <!-- ══════════════════════════════════════
+       PROGRAM: MATH & SCIENCE EDUCATION — PhD
+  ══════════════════════════════════════ -->
+  <div id="form-ed-math-sci" class="hidden">
+
+    <div class="card">
+      <div class="card-header crimson">Math &amp; Science Education — PhD &nbsp;<small style="font-weight:400;opacity:.8;text-transform:none;">Program-Specific Review</small></div>
+      <div class="card-body">
+        <div class="card-intro">Rate each domain 0–3. If the applicant is not rejected but receives a 0 on any item, a discussion by the review committee is automatically warranted. Part 2 (TA/RA) applies only to candidates seeking financial assistance.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header slate">Part 1 &nbsp;·&nbsp; Application Review</div>
+      <div class="card-body">
+        <div class="field-group">
+          <label class="field-label">The applicant has met the minimum GPA requirement of the Graduate School.</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="em_gpa_req" value="yes"> Yes</label>
+            <label><input type="radio" name="em_gpa_req" value="no"> No</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">1</span> Mathematics and/or Science Content Background <span class="points" style="color:rgba(255,255,255,.6);font-size:11px;">(0–3)</span></div>
+      <div class="card-body">
+        <div class="field-note">Consider: degree in math or science, grades in relevant content courses, GRE Quantitative score, and content teaching or professional development that developed content knowledge.</div>
+        <div class="radio-scale">
+          <label class="radio-option"><input type="radio" name="em_content" value="0"><span class="option-score">0</span><span class="option-body">Little to no math/science background — no undergraduate content coursework; GRE Q below 139 (10th %ile)</span></label>
+          <label class="radio-option"><input type="radio" name="em_content" value="1"><span class="option-score">1</span><span class="option-body">Weak — minimal undergraduate content coursework; C grades or lower in content courses; GRE Q below 144 (25th %ile)</span></label>
+          <label class="radio-option"><input type="radio" name="em_content" value="2"><span class="option-score">2</span><span class="option-body">Adequate — minor or equivalent in a content area; strong grades; GRE Q above 149 (50th %ile); or extensive content teaching/PD that developed content knowledge</span></label>
+          <label class="radio-option"><input type="radio" name="em_content" value="3"><span class="option-score">3</span><span class="option-body">Extensive — degree in math or science; exceptional grades in discipline-relevant courses; GRE Q above 155 (70th %ile)</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">2</span> Teaching Experience <span class="points" style="color:rgba(255,255,255,.6);font-size:11px;">(0–3)</span></div>
+      <div class="card-body">
+        <div class="field-note">Teaching may occur in PreK–16 settings or informal learning environments.</div>
+        <div class="radio-scale">
+          <label class="radio-option"><input type="radio" name="em_teaching" value="0"><span class="option-score">0</span><span class="option-body">No evidence of teaching experience</span></label>
+          <label class="radio-option"><input type="radio" name="em_teaching" value="1"><span class="option-score">1</span><span class="option-body">Limited — some successful experience with children or adults in an educational setting</span></label>
+          <label class="radio-option"><input type="radio" name="em_teaching" value="2"><span class="option-score">2</span><span class="option-body">Abbreviated — tutoring or structured environment; minimal responsibility for curriculum planning or assessment</span></label>
+          <label class="radio-option"><input type="radio" name="em_teaching" value="3"><span class="option-score">3</span><span class="option-body">Extensive and consistent — duties included management, curriculum design, planning, and assessment</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">3</span> Familiarity with Learning Contexts <span class="points" style="color:rgba(255,255,255,.6);font-size:11px;">(0–3)</span></div>
+      <div class="card-body">
+        <div class="radio-scale">
+          <label class="radio-option"><input type="radio" name="em_context" value="0"><span class="option-score">0</span><span class="option-body">Little to no familiarity with learning contexts beyond personal experience as a student</span></label>
+          <label class="radio-option"><input type="radio" name="em_context" value="1"><span class="option-score">1</span><span class="option-body">Some familiarity with K–16 learning contexts in a country other than the U.S.</span></label>
+          <label class="radio-option"><input type="radio" name="em_context" value="2"><span class="option-score">2</span><span class="option-body">Some professional familiarity with K–16 in the U.S., or deep familiarity with K–16 in a different country</span></label>
+          <label class="radio-option"><input type="radio" name="em_context" value="3"><span class="option-score">3</span><span class="option-body">Deep professional familiarity with K–16 and other relevant learning contexts in the U.S.</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">4</span> Commitment to Scholarship &amp; Professional Development <span class="points" style="color:rgba(255,255,255,.6);font-size:11px;">(0–3)</span></div>
+      <div class="card-body">
+        <div class="radio-scale">
+          <label class="radio-option"><input type="radio" name="em_scholarship" value="0"><span class="option-score">0</span><span class="option-body">Unclear or missing commitment to scholarship and/or professional development</span></label>
+          <label class="radio-option"><input type="radio" name="em_scholarship" value="1"><span class="option-score">1</span><span class="option-body">Discusses scholarship/PD; limited or no evidence of past experiences in line with program goals</span></label>
+          <label class="radio-option"><input type="radio" name="em_scholarship" value="2"><span class="option-score">2</span><span class="option-body">Discusses scholarship/PD; some evidence of past scholarly experiences or PD in line with program goals</span></label>
+          <label class="radio-option"><input type="radio" name="em_scholarship" value="3"><span class="option-score">3</span><span class="option-body">Clearly states commitment; ample evidence of past scholarly experiences or PD in line with program goals</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">5</span> Academic Writing Sample <span class="points" style="color:rgba(255,255,255,.6);font-size:11px;">(0–3)</span></div>
+      <div class="card-body">
+        <div class="field-note">Domain 4a rates general written communication. This question specifically assesses whether the academic writing sample demonstrates doctoral-level scholarly writing.</div>
+        <div class="radio-scale">
+          <label class="radio-option"><input type="radio" name="em_writing" value="0"><span class="option-score">0</span><span class="option-body">Sample suggests the applicant cannot perform doctoral-level writing tasks even with significant faculty support</span></label>
+          <label class="radio-option"><input type="radio" name="em_writing" value="1"><span class="option-score">1</span><span class="option-body">Sample suggests significant faculty support above and beyond regular coursework would be needed</span></label>
+          <label class="radio-option"><input type="radio" name="em_writing" value="2"><span class="option-score">2</span><span class="option-body">Sample suggests writing skills sufficient for doctoral work can be developed through normal coursework</span></label>
+          <label class="radio-option"><input type="radio" name="em_writing" value="3"><span class="option-score">3</span><span class="option-body">Sample suggests the applicant will develop into a very successful scholarly writer at the PhD level</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">6</span> Additive Perspective <span class="points" style="color:rgba(255,255,255,.6);font-size:11px;">(0–3)</span></div>
+      <div class="card-body">
+        <div class="field-note">Consider perspectives on educational and social systems, challenging the status quo, educational and social justice, and how power structures influence math and/or science education.</div>
+        <div class="radio-scale">
+          <label class="radio-option"><input type="radio" name="em_additive" value="0"><span class="option-score">0</span><span class="option-body">Little or nothing in the application suggests the applicant will bring an additive perspective to the program</span></label>
+          <label class="radio-option"><input type="radio" name="em_additive" value="1"><span class="option-score">1</span><span class="option-body">The applicant may bring an additive perspective, but this is not made clear in the materials</span></label>
+          <label class="radio-option"><input type="radio" name="em_additive" value="2"><span class="option-score">2</span><span class="option-body">A few novel ideas and a unique perspective that would add to the richness of the program community</span></label>
+          <label class="radio-option"><input type="radio" name="em_additive" value="3"><span class="option-score">3</span><span class="option-body">Several novel ideas and a distinctive perspective that would meaningfully enrich the program community</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header slate">Part 2 &nbsp;·&nbsp; TA/RA Candidates Only</div>
+      <div class="card-body">
+        <div class="field-group">
+          <label class="field-label">Is the applicant seeking a TA/RA position?</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="em_seeking_ta" value="yes"> Yes</label>
+            <label><input type="radio" name="em_seeking_ta" value="no"> No — skip this section</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">TA/RA suitability score <span class="points">(1–5)</span></label>
+          <div class="field-note">Consider teaching experience/potential and letters of recommendation that specifically address teaching.</div>
+          <div class="matrix-wrap">
+            <table class="matrix"><thead><tr><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead>
+              <tbody><tr>
+                <td><input type="radio" name="em_ta_score" value="1"></td><td><input type="radio" name="em_ta_score" value="2"></td>
+                <td><input type="radio" name="em_ta_score" value="3"></td><td><input type="radio" name="em_ta_score" value="4"></td>
+                <td><input type="radio" name="em_ta_score" value="5"></td>
+              </tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Comments on TA/RA suitability</label>
+          <textarea class="form-textarea" placeholder="Describe the basis for your score…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header crimson">Final Recommendation — Math &amp; Science Education PhD</div>
+      <div class="card-body">
+        <div class="field-group">
+          <label class="field-label">Recommended Decision</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="em_decision" value="admit"> Admit</label>
+            <label><input type="radio" name="em_decision" value="deny"> Deny</label>
+            <label><input type="radio" name="em_decision" value="waitlist"> Waitlist</label>
+            <label><input type="radio" name="em_decision" value="info"> Need More Info</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Suggested faculty mentor(s) <span class="points">(optional)</span></label>
+          <input class="form-input" type="text" placeholder="Faculty name(s)" style="width:100%;">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Justification / Summary Comments</label>
+          <textarea class="form-textarea" style="min-height:120px;" placeholder="Summarize your recommendation. Note any items scored 0 that require committee discussion…"></textarea>
+          <div class="char-hint">Note: Any applicant not rejected who scored 0 on any item must be flagged for committee discussion.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /form-ed-math-sci -->
+
+
+  <!-- ══════════════════════════════════════
+       PROGRAM: SOIL SCIENCE — PhD
+  ══════════════════════════════════════ -->
+  <div id="form-soil-sci" class="hidden">
+
+    <div class="card">
+      <div class="card-header crimson">Soil Science — PhD &nbsp;<small style="font-weight:400;opacity:.8;text-transform:none;">Program-Specific Review</small></div>
+      <div class="card-body">
+        <div class="card-intro">The universal domains cover research experience, program fit, motivation, writing, personal attributes, and letter quality. The questions below address the structural and discipline-specific requirements unique to soil science doctoral admissions — particularly faculty advisor availability, which is a prerequisite for all other considerations.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">I</span> Faculty Advisor Availability <small style="font-weight:400;opacity:.75;text-transform:none;">(prerequisite)</small></div>
+      <div class="card-body">
+        <div class="warning-box">A willing faculty advisor is required for acceptance into this program. If no advisor match has been identified, the application should not advance regardless of other scores.</div>
+        <div class="field-group">
+          <label class="field-label">Has a faculty member agreed or expressed willingness to serve as this applicant's advisor?</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="ss_advisor" value="confirmed"> Confirmed</label>
+            <label><input type="radio" name="ss_advisor" value="potential"> Potential — pending</label>
+            <label><input type="radio" name="ss_advisor" value="none"> No match identified</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Identified / prospective advisor</label>
+          <input class="form-input" type="text" placeholder="Faculty name" style="width:100%;">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">II</span> Scientific &amp; Technical Background</div>
+      <div class="card-body">
+        <div class="field-note">Domain 1 assesses overall academic preparation. This section addresses whether the applicant's specific disciplinary background prepares them for soil science doctoral training.</div>
+        <div class="field-group">
+          <label class="field-label">Disciplinary breadth and relevance of coursework</label>
+          <div class="field-note">Relevant disciplines: soil science, chemistry, biology, geology, agronomy, environmental science, microbiology, hydrology, plant science. Minimum typically includes ~12 credits across these areas.</div>
+          <div class="radio-scale">
+            <label class="radio-option"><input type="radio" name="ss_coursework" value="0"><span class="option-score">0</span><span class="option-body">Minimal or no coursework in soil science or closely related disciplines; significant preparation gaps</span></label>
+            <label class="radio-option"><input type="radio" name="ss_coursework" value="1"><span class="option-score">1</span><span class="option-body">Some relevant coursework but notable gaps in core scientific preparation</span></label>
+            <label class="radio-option"><input type="radio" name="ss_coursework" value="2"><span class="option-score">2</span><span class="option-body">Adequate foundation — covers most core areas; some advanced preparation in the area of interest</span></label>
+            <label class="radio-option"><input type="radio" name="ss_coursework" value="3"><span class="option-score">3</span><span class="option-body">Strong, well-rounded preparation; advanced coursework in primary area with supporting breadth across disciplines</span></label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Graduate academic record <span class="points">(if applicable)</span></label>
+          <div class="field-note">A master's degree (GPA ≥ 3.3) is typically required; an exceptional undergraduate record with advisor support may be considered. Leave at N/A if undergraduate only.</div>
+          <div class="radio-scale">
+            <label class="radio-option nm"><input type="radio" name="ss_grad_record" value="na"><span class="option-score">N/A</span><span class="option-body">Not applicable — undergraduate only</span></label>
+            <label class="radio-option"><input type="radio" name="ss_grad_record" value="0"><span class="option-score">0</span><span class="option-body">Graduate GPA below 3.3; thesis or research work was weak or incomplete</span></label>
+            <label class="radio-option"><input type="radio" name="ss_grad_record" value="1"><span class="option-score">1</span><span class="option-body">Graduate GPA 3.3–3.5; thesis/research demonstrates foundational competence</span></label>
+            <label class="radio-option"><input type="radio" name="ss_grad_record" value="2"><span class="option-score">2</span><span class="option-body">Graduate GPA 3.5–3.8; solid research work relevant to proposed doctoral focus</span></label>
+            <label class="radio-option"><input type="radio" name="ss_grad_record" value="3"><span class="option-score">3</span><span class="option-body">Graduate GPA ≥ 3.8; thesis/research demonstrates scholarly independence and strong preparation for doctoral inquiry</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">III</span> Lab &amp; Field Skills</div>
+      <div class="card-body">
+        <div class="field-note">Soil science PhDs involve both laboratory analysis and field sampling. Consider any technical skills mentioned in the CV, personal statement, or letters — e.g., soil morphology, lab instrumentation, GIS/remote sensing, statistical modeling, wet chemistry.</div>
+        <div class="field-group">
+          <label class="field-label">Practical technical competency</label>
+          <div class="radio-scale">
+            <label class="radio-option"><input type="radio" name="ss_skills" value="0"><span class="option-score">0</span><span class="option-body">No mention of lab or field skills; purely theoretical background</span></label>
+            <label class="radio-option"><input type="radio" name="ss_skills" value="1"><span class="option-score">1</span><span class="option-body">Basic exposure (e.g., introductory lab coursework); limited hands-on experience</span></label>
+            <label class="radio-option"><input type="radio" name="ss_skills" value="2"><span class="option-score">2</span><span class="option-body">Solid practical skills in at least one area (lab methods, field sampling, GIS, or statistical modeling)</span></label>
+            <label class="radio-option"><input type="radio" name="ss_skills" value="3"><span class="option-score">3</span><span class="option-body">Strong, multi-domain technical skills evident from thesis work, professional experience, or detailed descriptions in application materials</span></label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Letter from a research supervisor or faculty member?</label>
+          <div class="field-note">At least one letter should come from someone with direct knowledge of the applicant's research or technical work.</div>
+          <div class="radio-inline">
+            <label><input type="radio" name="ss_lor_faculty" value="yes"> Yes</label>
+            <label><input type="radio" name="ss_lor_faculty" value="no"> No</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="section-num">IV</span> Funding &amp; Assistantship</div>
+      <div class="card-body">
+        <div class="field-note">Assistantship decisions for applications submitted before January 1 are typically finalized in early February. Note whether funding is sought and whether the prospective advisor has support available.</div>
+        <div class="field-group">
+          <label class="field-label">Applicant is seeking an assistantship</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="ss_funding" value="yes"> Yes</label>
+            <label><input type="radio" name="ss_funding" value="no"> No</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Prospective advisor has funding available</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="ss_advisor_funding" value="yes"> Yes</label>
+            <label><input type="radio" name="ss_advisor_funding" value="no"> No</label>
+            <label><input type="radio" name="ss_advisor_funding" value="unknown"> Unknown / TBD</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Additional comments</label>
+          <textarea class="form-textarea" placeholder="Note any additional strengths, concerns, or context relevant to this application…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header crimson">Final Recommendation — Soil Science PhD</div>
+      <div class="card-body">
+        <div class="field-group">
+          <label class="field-label">Recommended Decision</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="ss_decision" value="admit"> Admit</label>
+            <label><input type="radio" name="ss_decision" value="admit_fund"> Admit + Assistantship</label>
+            <label><input type="radio" name="ss_decision" value="deny"> Deny</label>
+            <label><input type="radio" name="ss_decision" value="waitlist"> Waitlist</label>
+            <label><input type="radio" name="ss_decision" value="info"> Need More Info</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Justification / Summary Comments</label>
+          <textarea class="form-textarea" style="min-height:120px;" placeholder="Summarize your recommendation. If no advisor match exists, note that here and explain why the application is not advancing…"></textarea>
+          <div class="char-hint">Aim for 2–4 sentences. This may be shared with the committee.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /form-soil-sci -->
+
+</div><!-- /page-body -->
+
+<script>
+  function showProgram(id) {
+    document.getElementById('prog-placeholder').classList.add('hidden');
+    document.querySelectorAll('[id^="form-"]').forEach(el => el.classList.add('hidden'));
+    const target = document.getElementById('form-' + id);
+    if (target) {
+      target.classList.remove('hidden');
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    const radio = document.querySelector('input[name="program"][value="' + id + '"]');
+    if (radio) radio.checked = true;
+  }
+</script>
+
+</body>
+</html>
