@@ -42,6 +42,123 @@ if (typeof CURRENT_LAYOUT === 'undefined') {
 if (typeof SELF_CONTAINED_EXPORT === 'undefined') {
   var SELF_CONTAINED_EXPORT = false;
 }
+if (typeof IMPORTED_EXTRA_DATA_ATTRS === 'undefined') {
+  var IMPORTED_EXTRA_DATA_ATTRS = {};
+}
+
+const STYLE_ATTR_TO_CONTROL = {
+  "data-name-font-family": "style_name_font",
+  "data-name-font-size": "style_name_size",
+  "data-name-font-weight": "style_name_weight",
+  "data-name-font-style": "style_name_style",
+  "data-name-color": "style_name_color",
+  "data-title-font-family": "style_title_font",
+  "data-title-font-size": "style_title_size",
+  "data-title-font-weight": "style_title_weight",
+  "data-title-font-style": "style_title_style",
+  "data-title-color": "style_title_color",
+  "data-card-fill": "style_card_fill",
+  "data-card-stroke": "style_card_stroke",
+  "data-card-shadow": "style_card_shadow",
+  "data-link-color": "style_link_color",
+  "data-link-width": "style_link_width",
+  "data-spine-color": "style_spine_color",
+  "data-spine-width": "style_spine_width",
+  "data-btn-circle-fill": "style_btn_circle_fill",
+  "data-btn-circle-stroke": "style_btn_circle_stroke",
+  "data-btn-circle-outline": "style_btn_circle_outline",
+  "data-btn-rect-fill": "style_btn_rect_fill",
+  "data-name-line-height": "style_name_line_height",
+  "data-title-line-height": "style_title_line_height",
+  "data-name-letter-spacing": "style_name_letter_spacing",
+  "data-title-letter-spacing": "style_title_letter_spacing",
+  "data-text-align": "style_text_align",
+  "data-text-gap": "style_text_gap",
+  "data-card-padding-top": "style_card_padding_top",
+  "data-card-padding-bottom": "style_card_padding_bottom",
+  "data-card-padding-left": "style_card_padding_left",
+  "data-card-padding-right": "style_card_padding_right",
+  "data-card-radius": "style_card_radius",
+  "data-card-stroke-width": "style_card_stroke_width",
+  "data-btn-radius": "style_btn_radius",
+  "data-btn-offset-x": "style_btn_offset_x",
+  "data-btn-offset-y": "style_btn_offset_y",
+  "data-shadow-color": "style_shadow_color",
+  "data-shadow-blur": "style_shadow_blur",
+  "data-shadow-opacity": "style_shadow_opacity",
+  "data-shadow-offset-x": "style_shadow_offset_x",
+  "data-shadow-offset-y": "style_shadow_offset_y",
+  "data-margin": "style_margin",
+  "data-sibling-gap": "style_sibling_gap"
+};
+
+const CENTERED_IMPORT_MAPPING = [
+  { controlId: "c_scale_desktop", names: ["data-scale-desktop", "data-scale"] },
+  { controlId: "c_scale_tablet", names: ["data-scale-tablet", "data-scale"] },
+  { controlId: "c_scale_phone", names: ["data-scale-phone", "data-scale"] },
+  { controlId: "hgaps", names: ["data-hgaps"] },
+  { controlId: "stubs", names: ["data-stubs"] },
+  { controlId: "cardw", names: ["data-cardw"] },
+  { controlId: "cardh", names: ["data-cardh"] },
+  { controlId: "l1stub", names: ["data-l1stub"] },
+  { controlId: "center", names: ["data-center"] },
+  { controlId: "c_connector_align", names: ["data-c-connector-align"] },
+  { controlId: "c_open_depth_desktop", names: ["data-open-depth-desktop"] },
+  { controlId: "c_open_depth_tablet", names: ["data-open-depth-tablet"] },
+  { controlId: "c_open_depth_phone", names: ["data-open-depth-phone"] }
+];
+
+const VERTICAL_IMPORT_MAPPING = [
+  { controlId: "v_scale_desktop", names: ["data-scale-desktop", "data-scale"] },
+  { controlId: "v_scale_tablet", names: ["data-scale-tablet", "data-scale"] },
+  { controlId: "v_scale_phone", names: ["data-scale-phone", "data-scale"] },
+  { controlId: "v_cardw", names: ["data-cardw"] },
+  { controlId: "v_cardh", names: ["data-cardh"] },
+  { controlId: "v_hgap", names: ["data-hgap"] },
+  { controlId: "v_vgap", names: ["data-vgap"] },
+  { controlId: "v_root_offset_y", names: ["data-v-root-offset-y"] },
+  { controlId: "v_open_depth_desktop", names: ["data-open-depth-desktop", "data-v-autodepth-desktop"] },
+  { controlId: "v_open_depth_tablet", names: ["data-open-depth-tablet", "data-v-autodepth-tablet"] },
+  { controlId: "v_open_depth_phone", names: ["data-open-depth-phone", "data-v-autodepth-phone"] }
+];
+
+const HORIZONTAL_IMPORT_MAPPING = [
+  { controlId: "vh_scale_desktop", names: ["data-scale-desktop", "data-scale"] },
+  { controlId: "vh_scale_tablet", names: ["data-scale-tablet", "data-scale"] },
+  { controlId: "vh_scale_phone", names: ["data-scale-phone", "data-scale"] },
+  { controlId: "vh_cardw", names: ["data-cardw"] },
+  { controlId: "vh_cardh", names: ["data-cardh"] },
+  { controlId: "vh_vgap", names: ["data-vgap"] },
+  { controlId: "vh_hgap", names: ["data-hgap"] },
+  { controlId: "vh_stub", names: ["data-h-stubs"] },
+  { controlId: "vh_parent_stub", names: ["data-h-parent-stubs"] },
+  { controlId: "vh_max_cols", names: ["data-h-max-cols"] },
+  { controlId: "vh_row_spacing", names: ["data-h-row-spacing"] },
+  { controlId: "h_root_offset_x", names: ["data-h-root-offset-x"] },
+  { controlId: "vh_alignrows", names: ["data-h-alignrows"] },
+  { controlId: "vh_wrap", names: ["data-h-wrap"] },
+  { controlId: "vh_pack", names: ["data-h-pack"] },
+  { controlId: "vh_breakpoint", names: ["data-breakpoint"] },
+  { controlId: "vh_toggle", names: ["data-toggle"] },
+  { controlId: "vh_open_depth_desktop", names: ["data-open-depth-desktop", "data-h-autodepth"] },
+  { controlId: "vh_open_depth_tablet", names: ["data-open-depth-tablet"] },
+  { controlId: "vh_open_depth_phone", names: ["data-open-depth-phone"] }
+];
+
+function buildKnownDataAttrs() {
+  const attrs = new Set(["data-layout", "data-mode", "data-breakpoint", "data-toggle", "data-bg-color"]);
+  Object.keys(STYLE_ATTR_TO_CONTROL).forEach(name => attrs.add(name));
+  [CENTERED_IMPORT_MAPPING, VERTICAL_IMPORT_MAPPING, HORIZONTAL_IMPORT_MAPPING].forEach(mapping => {
+    mapping.forEach(({ names }) => names.forEach(name => attrs.add(name)));
+  });
+  return attrs;
+}
+
+const KNOWN_DATA_ATTRS = buildKnownDataAttrs();
+
+const PREVIEW_ZOOM_STEP = 0.05;
+const PREVIEW_ZOOM_MIN = 0.4;
+const PREVIEW_ZOOM_MAX = 1.6;
 
 // Layout switching
 function updateLayoutType() {
@@ -608,6 +725,7 @@ function refresh() {
   console.log("========================================");
   console.log("[admin.js] refresh() called");
   console.log("[admin.js] refresh() - CURRENT_LAYOUT:", CURRENT_LAYOUT);
+  updatePreviewZoomDisplay();
   applyLayoutToDom(); 
   applyDataToDom(); 
   applyHelperToPreview(); 
@@ -885,6 +1003,160 @@ function l1Flip() {
   renderNodeDropdowns(); refresh(); toast(`Flipped subtree to ${next}`);
 }
 
+function extractHostDataAttributes(raw) {
+  const hostMatch = raw && raw.match(/<div[^>]+id=["']wsu-orgchart["'][^>]*>/i);
+  if(!hostMatch) return {};
+  const hostTag = hostMatch[0];
+  const attrs = {};
+  hostTag.replace(/\s(data-[a-z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi, (_, name, quotedA, quotedB) => {
+    attrs[String(name).toLowerCase()] = (quotedA ?? quotedB ?? "").trim();
+    return "";
+  });
+  return attrs;
+}
+
+function firstHostAttr(attrs, names) {
+  for(const name of names) {
+    if(Object.prototype.hasOwnProperty.call(attrs, name)) return attrs[name];
+  }
+  return null;
+}
+
+function setControlValue(id, value) {
+  if(value === null || value === undefined) return;
+  const el = document.getElementById(id);
+  if(el) el.value = String(value);
+}
+
+function applyImportMapping(attrs, mapping) {
+  mapping.forEach(({ controlId, names }) => {
+    setControlValue(controlId, firstHostAttr(attrs, names));
+  });
+}
+
+function detectLayoutFromAttrs(attrs) {
+  const layout = String(attrs["data-layout"] || "").toLowerCase();
+  const mode = String(attrs["data-mode"] || "").toLowerCase();
+  if(layout === "vertical") return "vertical";
+  if(layout === "horizontal" || mode === "horizontal" || mode === "auto") return "vertical_horizontal";
+  if(Object.prototype.hasOwnProperty.call(attrs, "data-v-autodepth-desktop") || Object.prototype.hasOwnProperty.call(attrs, "data-v-root-offset-y")) return "vertical";
+  if(Object.prototype.hasOwnProperty.call(attrs, "data-h-autodepth") || Object.prototype.hasOwnProperty.call(attrs, "data-h-stubs")) return "vertical_horizontal";
+  return "centered";
+}
+
+function importStylesFromAttrs(attrs) {
+  Object.entries(STYLE_ATTR_TO_CONTROL).forEach(([attrName, controlId]) => {
+    const val = firstHostAttr(attrs, [attrName]);
+    if(val !== null) setControlValue(controlId, val);
+  });
+  const bgColor = firstHostAttr(attrs, ["data-bg-color"]);
+  if(bgColor === null || String(bgColor).trim() === "") {
+    setControlValue("style_bg_transparent", "1");
+  } else {
+    setControlValue("style_bg_transparent", "0");
+    setControlValue("style_bg_color", bgColor);
+  }
+}
+
+function importCenteredLayoutFromAttrs(attrs) {
+  applyImportMapping(attrs, CENTERED_IMPORT_MAPPING);
+}
+
+function importVerticalLayoutFromAttrs(attrs) {
+  applyImportMapping(attrs, VERTICAL_IMPORT_MAPPING);
+}
+
+function importHorizontalLayoutFromAttrs(attrs) {
+  applyImportMapping(attrs, HORIZONTAL_IMPORT_MAPPING);
+}
+
+function importLegacyLayoutFallback(layout) {
+  if(!layout) return;
+  if(CURRENT_LAYOUT === "centered"){
+    if(layout.scaleDesktop !== null && layout.scaleDesktop !== undefined){
+      $("#c_scale_desktop").value = layout.scaleDesktop;
+      $("#c_scale_tablet").value = layout.scaleTablet ?? 0.75;
+      $("#c_scale_phone").value = layout.scalePhone ?? 0.60;
+    } else if(layout.scale !== null && layout.scale !== undefined){
+      $("#c_scale_desktop").value = layout.scale;
+      $("#c_scale_tablet").value = layout.scale;
+      $("#c_scale_phone").value = layout.scale;
+    }
+    if(layout.hgaps) $("#hgaps").value = layout.hgaps;
+    if(layout.stubs) $("#stubs").value = layout.stubs;
+    if(layout.cardw) $("#cardw").value = layout.cardw;
+    if(layout.l1stub !== null && layout.l1stub !== undefined) $("#l1stub").value = layout.l1stub;
+    if(layout.center !== null && layout.center !== undefined) $("#center").value = String(layout.center);
+    if(layout.connectorAlign !== null && layout.connectorAlign !== undefined) $("#c_connector_align").value = String(layout.connectorAlign);
+    if(layout.openDepthDesktop !== null && layout.openDepthDesktop !== undefined) $("#c_open_depth_desktop").value = String(layout.openDepthDesktop);
+    if(layout.openDepthTablet !== null && layout.openDepthTablet !== undefined) $("#c_open_depth_tablet").value = String(layout.openDepthTablet);
+    if(layout.openDepthPhone !== null && layout.openDepthPhone !== undefined) $("#c_open_depth_phone").value = String(layout.openDepthPhone);
+  } else if(CURRENT_LAYOUT === "vertical"){
+    if(layout.scaleDesktop !== null && layout.scaleDesktop !== undefined){
+      $("#v_scale_desktop").value = layout.scaleDesktop;
+      $("#v_scale_tablet").value = layout.scaleTablet ?? 0.75;
+      $("#v_scale_phone").value = layout.scalePhone ?? 0.60;
+    } else if(layout.scale !== null && layout.scale !== undefined){
+      $("#v_scale_desktop").value = layout.scale;
+      $("#v_scale_tablet").value = layout.scale;
+      $("#v_scale_phone").value = layout.scale;
+    }
+    if(layout.cardw) $("#v_cardw").value = layout.cardw;
+    if(layout.hgap) $("#v_hgap").value = layout.hgap;
+    if(layout.vgap) $("#v_vgap").value = layout.vgap;
+  } else if(CURRENT_LAYOUT === "vertical_horizontal"){
+    if(layout.scaleDesktop !== null && layout.scaleDesktop !== undefined){
+      $("#vh_scale_desktop").value = layout.scaleDesktop;
+      $("#vh_scale_tablet").value = layout.scaleTablet ?? 0.75;
+      $("#vh_scale_phone").value = layout.scalePhone ?? 0.60;
+    } else if(layout.scale !== null && layout.scale !== undefined){
+      $("#vh_scale_desktop").value = layout.scale;
+      $("#vh_scale_tablet").value = layout.scale;
+      $("#vh_scale_phone").value = layout.scale;
+    }
+  }
+}
+
+function getActiveScaleInputIds() {
+  if(CURRENT_LAYOUT === "centered") return ["c_scale_desktop", "c_scale_tablet", "c_scale_phone"];
+  if(CURRENT_LAYOUT === "vertical") return ["v_scale_desktop", "v_scale_tablet", "v_scale_phone"];
+  return ["vh_scale_desktop", "vh_scale_tablet", "vh_scale_phone"];
+}
+
+function getActiveScaleInputs() {
+  return getActiveScaleInputIds().map(id => document.getElementById(id)).filter(Boolean);
+}
+
+function getCurrentZoomPercent() {
+  const input = getActiveScaleInputs()[0];
+  const value = parseFloat(input && input.value ? input.value : "0.85");
+  if(!Number.isFinite(value)) return 85;
+  return Math.round(value * 100);
+}
+
+function updatePreviewZoomDisplay() {
+  const label = document.getElementById("previewZoomValue");
+  if(label) label.textContent = `${getCurrentZoomPercent()}%`;
+}
+
+function adjustPreviewZoom(delta) {
+  const inputs = getActiveScaleInputs();
+  if(!inputs.length) return;
+  inputs.forEach(input => {
+    const current = parseFloat(input.value || "0.85");
+    const next = Math.min(PREVIEW_ZOOM_MAX, Math.max(PREVIEW_ZOOM_MIN, (Number.isFinite(current) ? current : 0.85) + delta));
+    input.value = next.toFixed(2);
+  });
+  refresh();
+}
+
+function resetPreviewZoom() {
+  const defaults = ["0.85", "0.75", "0.60"];
+  const ids = getActiveScaleInputIds();
+  ids.forEach((id, index) => setControlValue(id, defaults[index]));
+  refresh();
+}
+
 // Import/Export
 async function importBlock(raw) {
   if(!raw){ alert("Paste or upload a WP block first."); return; }
@@ -896,80 +1168,29 @@ async function importBlock(raw) {
   const j = await resp.json();
   if(!j.ok){ alert(j.error||"Import failed"); log("Import failed", j.error); return; }
   NODES = j.nodes || [];
-  
-  // Detect layout type from imported HTML
-  const hostMatch = raw.match(/<div[^>]+id=["']wsu-orgchart["'][^>]*>/i);
-  if(hostMatch){
-    const hasMode = hostMatch[0].includes("data-mode");
-    const hasHgap = hostMatch[0].includes("data-hgap");
-    
-    if(hasMode) {
-      CURRENT_LAYOUT = "vertical_horizontal";
-    } else if(hasHgap) {
-      CURRENT_LAYOUT = "vertical";
-    } else {
-      CURRENT_LAYOUT = "centered";
-    }
-    
+
+  const hostAttrs = extractHostDataAttributes(raw);
+  const attrKeys = Object.keys(hostAttrs);
+
+  if(attrKeys.length) {
+    CURRENT_LAYOUT = detectLayoutFromAttrs(hostAttrs);
     $("#layoutType").value = CURRENT_LAYOUT;
     updateLayoutType();
-  }
-  
-  // Import centered layout settings
-  if(CURRENT_LAYOUT === "centered"){
-    // Import responsive scale (prefer new format, fall back to legacy single scale)
-    if(j.layout.scaleDesktop !== null && j.layout.scaleDesktop !== undefined){
-      $("#c_scale_desktop").value = j.layout.scaleDesktop;
-      $("#c_scale_tablet").value = j.layout.scaleTablet ?? 0.75;
-      $("#c_scale_phone").value = j.layout.scalePhone ?? 0.60;
-    } else if(j.layout.scale !== null && j.layout.scale !== undefined){
-      // Legacy format: use single scale for all breakpoints
-      $("#c_scale_desktop").value = j.layout.scale;
-      $("#c_scale_tablet").value = j.layout.scale;
-      $("#c_scale_phone").value = j.layout.scale;
-    }
-    if(j.layout.hgaps) $("#hgaps").value = j.layout.hgaps;
-    if(j.layout.stubs) $("#stubs").value = j.layout.stubs;
-    if(j.layout.cardw) $("#cardw").value = j.layout.cardw;
-    if(j.layout.l1stub !== null && j.layout.l1stub !== undefined) $("#l1stub").value = j.layout.l1stub;
-    if(j.layout.center !== null && j.layout.center !== undefined) $("#center").value = String(j.layout.center);
-    if(j.layout.connectorAlign !== null && j.layout.connectorAlign !== undefined) $("#c_connector_align").value = String(j.layout.connectorAlign);
-    if(j.layout.openDepthDesktop !== null && j.layout.openDepthDesktop !== undefined) $("#c_open_depth_desktop").value = String(j.layout.openDepthDesktop);
-    if(j.layout.openDepthTablet !== null && j.layout.openDepthTablet !== undefined) $("#c_open_depth_tablet").value = String(j.layout.openDepthTablet);
-    if(j.layout.openDepthPhone !== null && j.layout.openDepthPhone !== undefined) $("#c_open_depth_phone").value = String(j.layout.openDepthPhone);
-  }
 
-  // Import vertical layout settings
-  if(CURRENT_LAYOUT === "vertical"){
-    // Import responsive scale (prefer new format, fall back to legacy single scale)
-    if(j.layout.scaleDesktop !== null && j.layout.scaleDesktop !== undefined){
-      $("#v_scale_desktop").value = j.layout.scaleDesktop;
-      $("#v_scale_tablet").value = j.layout.scaleTablet ?? 0.75;
-      $("#v_scale_phone").value = j.layout.scalePhone ?? 0.60;
-    } else if(j.layout.scale !== null && j.layout.scale !== undefined){
-      // Legacy format: use single scale for all breakpoints
-      $("#v_scale_desktop").value = j.layout.scale;
-      $("#v_scale_tablet").value = j.layout.scale;
-      $("#v_scale_phone").value = j.layout.scale;
-    }
-    if(j.layout.cardw) $("#v_cardw").value = j.layout.cardw;
-    if(j.layout.hgap) $("#v_hgap").value = j.layout.hgap;
-    if(j.layout.vgap) $("#v_vgap").value = j.layout.vgap;
-  }
+    importStylesFromAttrs(hostAttrs);
+    if(CURRENT_LAYOUT === "centered") importCenteredLayoutFromAttrs(hostAttrs);
+    if(CURRENT_LAYOUT === "vertical") importVerticalLayoutFromAttrs(hostAttrs);
+    if(CURRENT_LAYOUT === "vertical_horizontal") importHorizontalLayoutFromAttrs(hostAttrs);
 
-  // Import horizontal layout settings
-  if(CURRENT_LAYOUT === "vertical_horizontal"){
-    // Import responsive scale (prefer new format, fall back to legacy single scale)
-    if(j.layout.scaleDesktop !== null && j.layout.scaleDesktop !== undefined){
-      $("#vh_scale_desktop").value = j.layout.scaleDesktop;
-      $("#vh_scale_tablet").value = j.layout.scaleTablet ?? 0.75;
-      $("#vh_scale_phone").value = j.layout.scalePhone ?? 0.60;
-    } else if(j.layout.scale !== null && j.layout.scale !== undefined){
-      // Legacy format: use single scale for all breakpoints
-      $("#vh_scale_desktop").value = j.layout.scale;
-      $("#vh_scale_tablet").value = j.layout.scale;
-      $("#vh_scale_phone").value = j.layout.scale;
-    }
+    IMPORTED_EXTRA_DATA_ATTRS = {};
+    attrKeys.forEach(name => {
+      if(name.startsWith("data-") && !KNOWN_DATA_ATTRS.has(name)) {
+        IMPORTED_EXTRA_DATA_ATTRS[name] = hostAttrs[name];
+      }
+    });
+  } else {
+    importLegacyLayoutFallback(j.layout);
+    IMPORTED_EXTRA_DATA_ATTRS = {};
   }
 
   SELECTED_ID = (rootNode() && rootNode().id) || (NODES[0] && NODES[0].id) || null;
@@ -1103,7 +1324,14 @@ async function buildExport() {
       delete attrs["data-toggle"];
     }
   }
-  
+
+  Object.entries(IMPORTED_EXTRA_DATA_ATTRS || {}).forEach(([name, value]) => {
+    if(!name.startsWith("data-")) return;
+    if(KNOWN_DATA_ATTRS.has(name)) return;
+    if(Object.prototype.hasOwnProperty.call(attrs, name)) return;
+    attrs[name] = String(value);
+  });
+
   const attrStr = Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(" ");
   const closeScript = "<" + "/script>";
 
@@ -1302,6 +1530,19 @@ function wireControls() {
   }
   
   layoutTypeEl.addEventListener("change", updateLayoutType);
+
+  const btnPreviewZoomOut = document.getElementById("btnPreviewZoomOut");
+  if (btnPreviewZoomOut) {
+    btnPreviewZoomOut.addEventListener("click", ()=> adjustPreviewZoom(-PREVIEW_ZOOM_STEP));
+  }
+  const btnPreviewZoomIn = document.getElementById("btnPreviewZoomIn");
+  if (btnPreviewZoomIn) {
+    btnPreviewZoomIn.addEventListener("click", ()=> adjustPreviewZoom(PREVIEW_ZOOM_STEP));
+  }
+  const btnPreviewZoomReset = document.getElementById("btnPreviewZoomReset");
+  if (btnPreviewZoomReset) {
+    btnPreviewZoomReset.addEventListener("click", resetPreviewZoom);
+  }
 
   const btnUploadImport = document.getElementById("btnUploadImport");
   if (btnUploadImport) {

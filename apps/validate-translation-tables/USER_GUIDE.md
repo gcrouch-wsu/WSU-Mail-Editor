@@ -56,6 +56,7 @@ Use this when you already have a translation table and want to correct it.
 8. Optional: click `Bulk edit before export` to apply `Decision` and/or `Manual_Suggested_Key` to filtered rows in one step.
    - New in-app review grid includes Outcomes/myWSU name + state + country context, per-row suggestion dropdown, and `Reason_Code`.
    - Use quick family chips (for example, `Texas A&M`, `Troy University`) to jump to common campus groups.
+   - `Bulk edit before export` is a one-time opener for a run. After first click it stays open for that run and re-opens automatically after re-validate; `Start Over` resets this.
    - For performance, use pagination controls (100/200/400 rows per page) with synced controls above and below the grid. Bulk actions can target all filtered rows or only the current page.
    - For duplicate and one-to-many style review rows, the Suggested myWSU dropdown lists the top 5 location-valid name matches, ranked by similarity.
    - `Review Scope` controls both what appears in the in-app grid and what is included in the downloaded report:
@@ -64,7 +65,7 @@ Use this when you already have a translation table and want to correct it.
      - `Missing mappings only`
    - `Review Scope` export behavior:
      - `Uploaded Translate rows only` excludes Missing_Mapping rows from the export review queue and omits the `Missing_Mappings` sheet.
-     - `Missing mappings only` keeps only Missing_Mapping rows in the export review queue and suppresses non-missing diagnostic sheets.
+     - `Missing mappings only` keeps only Missing_Mapping rows in the export review queue, scopes `Final_Translation_Table` to missing-mapping review output, and suppresses non-missing diagnostic sheets.
    - In the editor panel, upload **Prior Validate workbook** and/or **Review session JSON** to resume prior work after validation.
    - Use `Save session` to download a JSON snapshot and `Load session` to resume later.
 9. Click `Download Full Report`.

@@ -76,6 +76,8 @@ let uploadedSessionRows = null;
 let uploadedSessionApplied = false;
 let actionQueuePrefetchPromise = null;
 let actionQueuePrefetchInFlight = false;
+// One-way flag for the current page lifecycle; reset by Start Over/full reload.
+let bulkEditorOpenedOnce = false;
 
 function beforeUnloadHandler(event) {
     event.preventDefault();
@@ -2020,6 +2022,7 @@ async function runValidation() {
 
         displayResults(stats, errorSamples);
         startActionQueuePrefetch();
+        document.dispatchEvent(new CustomEvent('validation-results-ready'));
 
     } catch (error) {
         console.error('Validation error:', error);
@@ -3045,6 +3048,10 @@ function setupBulkEditPanel() {
     const loadProgressPercent = document.getElementById('bulk-load-progress-percent');
     const loadProgressBar = document.getElementById('bulk-load-progress-bar');
     if (!toggleBtn || !panel || !tbody) return;
+    const syncToggleButtonVisibility = () => {
+        toggleBtn.classList.toggle('hidden', bulkEditorOpenedOnce);
+    };
+    syncToggleButtonVisibility();
 
     const DEFAULT_PAGE_SIZE = 200;
     const DECISION_OPTIONS = ['', 'Keep As-Is', 'Use Suggestion', 'Allow One-to-Many', 'Ignore'];
@@ -3473,11 +3480,17 @@ function setupBulkEditPanel() {
         }
     };
 
-    toggleBtn.addEventListener('click', async function() {
-        panel.classList.toggle('hidden');
-        if (!panel.classList.contains('hidden')) {
-            await loadActionQueueRows();
+    const openBulkEditorPanel = async (markOneTimeOpen = false) => {
+        panel.classList.remove('hidden');
+        if (markOneTimeOpen && !bulkEditorOpenedOnce) {
+            bulkEditorOpenedOnce = true;
+            syncToggleButtonVisibility();
         }
+        await loadActionQueueRows();
+    };
+
+    toggleBtn.addEventListener('click', async function() {
+        await openBulkEditorPanel(true);
     });
 
     filterSelect?.addEventListener('change', () => {
@@ -3724,12 +3737,19 @@ function setupBulkEditPanel() {
     };
     document.addEventListener('session-upload-applied', refreshFromExternalLoad);
     document.addEventListener('prior-upload-applied', refreshFromExternalLoad);
+    document.addEventListener('validation-results-ready', async () => {
+        syncToggleButtonVisibility();
+        if (!bulkEditorOpenedOnce) return;
+        await openBulkEditorPanel(false);
+    });
 }
 
 function setupResetButton() {
     const resetBtn = document.getElementById('reset-btn');
     resetBtn.addEventListener('click', function() {
         if (confirm('Are you sure you want to start over? This will clear all uploaded files and results.')) {
+            // Keep this explicit so a future soft-reset path can share the same state reset.
+            bulkEditorOpenedOnce = false;
             location.reload();
         }
     });

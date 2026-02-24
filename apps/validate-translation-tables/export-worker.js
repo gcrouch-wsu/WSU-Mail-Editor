@@ -2964,10 +2964,13 @@ async function buildValidationExport(payload) {
             Has_Update: 0
         };
     };
-    const autoApprovedRows = [
-        ...validDataRows.map(row => buildAutoApprovedRow(row, 'Valid_Mappings', 'Valid')),
-        ...highConfidenceDataRows.map(row => buildAutoApprovedRow(row, 'High_Confidence_Matches', 'High_Confidence_Match'))
-    ];
+    const includeAutoApprovedRows = !missingOnlyExport;
+    const autoApprovedRows = includeAutoApprovedRows
+        ? [
+            ...validDataRows.map(row => buildAutoApprovedRow(row, 'Valid_Mappings', 'Valid')),
+            ...highConfidenceDataRows.map(row => buildAutoApprovedRow(row, 'High_Confidence_Matches', 'High_Confidence_Match'))
+        ]
+        : [];
     const approvedColumns = [
         'Review_Row_ID',
         'Approval_Source',

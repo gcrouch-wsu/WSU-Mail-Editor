@@ -1807,6 +1807,17 @@ async function run() {
         }
         assert.ok(missingOnlyRows > 0, 'Missing-only export scope should include Missing_Mapping rows in review queue');
         assert.equal(nonMissingOnlyRows, 0, 'Missing-only export scope should exclude non-missing rows from review queue');
+        const approvedSheet = workbookMissingOnly.getWorksheet('Approved_Mappings');
+        const approvalSourceCol = findHeaderIndex(approvedSheet, 'Approval Source');
+        let autoApprovedRows = 0;
+        for (let r = 2; r <= (approvedSheet.rowCount || 0); r += 1) {
+            const cellValue = approvedSheet.getRow(r).getCell(approvalSourceCol).value;
+            const value = (cellValue && typeof cellValue === 'object' && Object.prototype.hasOwnProperty.call(cellValue, 'formula'))
+                ? ''
+                : String(cellValue || '');
+            if (value === 'Valid_Mappings' || value === 'High_Confidence_Matches') autoApprovedRows += 1;
+        }
+        assert.equal(autoApprovedRows, 0, 'Missing-only export scope should exclude auto-approved valid/high-confidence rows from final export staging');
     });
 
     if (failures > 0) {

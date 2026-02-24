@@ -74,9 +74,9 @@
                         <p>2. <strong>Match Options:</strong> Pick Translation input/output columns. Default validation mode is <strong>Key + name comparison</strong> (switch to Key only if needed).</p>
                         <p>3. <strong>Name comparison</strong> (if used): Pick Outcomes and myWSU name columns; set threshold (default 0.8) and ambiguity gap (0.03).</p>
                         <p>4. <strong>Select Columns, Keys, and Roles:</strong> Pick included columns; mark key columns for Outcomes and myWSU; optionally map roles (School, City, State, Country). Include City/State for high-confidence matching.</p>
-                        <p>5. Click <strong>Validate Mappings</strong>, then use <strong>Bulk edit before export</strong> for context-aware edits (quick family chips, top/bottom pagination, Apply Scope). Use <strong>Review Scope</strong> (`All review rows`, `Uploaded Translate rows only`, `Missing mappings only`) to control both in-app review and download output. In the editor panel, upload <strong>Prior Validate Workbook</strong> and/or <strong>Review Session JSON</strong> to resume work.</p>
+                        <p>5. Click <strong>Validate Mappings</strong>, then use <strong>Bulk edit before export</strong> for context-aware edits (quick family chips, top/bottom pagination, Apply Scope). The bulk-edit button is a one-time opener per run; after first click the editor stays available for that run and re-opens on re-validate, and <strong>Start Over</strong> resets it. Use <strong>Review Scope</strong> (`All review rows`, `Uploaded Translate rows only`, `Missing mappings only`) to control both in-app review and download output. In the editor panel, upload <strong>Prior Validate Workbook</strong> and/or <strong>Review Session JSON</strong> to resume work.</p>
                         <p>6. Click <strong>Download Full Report</strong>.</p>
-                        <p>7. The Final_Translation_Table has <strong>auto-matched row pairs</strong> (Valid + High_Confidence_Match). You must use <strong>Review_Workbench</strong> to set decisions for rows needing review. Set <strong>Decision</strong> (Keep As-Is, Use Suggestion, Allow One-to-Many, Ignore) and set <strong>Reason Code</strong> for risky decisions (Use Suggestion with manual key, Allow One-to-Many, Keep As-Is on Duplicate_Target rows). If you use Use Suggestion, either Suggested Key (from C1/C2/C3) or <strong>Manual_Suggested_Key</strong> must be filled, and Update Side must be Input/Output/Both. For intentional many-to-one (for example, Texas A&amp;M campuses to one parent), use Keep As-Is on Duplicate_Target rows. Use <strong>Translation_Key_Updates (What changed)</strong> to verify all key changes before publish.</p>
+                        <p>7. The Final_Translation_Table has <strong>auto-matched row pairs</strong> (Valid + High_Confidence_Match) in normal/all-row review scope. In <strong>Missing mappings only</strong> scope, Final_Translation_Table is scoped to missing-mapping review output. You must use <strong>Review_Workbench</strong> to set decisions for rows needing review. Set <strong>Decision</strong> (Keep As-Is, Use Suggestion, Allow One-to-Many, Ignore) and set <strong>Reason Code</strong> for risky decisions (Use Suggestion with manual key, Allow One-to-Many, Keep As-Is on Duplicate_Target rows). If you use Use Suggestion, either Suggested Key (from C1/C2/C3) or <strong>Manual_Suggested_Key</strong> must be filled, and Update Side must be Input/Output/Both. For intentional many-to-one (for example, Texas A&amp;M campuses to one parent), use Keep As-Is on Duplicate_Target rows. Use <strong>Translation_Key_Updates (What changed)</strong> to verify all key changes before publish.</p>
                         <p>8. Excel requires 365 or 2021+. Before updating the Outcomes Translation Table: verify changes in <strong>Translation_Key_Updates (What changed)</strong> -> copy Final_Translation_Table -> paste as <strong>values only</strong> into a new sheet -> sort and double-check -> only then update. Publish only after QA_Checks_Validate blocking checks pass (including risky decisions without reason code and duplicate checks).</p>
                     </div>
                     <div id="instructions-create" class="hidden">
@@ -888,15 +888,15 @@
                     </label>
                 </div>
             </div>
-            <div class="text-center">
-                <button id="bulk-edit-toggle-btn" class="mr-2 mb-4 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm font-medium">Bulk edit before export</button>
-                <button id="download-btn" class="bg-wsu-crimson hover:bg-red-800 text-white px-8 py-3 rounded-lg text-lg font-semibold shadow-lg transition-colors inline-flex items-center">
+            <div class="flex flex-wrap items-center justify-center gap-3">
+                <button id="bulk-edit-toggle-btn" class="inline-flex items-center justify-center h-12 min-w-[220px] px-6 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-base font-semibold shadow-lg transition-colors">Bulk edit before export</button>
+                <button id="download-btn" class="inline-flex items-center justify-center h-12 min-w-[220px] px-6 bg-wsu-crimson hover:bg-red-800 text-white rounded-lg text-base font-semibold shadow-lg transition-colors">
                     <svg class="h-6 w-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
                     Download Full Report
                 </button>
-                <button id="reset-btn" class="ml-4 bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold shadow-lg transition-colors">
+                <button id="reset-btn" class="inline-flex items-center justify-center h-12 min-w-[220px] px-6 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-base font-semibold shadow-lg transition-colors">
                     Start Over
                 </button>
             </div>
