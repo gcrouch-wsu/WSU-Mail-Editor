@@ -444,9 +444,19 @@ const encodingSelectIds = {
     wsu_org: 'wsu-org-encoding'
 };
 
+const sheetHeaderHintsByFileKey = {
+    outcomes: ['name', 'mdb_code', 'state', 'country'],
+    translate: ['input', 'output', 'translate_input', 'translate_output'],
+    wsu_org: ['org id', 'descr', 'city', 'state', 'country']
+};
+
 function getFileEncoding(fileKey) {
     const select = document.getElementById(encodingSelectIds[fileKey]);
     return select ? select.value : 'auto';
+}
+
+function getSheetHeaderHints(fileKey) {
+    return sheetHeaderHintsByFileKey[fileKey] || [];
 }
 
 function parsePriorValidateWorkbook(file) {
@@ -941,7 +951,10 @@ async function handleFileSelect(event, fileKey) {
         filenameSpan.textContent = file.name;
         statusDiv.classList.remove('hidden');
 
-        const data = await loadFile(file, { encoding: getFileEncoding(fileKey) });
+        const data = await loadFile(file, {
+            encoding: getFileEncoding(fileKey),
+            sheetHeaderHints: getSheetHeaderHints(fileKey)
+        });
 
         fileObjects[fileKey] = file;
         loadedData[fileKey] = data;
@@ -968,7 +981,10 @@ async function reparseFile(fileKey) {
     const rowsSpan = document.getElementById(`${fileKey.replace('_', '-')}-rows`);
 
     try {
-        const data = await loadFile(file, { encoding: getFileEncoding(fileKey) });
+        const data = await loadFile(file, {
+            encoding: getFileEncoding(fileKey),
+            sheetHeaderHints: getSheetHeaderHints(fileKey)
+        });
         loadedData[fileKey] = data;
         filesUploaded[fileKey] = true;
         updateDebugState(fileKey, file, data);

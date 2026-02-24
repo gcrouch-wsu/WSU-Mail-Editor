@@ -2,10 +2,84 @@ let outcomesData = [];
 let translateData = [];
 let wsuOrgData = [];
 
+function getSheetHeaderRows(sheet, maxRows = 25) {
+    if (!sheet || !sheet['!ref']) return [];
+    let range = sheet['!ref'];
+    try {
+        const decoded = XLSX.utils.decode_range(sheet['!ref']);
+        decoded.e.r = Math.min(decoded.e.r, Math.max(0, maxRows - 1));
+        range = XLSX.utils.encode_range(decoded);
+    } catch (_) {
+        range = sheet['!ref'];
+    }
+    return XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        raw: false,
+        defval: '',
+        blankrows: false,
+        range
+    });
+}
+
+function scoreSheetForHeaderHints(sheet, normalizedHints) {
+    if (!sheet || !normalizedHints.length) return 0;
+    const rows = getSheetHeaderRows(sheet, 25);
+    if (!rows.length) return 0;
+    let best = 0;
+    rows.forEach((row) => {
+        const cells = (row || [])
+            .map(cell => normalizeHeader(cell))
+            .filter(Boolean);
+        if (!cells.length) return;
+        const cellSet = new Set(cells);
+        let matched = 0;
+        normalizedHints.forEach((hint) => {
+            if (cellSet.has(hint)) {
+                matched += 1;
+            }
+        });
+        if (matched > best) {
+            best = matched;
+        }
+    });
+    return best;
+}
+
+function selectBestSheet(workbook, expectedHeaders = [], sheetHeaderHints = []) {
+    const sheetNames = workbook && Array.isArray(workbook.SheetNames)
+        ? workbook.SheetNames
+        : [];
+    if (!sheetNames.length) return null;
+
+    const normalizedHints = Array.from(
+        new Set(
+            [...(expectedHeaders || []), ...(sheetHeaderHints || [])]
+                .map(header => normalizeHeader(header))
+                .filter(Boolean)
+        )
+    );
+    if (!normalizedHints.length) {
+        return workbook.Sheets[sheetNames[0]];
+    }
+
+    let bestSheetName = sheetNames[0];
+    let bestScore = -1;
+    sheetNames.forEach((sheetName) => {
+        const score = scoreSheetForHeaderHints(workbook.Sheets[sheetName], normalizedHints);
+        if (score > bestScore) {
+            bestScore = score;
+            bestSheetName = sheetName;
+        }
+    });
+
+    return workbook.Sheets[bestSheetName];
+}
+
 async function loadFile(file, options = {}) {
     return new Promise((resolve, reject) => {
         const fileName = file.name.toLowerCase();
         const expectedHeaders = options.expectedHeaders || [];
+        const sheetHeaderHints = options.sheetHeaderHints || [];
 
         if (fileName.endsWith('.csv')) {
             const userEncoding = options.encoding || 'auto';
@@ -16,8 +90,8 @@ async function loadFile(file, options = {}) {
                 } catch (parseError) {
                     if (typeof XLSX !== 'undefined') {
                         const workbook = XLSX.read(text, { type: 'string' });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        return sheetToJsonWithHeaderDetection(firstSheet, expectedHeaders);
+                        const selectedSheet = selectBestSheet(workbook, expectedHeaders, sheetHeaderHints);
+                        return sheetToJsonWithHeaderDetection(selectedSheet, expectedHeaders);
                     }
                     throw parseError;
                 }
@@ -57,8 +131,8 @@ async function loadFile(file, options = {}) {
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = sheetToJsonWithHeaderDetection(firstSheet, expectedHeaders);
+                    const selectedSheet = selectBestSheet(workbook, expectedHeaders, sheetHeaderHints);
+                    const jsonData = sheetToJsonWithHeaderDetection(selectedSheet, expectedHeaders);
                     resolve(jsonData);
                 } catch (error) {
                     reject(new Error(`Error parsing Excel: ${error.message}`));
